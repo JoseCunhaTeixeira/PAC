@@ -7,9 +7,9 @@ Compile C++ functions:
 python3 setup.py build_ext --inplace clean
 
 Launch the app with the following command:
-streamlit run app.py
+streamlit run Home.py
 or
-streamlit run app.py --server.enableXsrfProtection false
+streamlit run Home.py --server.enableXsrfProtection false
 """
 
 
