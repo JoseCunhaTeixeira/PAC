@@ -42,10 +42,8 @@ Content:
 
 ## Contributors
 - **José Cunha Teixeira**
-- **Benjamin Becker**
-- *Keurfon Luu for Disba Package*
-- *Fabrizio Magrini for BayesBay Package*
-
+- **Benjamin Decker** for phase-shift optimization
+  
 ## License
 This open source project is part of the PhD thesis of José Cunha Teixeira and was funded by UMR 7619 METIS (Sorbonne Université), Mines Paris - PSL, SNCF Réseau, and the European Union.
 
