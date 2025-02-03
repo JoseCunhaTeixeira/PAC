@@ -29,7 +29,7 @@ cd PAC/src/
 streamlit run Home.py
 ```
 Content:
-- `input/`: Contains folders (by site) with seismic records
+- `input/`: Contains folders (per profile) with seismic records
 - `src/`: Source code
     - `Paths.py`: Path to you folder (to modify)
     - `Home.py`: App home
@@ -37,7 +37,7 @@ Content:
     - `pages/`: App tabs
     - `scripts/`: Signal processing scripts
     - `modules/`: Functions
-- `output/`: Contains folders (by site) with dispersion images, picked dispersion curves and inversion results
+- `output/`: Contains folders (per profile) with dispersion images, picked dispersion curves and inversion results
 
 ## Contributors
 - **José Cunha Teixeira**
