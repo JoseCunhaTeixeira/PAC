@@ -14,6 +14,8 @@ PAC (Passive and Active Computation) is a tool designed for processing automatic
 ### Requirements
 - Python 3.10+
 - Required libraries: `numpy`, `pandas`, `scipy`, `matplotlib`, `plotly`, `bayesbay`, `streamlit`, `obspy`
+- On Mac OS, the GUI for folder selection and subprocesses mapping may be incompatible with Streamlit.
+- On Mac OS, BaysBay needs to be installed from source and architecture target on Makefile needs to be erased.
 
 ### Clone Repository
 ```sh
