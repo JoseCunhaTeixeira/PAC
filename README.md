@@ -38,7 +38,7 @@ Folders:
 - *Fabrizio Magrini for BayesBay*
 
 ## License
-This open sourceproject is part of the PhD thesis of José Cunha Teixeira and was funded by UMR 7619 METIS (Sorbonne Univesité), Mines Paris - PSL, SNCF Réseau and the European Union.
+This open source project is part of the PhD thesis of José Cunha Teixeira and was funded by UMR 7619 METIS (Sorbonne Université), Mines Paris - PSL, SNCF Réseau, and the European Union.
 
 ## Acknowledgments
 This work was developed with contributions from the geophysics research community. Special thanks to open-source developers for their invaluable tools.
