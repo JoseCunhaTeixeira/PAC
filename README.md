@@ -18,7 +18,7 @@ PAC (Passive and Active Computation) is a tool designed for processing automatic
 ### Clone Repository
 ```sh
 git clone https://github.com/JoseCunhaTeixeira/PAC.git
-cd PAC
+cd PAC/src/
 ```
 
 ## Usage
@@ -26,16 +26,22 @@ cd PAC
 ```sh
 streamlit run Home.py
 ```
-Folders:
-- `input`: Seismic records
-- `src`: Codes
-- `output`: Dispersion images, picked dispersion curves and inversion results.
+Content:
+- `input/`: Seismic records
+- `src/`: Source code
+    - `Paths.py`: Path to you folder (to modify)
+    - `Home.py`: App home
+    - `images/`: Images for app home
+    - `pages/`: App tabs
+    - `scripts/`: Signal processing scripts
+    - `modules/`: Functions
+- `output/`: Dispersion images, picked dispersion curves and inversion results.
 
 ## Contributors
 - **José Cunha Teixeira**
 - **Benjamin Becker**
 - *Keurfon Luu for Disba Package*
-- *Fabrizio Magrini for BayesBay*
+- *Fabrizio Magrini for BayesBay Package*
 
 ## License
 This open source project is part of the PhD thesis of José Cunha Teixeira and was funded by UMR 7619 METIS (Sorbonne Université), Mines Paris - PSL, SNCF Réseau, and the European Union.
