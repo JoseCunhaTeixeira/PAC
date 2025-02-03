@@ -37,7 +37,7 @@ Content:
     - `pages/`: App tabs
     - `scripts/`: Signal processing scripts
     - `modules/`: Functions
-- `output/`: Contains folders (by site) with dispersion images, picked dispersion curves and inversion results.
+- `output/`: Contains folders (by site) with dispersion images, picked dispersion curves and inversion results
 
 ## Contributors
 - **José Cunha Teixeira**
