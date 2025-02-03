@@ -6,7 +6,7 @@ PAC (Passive and Active Computation) is a tool designed for processing automatic
 - **Hybrid Processing:** Supports both passive and active MASW methods without needing source position information.
 - **Signal Processing Tools:** Uses an automatic source detection algorithm combined with seismic interferometry.
 - **Automated Dispersion Analysis:** Extracts and visualizes dispersion images and curves.
-- **Velocity Inversion:** Computes shear wave velocity profiles from dispersion data using the MCMC algorithm BayesBay and direct modeling algorithm Disba.
+- **Velocity Inversion:** Computes shear wave velocity profiles from dispersion data using the MCMC algorithm BayesBay and forward modeling algorithm Disba.
 - **User-Friendly Interface:** Streamlined workflow with visualization capabilities.
 - **Python-Based:** Lightweight and extensible for custom modifications.
 
@@ -15,7 +15,7 @@ PAC (Passive and Active Computation) is a tool designed for processing automatic
 - Python 3.10+
 - Required libraries: `numpy`, `pandas`, `scipy`, `matplotlib`, `plotly`, `bayesbay`, `streamlit`, `obspy`
 - On Mac OS, the GUI for folder selection and subprocess mapping may be incompatible with Streamlit.
-- On Mac OS, BaysBay needs to be installed from source and architecture target on Makefile needs to be erased.
+- On Mac OS, BayesBay needs to be installed from source and architecture target on Makefile needs to be erased.
 - Developed on Linux OS under Streamlit 1.41.1 and Python 3.10.12
 
 ### Clone Repository
