@@ -32,7 +32,7 @@ streamlit run Home.py
 Content:
 - `input/`: Contains folders (per profile) with seismic records
 - `src/`: Source code
-    - `Paths.py`: Path to you folder (to modify)
+    - `Paths.py`: Paths to the PAC main folder (to modify)
     - `Home.py`: App home
     - `images/`: Images for app home
     - `pages/`: App tabs
