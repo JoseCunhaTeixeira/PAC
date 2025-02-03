@@ -15,9 +15,10 @@ streamlit run app.py --server.enableXsrfProtection false
 
 
 
+import os
 import streamlit as st
 
-
+from Paths import input_dir, output_dir
 
 
 
@@ -69,4 +70,11 @@ st.text("")
 st.text("")
 st.text("")
 st.write(f"*streamlit version: {st.__version__}*")
+
+
+if not os.path.exists(f"{input_dir}"):
+    os.makedirs(f"{input_dir}")
+    
+if not os.path.exists(f"{output_dir}"):
+    os.makedirs(f"{output_dir}")
 ### -----------------------------------------------------------------------------------------------
