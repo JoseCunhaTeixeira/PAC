@@ -3,9 +3,6 @@ Author : José CUNHA TEIXEIRA
 License : SNCF Réseau, UMR 7619 METIS
 Date : Decdember 18, 2024
 
-Compile C++ functions:
-python3 setup.py build_ext --inplace clean
-
 Launch the app with the following command:
 streamlit run Home.py
 or
