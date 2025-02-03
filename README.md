@@ -18,7 +18,7 @@ PAC (Passive and Active Computation) is a tool designed for processing automatic
 ### Clone Repository
 ```sh
 git clone https://github.com/JoseCunhaTeixeira/PAC.git
-cd pac
+cd PAC
 ```
 
 ## Usage
@@ -38,7 +38,7 @@ Folders:
 - *Fabrizio Magrini for BayesBay*
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This open sourceproject is part of the PhD thesis of José Cunha Teixeira and was funded by UMR 7619 METIS (Sorbonne Univesité), Mines Paris - PSL, SNCF Réseau and the European Union.
 
 ## Acknowledgments
 This work was developed with contributions from the geophysics research community. Special thanks to open-source developers for their invaluable tools.
