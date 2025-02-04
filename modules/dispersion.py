@@ -186,9 +186,9 @@ def resamp(f, v, err, wmax=None):
         f_resamp = v_resamp/w_resamp
         f_resamp, v_resamp, err_resamp = zip(*sorted(zip(f_resamp, v_resamp, err_resamp)))
     else : 
-        f_resamp = f[0]
-        v_resamp = v[0]
-        err_resamp = err[0]
+        f_resamp = [f[0]]
+        v_resamp = [v[0]]
+        err_resamp = [err[0]]
     return f_resamp, v_resamp, err_resamp
 ### -----------------------------------------------------------------------------------------------
 

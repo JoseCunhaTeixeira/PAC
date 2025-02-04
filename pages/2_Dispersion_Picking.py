@@ -56,6 +56,9 @@ def handle_picked():
             y = selected_data[0]['y']
             poly_coords = np.array([x, y]).T
             f_picked, v_picked = extract_curve(st.session_state.DISP_FV, st.session_state.DISP_fs, st.session_state.DISP_vs, poly_coords, smooth=False)
+            if len(f_picked) < 2 or len(v_picked) < 2:
+                st.session_state.DISP_clicked_pick = False
+                return
             dc = lorentzian_error(v_picked, f_picked, st.session_state.DISP_dx, st.session_state.DISP_Nx)
             f_picked, v_picked, dc = resamp(f_picked, v_picked, dc)#, wmax=50)
             st.session_state.DISP_fs_picked = f_picked
@@ -297,7 +300,11 @@ if st.session_state.DISP_position is not None:
     if not st.session_state.DISP_clicked_pick:
         columns = st.columns(2, vertical_alignment="bottom")
         with columns[0]:
-            st.session_state.DISP_mode = st.number_input("**Select a mode to pick:**", value=nb_picked_modes_by_position[i], min_value=0, step=1)
+            if picked_modes_by_position[i] == []:
+                value = 0
+            else:
+                value = picked_modes_by_position[i][-1]+1
+            st.session_state.DISP_mode = st.number_input("**Select a mode to pick:**", value=value, min_value=0, step=1)
         with columns[1]:
             button = st.button("Start picking", type="primary", use_container_width=True, on_click=set_clicked_pick)
         if st.session_state.DISP_mode in picked_modes_by_position[i]:
@@ -340,11 +347,14 @@ if st.session_state.DISP_position is not None:
                         try :
                             pvc = np.loadtxt(f"{st.session_state.DISP_folder_path}/{folder}/pick/{folder}_obs_M{mode}.pvc")
                             if len(pvc.shape) == 1:
-                                    pvc = pvc.reshape(1,-1)
+                                pvc = pvc.reshape(1,-1)
                             pvc = np.round(pvc, 2)
                             fs = pvc[:,0]
                             vs = pvc[:,1]
-                            ws, vs = resamp_wavelength(fs, vs)
+                            if len(fs) > 1 and len(vs) > 1:
+                                ws, vs = resamp_wavelength(fs, vs)
+                            else:
+                                ws = np.round(vs/fs)
                             ws_per_position.append(ws)
                             vs_per_position.append(vs)
                         except:
@@ -368,11 +378,14 @@ if st.session_state.DISP_position is not None:
                         try :
                             pvc = np.loadtxt(f"{st.session_state.DISP_folder_path}/{folder}/pick/{folder}_obs_M{mode}.pvc")
                             if len(pvc.shape) == 1:
-                                    pvc = pvc.reshape(1,-1)
+                                pvc = pvc.reshape(1,-1)
                             pvc = np.round(pvc, 2)
                             fs = pvc[:,0]
                             vs = pvc[:,1]
-                            fs, vs = resamp_frequency(fs, vs)
+                            if len(fs) > 1 and len(vs) > 1:
+                                fs, vs = resamp_frequency(fs, vs)
+                            else:
+                                fs = np.round(fs)
                             fs_per_position.append(fs)
                             vs_per_position.append(vs)
                         except:

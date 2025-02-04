@@ -287,11 +287,14 @@ for mode, count in distinct_modes.items():
                 try :
                     pvc = np.loadtxt(f"{st.session_state.INV_folder_path}/{folder}/pick/{folder}_obs_M{mode}.pvc")
                     if len(pvc.shape) == 1:
-                            pvc = pvc.reshape(1,-1)
+                        pvc = pvc.reshape(1,-1)
                     pvc = np.round(pvc, 2)
                     fs = pvc[:,0]
                     vs = pvc[:,1]
-                    ws, vs = resamp_wavelength(fs, vs)
+                    if len(fs) > 1 and len(vs) > 1:
+                        ws, vs = resamp_wavelength(fs, vs)
+                    else:
+                        ws = np.round(vs/fs)
                     ws_per_position.append(ws)
                     vs_per_position.append(vs)
                 except:
@@ -315,11 +318,14 @@ for mode, count in distinct_modes.items():
                 try :
                     pvc = np.loadtxt(f"{st.session_state.INV_folder_path}/{folder}/pick/{folder}_obs_M{mode}.pvc")
                     if len(pvc.shape) == 1:
-                            pvc = pvc.reshape(1,-1)
+                        pvc = pvc.reshape(1,-1)
                     pvc = np.round(pvc, 2)
                     fs = pvc[:,0]
                     vs = pvc[:,1]
-                    fs, vs = resamp_frequency(fs, vs)
+                    if len(fs) > 1 and len(vs) > 1:
+                        fs, vs = resamp_frequency(fs, vs)
+                    else:
+                        fs = np.round(fs)
                     fs_per_position.append(fs)
                     vs_per_position.append(vs)
                 except:
@@ -608,11 +614,14 @@ if st.button("Compute", type="primary", use_container_width=True):
             try :
                 pvc = np.loadtxt(f"{st.session_state.INV_folder_path}/{folder}/pick/{folder}_obs_{mode}.pvc")
                 if len(pvc.shape) == 1:
-                        pvc = pvc.reshape(1,-1)
+                    pvc = pvc.reshape(1,-1)
                 pvc = np.round(pvc, 2)
                 fs = pvc[:,0]
                 vs = pvc[:,1]
-                fs, vs = resamp_frequency(fs, vs)
+                if len(fs) > 1 and len(vs) > 1:
+                    fs, vs = resamp_frequency(fs, vs)
+                else:
+                    fs = np.round(fs)
                 obs_fs_per_position.append(fs)
                 obs_vs_per_position.append(vs)
             except:
@@ -625,7 +634,7 @@ if st.button("Compute", type="primary", use_container_width=True):
             try :
                 pvc = np.loadtxt(f"{st.session_state.INV_folder_path}/{folder}/inv/{folder}_median_smooth_{mode}.pvc")
                 if len(pvc.shape) == 1:
-                        pvc = pvc.reshape(1,-1)
+                    pvc = pvc.reshape(1,-1)
                 pvc = np.round(pvc, 2)
                 fs = pvc[:,0]
                 vs = pvc[:,1]
