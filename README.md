@@ -31,6 +31,11 @@ cd PAC/
 ```sh
 streamlit run Home.py
 ```
+or sometimes
+```sh
+streamlit run Home.py --server.enableXsrfProtection false
+```
+
 Content:
 - `Home.py`: App home
 - `home_images/`: Images for app home
