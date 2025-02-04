@@ -20,7 +20,7 @@ from scipy.ndimage import generic_filter
 from modules.dispersion import resamp_wavelength, resamp_frequency
 from modules.display import plot_pseudo_section, display_inverted_section, display_pseudo_sections
 from modules.misc import arange
-from Paths import output_dir
+from Paths import output_dir, work_dir
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -554,7 +554,7 @@ if st.button("Compute", type="primary", use_container_width=True):
     start = time.time()
     
     # Run inversion scripts
-    scripts = [f"/home/jteixeira/Desktop/passive-MASW/src/scripts/run_inversion.py -ID {i} -r {st.session_state.INV_folder_path}" for i in range(st.session_state.INV_nb_scripts)]
+    scripts = [f"{work_dir}/scripts/run_inversion.py -ID {i} -r {st.session_state.INV_folder_path}" for i in range(st.session_state.INV_nb_scripts)]
     with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
         executor.map(run_script, scripts)
     

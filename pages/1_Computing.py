@@ -16,7 +16,7 @@ import concurrent.futures
 import json
 import plotly.graph_objects as go
 
-from Paths import output_dir, input_dir
+from Paths import output_dir, input_dir, work_dir
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -531,7 +531,7 @@ if st.button("Compute", type="primary", use_container_width=True):
     print(f"\033[1m\n\nRunning computation...\033[0m")
     start = time.time()
     
-    scripts = [f"/home/jteixeira/Desktop/passive-MASW/src/scripts/run_passive-MASW.py -ID {i} -r {output_dir}" for i in range(st.session_state.COMP_nb_scripts)]
+    scripts = [f"{work_dir}/scripts/run_passive-MASW.py -ID {i} -r {output_dir}" for i in range(st.session_state.COMP_nb_scripts)]
     
     with concurrent.futures.ProcessPoolExecutor(max_workers=st.session_state.COMP_nb_max_subproc) as executor:
         executor.map(run_script, scripts)
