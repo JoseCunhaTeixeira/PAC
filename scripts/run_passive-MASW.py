@@ -83,7 +83,7 @@ streams = [stream[start:end+1] for stream in streams]
 
 durations = np.round([stream[0].stats.endtime - stream[0].stats.starttime for stream in streams], 6)
 
-dt = np.round(streams[0][0].stats.delta, 6)
+dt = streams[0][0].stats.delta
 ### -----------------------------------------------------------------------------------------------
 
 
@@ -138,7 +138,7 @@ for file, stream, duration in zip(files, streams, durations):
         
     
     ### DECIMATE ---------------------------------------------------------------------------------
-    if stream[0].stats.delta != dt:
+    if not isclose(stream[0].stats.delta, dt, rel_tol=1e-9):
         ratio = int(dt/ stream[0].stats.delta)
         stream.decimate(ratio)
     Nt = stream[0].stats.npts
@@ -271,7 +271,6 @@ for file, stream, duration in zip(files, streams, durations):
                 source_position = "R"
                 FK_ratios.append([i_segment, abs(FK_ratio)])
                 
-        ######################
         # Uncomment to plot FK diagrams
         # import matplotlib.pyplot as plt
         # plt.rcParams.update({'font.size': 14})
@@ -298,7 +297,6 @@ for file, stream, duration in zip(files, streams, durations):
         # fig.savefig(name_path)
         # plt.tight_layout()
         # plt.close()
-        ######################
     
         file_FK_ratios.write(f"{file} - {cut_start:.2f} - {source_position} - {FK_ratio}\n")
 

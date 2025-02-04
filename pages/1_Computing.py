@@ -208,7 +208,7 @@ def set_segment():
                 
 def set_FK_ratio_threshold():
     if st.session_state.COMP_FK_ratio_threshold is not None:
-        st.session_state.COMP_FK_ratio_threshold = round(st.session_state.COMP_FK_ratio_threshold, 1)
+        st.session_state.COMP_FK_ratio_threshold = round(st.session_state.COMP_FK_ratio_threshold, 2)
         if st.session_state.COMP_FK_ratio_threshold < 0:
             st.session_state.COMP_FK_ratio_threshold = 0
         if st.session_state.COMP_FK_ratio_threshold > 1:
@@ -418,7 +418,7 @@ st.number_input('Segment window step [s]', key='COMP_segment_step', value=None, 
 
 st.text('')
 
-st.number_input("Minimum FK ration threshold [-]", key="COMP_FK_ratio_threshold", value=None, step=0.1, on_change=set_FK_ratio_threshold, placeholder='Enter a value', format="%0.1f")
+st.number_input("Minimum FK ration threshold [-]", key="COMP_FK_ratio_threshold", value=None, step=0.10, on_change=set_FK_ratio_threshold, placeholder='Enter a value', format="%0.2f")
 
 if st.session_state.COMP_segment_length is None or st.session_state.COMP_segment_step is None or st.session_state.COMP_FK_ratio_threshold is None:
     st.text('')
