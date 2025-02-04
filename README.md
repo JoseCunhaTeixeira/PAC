@@ -38,8 +38,9 @@ Content:
 - `scripts/`: MASW and inversion scripts
 - `modules/`: Surface wave signal processing functions
 - `Paths.py`: Paths to the PAC main folder, and output and input directories
-- `input/`: Contains folders (one per profile) with seismic records
-- `output/`: Contains folders (one per profile) with dispersion images, picked dispersion curves and inversion results
+- `input/`: Contains one folder per profile with raw seismic records
+- `output/`: Contains one folder per profile with dispersion images, picked dispersion curves and inversion results
+[`input/` and `output/` are created automatically at app launching if do not exist]
 
 ## Contributors
 - **José Cunha Teixeira**
