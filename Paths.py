@@ -8,7 +8,7 @@ Date : Feb 4, 2025
 import os
 
 
-
+work_dir = f"."
 input_dir = f"./input"
 output_dir = f"./output"
 
