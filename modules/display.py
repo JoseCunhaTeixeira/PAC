@@ -398,6 +398,8 @@ def display_dispersion_img(FV_arr, fs, vs, path, obs_modes=[], pred_modes=[], fu
     
     if len(obs_modes) > 0 :
         for mode in obs_modes:
+            if len(mode.shape) == 1:
+                mode = mode.reshape(1,-1)
             fs_mode = mode[:,0]
             vs_mode = mode[:,1]
             dc_mode = mode[:,2]
@@ -408,12 +410,16 @@ def display_dispersion_img(FV_arr, fs, vs, path, obs_modes=[], pred_modes=[], fu
                 
     if len(pred_modes) > 0 :
         for mode in pred_modes:
+            if len(mode.shape) == 1:
+                mode = mode.reshape(1,-1)
             fs_mode = mode[:,0]
             vs_mode = mode[:,1]
             plt.errorbar(fs_mode, vs_mode, fmt=f"o", elinewidth=0.5, ms=2, color='tab:orange', linewidth=1.0)
             
     if len(full_pred_modes) > 0 :
         for mode in full_pred_modes:
+            if len(mode.shape) == 1:
+                mode = mode.reshape(1,-1)
             fs_mode = mode[:,0]
             vs_mode = mode[:,1]
             plt.plot(fs_mode, vs_mode, color='tab:orange', linewidth=1.0)
