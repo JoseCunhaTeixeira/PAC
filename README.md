@@ -1,6 +1,8 @@
-# PAC - Passive and Active Computation
+# PAC - Passive and Active Computation of MASW
 
-PAC (Passive and Active Computation) is a tool designed for processing automatic 2D Multichannel Analysis of Surface Waves (MASW). It can process both passive and active seismic data to extract dispersion curves and estimate subsurface shear wave velocity profiles.
+PAC is an app designed for processing 2D Multichannel Analysis of Surface Waves (MASW).
+It can handle both passive and active seismic data to automatically optimize and extract dispersion images.
+Dispersion curves can be semi-automatically picked on a interactive interface and then be inverted into shear wave velocity profiles.
 
 ## Features
 - **Hybrid Processing:** Supports both passive and active MASW methods without needing source position information.
@@ -16,7 +18,7 @@ PAC (Passive and Active Computation) is a tool designed for processing automatic
 - Required libraries: `numpy`, `pandas`, `scipy`, `matplotlib`, `plotly`, `bayesbay`, `streamlit`, `obspy`
 - On Mac OS, the GUI for folder selection and subprocess mapping may be incompatible with Streamlit.
 - On Mac OS, BayesBay needs to be installed from source and architecture target on Makefile needs to be erased.
-- Developed on Linux OS under Streamlit 1.41.1 and Python 3.10.12
+- Developed on Linux OS under Streamlit 1.41.1 and Python 3.10.12.
 
 ### Clone Repository
 ```sh
@@ -30,22 +32,22 @@ cd PAC/src/
 streamlit run Home.py
 ```
 Content:
-- `input/`: Contains folders (per profile) with seismic records
-- `src/`: Source code
-    - `Paths.py`: Paths to the PAC main folder (to modify)
-    - `Home.py`: App home
-    - `images/`: Images for app home
-    - `pages/`: App tabs
-    - `scripts/`: Signal processing scripts
-    - `modules/`: Functions
-- `output/`: Contains folders (per profile) with dispersion images, picked dispersion curves and inversion results
+- `Home.py`: App home
+- `home_images/`: Images for app home
+- `pages/`: App tabs (Computing, Dispersion Picking, Inversion, and Visualization)
+- `scripts/`: MASW and inversion scripts
+- `modules/`: Surface wave signal processing functions
+- `Paths.py`: Paths to the PAC main folder, and output and input directories
+- `input/`: Contains folders (one per profile) with seismic records
+- `output/`: Contains folders (one per profile) with dispersion images, picked dispersion curves and inversion results
 
 ## Contributors
 - **José Cunha Teixeira**
-- **Benjamin Decker** for phase-shift optimization
+- **Benjamin Decker** for phase-shift algorithm optimization
   
 ## License
-This open source project is part of the PhD thesis of José Cunha Teixeira and was funded by UMR 7619 METIS (Sorbonne Université), Mines Paris - PSL, SNCF Réseau, and the European Union.
+This project is under Creative Commons Attribution 4.0 International license, allowing re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited.
+It is part of the PhD thesis of José Cunha Teixeira and was funded by UMR 7619 METIS (Sorbonne University), Mines Paris - PSL, SNCF Réseau, and the European Union.
 
 ## Acknowledgments
 This work was developed with contributions from the geophysics research community. Special thanks to open-source developers for their invaluable tools.
