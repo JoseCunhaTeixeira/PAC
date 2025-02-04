@@ -45,10 +45,11 @@ Content:
 - `input/`: Contains one folder per profile with raw seismic records
     - `profile_1/`: seismic files for profile 1
     - `profile_2/`: seismic files for profile 2
-    ...
+    - ...
 - `output/`: Contains one folder per profile with dispersion images, picked dispersion curves and inversion results
     - `profile_1/`: results from computing, picking and inversion for profile 1
     - `profile_2/`: results from computing, picking and inversion for profile 2
+    - ...
 - (`input/` and `output/` are created automatically at app launching if do not exist)
 
 ## Contributors
