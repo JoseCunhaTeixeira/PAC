@@ -2,7 +2,7 @@
 
 PAC is an app designed for processing 2D Multichannel Analysis of Surface Waves (MASW).
 It can handle both passive and active seismic data to automatically optimize and extract dispersion images.
-Dispersion curves can be semi-automatically picked on a interactive interface and then be inverted into shear wave velocity profiles.
+Dispersion curves can be semi-automatically picked on an interactive interface and then be inverted into shear wave velocity profiles.
 
 ## Features
 - **Hybrid Processing:** Supports both passive and active MASW methods without needing source position information.
