@@ -6,18 +6,17 @@ Date : Feb 4, 2025
 """
 
 import os
+import glob
 import time
 import pandas as pd
 import streamlit as st
 from obspy import read
-import tkinter as tk
-from tkinter import filedialog
 import subprocess
 import concurrent.futures
 import json
 import plotly.graph_objects as go
 
-from Paths import output_dir
+from Paths import output_dir, input_dir
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -25,13 +24,6 @@ warnings.filterwarnings("ignore")
 
 
 ### FUNCTIONS ---------------------------------------------------------------------------------------------------------------------------------------
-def select_folder():
-   root = tk.Tk()
-   root.withdraw()
-   folder_path = filedialog.askdirectory(master=root)
-   root.destroy()
-   return folder_path
-
 def plot_MASW(geophone_positions, MASW_length_idx, MASW_step_idx):
     dx = geophone_positions[1] - geophone_positions[0]
     
@@ -113,13 +105,45 @@ def clear_session():
     st.session_state.clear()
 
 def initialize_session():
+    for key in st.session_state:
+        if 'COMP' not in key:
+            st.session_state.pop(key)
     if 'COMP_folder_path' not in st.session_state:
         st.session_state.COMP_folder_path = None
+    if 'COMP_x_start' not in st.session_state:
+        st.session_state.COMP_x_start = None
+    if 'COMP_x_step' not in st.session_state:
+        st.session_state.COMP_x_step = None
 ### -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 
 ### HANDLERS ----------------------------------------------------------------------------------------------------------------------------------------
+def handle_select_folder():
+    selected_folder_tmp = st.session_state.COMP_selected_folder
+    clear_session()
+    initialize_session()
+    st.session_state.COMP_selected_folder = selected_folder_tmp
+    
+    if st.session_state.COMP_selected_folder is not None:    
+        st.session_state.COMP_folder_path = f"{input_dir}/{st.session_state.COMP_selected_folder}/"
+
+        # List all files in the folder
+        files = [file for file in os.listdir(st.session_state.COMP_folder_path)]
+        files = sorted(files)
+        st.session_state.COMP_files = files
+
+        # Read all seismic records
+        streams = []
+        for file in st.session_state.COMP_files:
+            stream = read(st.session_state.COMP_folder_path + file)
+            streams.append(stream)
+        st.session_state.COMP_streams = streams
+
+        # Compute the duration of each seismic record
+        st.session_state.COMP_durations = [stream[0].stats.endtime - stream[0].stats.starttime for stream in st.session_state.COMP_streams]
+    
+
 def handle_set():
     st.session_state.COMP_clicked_set = True
 
@@ -255,50 +279,35 @@ st.title("👨‍💻 Computing")
 st.write("🛈 Surface wave dispersion computing.")
 
 st.divider() # --------------------------------------------------------------------------------------------------------------------------------------
-st.header("🚨 Select folder")
+st.header("🚨 Data selection")
 
 st.text('')
 st.text('')
 
-# Folder selection button
-folder_select_button = st.button("Select Folder", type="primary", use_container_width=True)
-    
-if folder_select_button:
-    
-    # Clear and initialize session
-    clear_session()
-    initialize_session()
-    
-    # Main folder with all seismic records
-    folder_path = select_folder()
-    folder_path = f"{folder_path}/"
-    st.session_state.COMP_folder_path = folder_path
-
-    # List all files in the folder
-    files = [file for file in os.listdir(st.session_state.COMP_folder_path)]
-    files = sorted(files)
-    st.session_state.COMP_files = files
-
-    # Read all seismic records
-    streams = []
-    for file in st.session_state.COMP_files:
-        stream = read(st.session_state.COMP_folder_path + file)
-        streams.append(stream)
-    st.session_state.COMP_streams = streams
-
-    # Compute the duration of each seismic record
-    st.session_state.COMP_durations = [stream[0].stats.endtime - stream[0].stats.starttime for stream in st.session_state.COMP_streams]
-     
-if st.session_state.COMP_folder_path is None:
-    st.text('')
-    st.text('')
-    st.info("👆 Select a folder containing the seismic files.")
+# Folder selection
+files_depth_1 = glob.glob(f"{input_dir}/*")
+input_folders = filter(lambda f: os.path.isdir(f), files_depth_1)
+input_folders = [os.path.relpath(folder, input_dir) for folder in input_folders]
+input_folders = sorted(input_folders)
+if input_folders:
+    st.selectbox("**Data folder**", input_folders, key='COMP_selected_folder', on_change=handle_select_folder, index=None, placeholder='Select')
+else:
+    st.error("❌ No input data folders found.")
     st.stop()
 
+if st.session_state.COMP_folder_path is None:
+    st.info("👆 Select a folder containing the raw seismic files to be processed.")
+    if st.session_state.COMP_x_start is not None or st.session_state.COMP_x_step is not None:
+        st.session_state.COMP_x_start = None
+        st.session_state.COMP_x_step = None
+    st.stop()
+
+st.success(f"👌 Seismic files loaded.")
+
 st.text('')
 st.text('')
 
-st.success(f"👌 Files loaded.")
+st.markdown("**Summary:**")
 data = {
     'Folder' : [st.session_state.COMP_folder_path],
     'Number of files [#]' : [len(st.session_state.COMP_files)],

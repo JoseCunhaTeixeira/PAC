@@ -6,10 +6,9 @@ Date : Feb 4, 20252025
 """
 
 import os
+import glob
 import numpy as np
 import streamlit as st
-import tkinter as tk
-from tkinter import filedialog
 from obspy import read
 import json
 import plotly.graph_objects as go
@@ -22,30 +21,28 @@ from modules.display import plot_pseudo_section, plot_wiggle, plot_disp, plot_in
 from modules.obspy2numpy import stream_to_array
 from modules.misc import arange
 
+from Paths import input_dir, output_dir
+
 import warnings
 warnings.filterwarnings("ignore")
 
 
 
 ### FUNCTIONS ---------------------------------------------------------------------------------------------------------------------------------------
-def select_folder():
-   root = tk.Tk()
-   root.withdraw()
-   folder_path = filedialog.askdirectory(master=root)
-   root.destroy()
-   return folder_path
-    
 def clear_session():
     st.cache_data.clear()
     st.session_state.clear()
 
 def initialize_session():
+    for key in st.session_state:
+        if 'VIZ' not in key:
+            st.session_state.pop(key)
     if "VIZ_mode" not in st.session_state:
         st.session_state.VIZ_mode = None
+    if 'VIZ_selected_folder' not in st.session_state:
+        st.session_state.VIZ_selected_folder = None
     if 'VIZ_folder_path' not in st.session_state:
         st.session_state.VIZ_folder_path = None
-    if 'VIZ_vmin_vmax' not in st.session_state:
-        st.session_state.VIZ_vmin_vmax = None
     if 'VIZ_v_xd_layered_raw' not in st.session_state:
         st.session_state.VIZ_v_xd_layered_raw = None
     if 'VIZ_v_xd_layered_smooth' not in st.session_state:
@@ -526,6 +523,30 @@ def save_images():
                     pred_v_fx[j, fi_start:fi_end+1] = pred_vs
             path_name = f"{st.session_state.VIZ_folder_path}/M{mode}_vr_pseudo-section.svg"
             display_pseudo_sections(obs_v_fx, pred_v_fx, fs, st.session_state.VIZ_xmids, path_name)
+                        
+def handle_select_folder():
+    mode_tmp = st.session_state.VIZ_mode
+    selected_folder_tmp = st.session_state.VIZ_selected_folder
+    clear_session()
+    initialize_session()
+    st.session_state.VIZ_mode = mode_tmp
+    st.session_state.VIZ_selected_folder = selected_folder_tmp
+    
+    if st.session_state.VIZ_selected_folder is not None:
+        if st.session_state.VIZ_mode == 'Signal':
+            st.session_state.VIZ_folder_path = f"{input_dir}/{st.session_state.VIZ_selected_folder}/"
+        if st.session_state.VIZ_mode in ['Dispersion', 'Inversion']:
+            st.session_state.VIZ_folder_path = f"{output_dir}/{st.session_state.VIZ_selected_folder}/"
+        
+def handle_select_mode():
+    mode_tmp = st.session_state.VIZ_mode
+    clear_session()
+    initialize_session()
+    st.session_state.VIZ_mode = mode_tmp
+    if 'VIZ_selected_folder' in st.session_state:
+        st.session_state.VIZ_selected_folder = None
+    if 'VIZ_folder_path' in st.session_state:
+        st.session_state.VIZ_folder_path = None
 ### -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -544,456 +565,488 @@ st.title("🧐 Visualization")
 st.write("🛈 Visualization of raw seismic records, dispersion images and inversion results.")
 
 st.divider() # --------------------------------------------------------------------------------------------------------------------------------------
-st.header("🚨 Select folder")
+st.header("🚨 Data selection")
 
 st.text('')
 st.text('')
 
-# Folder selection button
-folder_select_button = st.button("Select Folder", type="primary", use_container_width=True)
-
-if folder_select_button:
-    
-    clear_session()
-    initialize_session()
-    
-    # Main folder with all xmids folders
-    VIZ_folder_path= select_folder()
-    VIZ_folder_path = f"{VIZ_folder_path}/"
-    st.session_state.VIZ_folder_path = VIZ_folder_path
-    
-if st.session_state.VIZ_folder_path is None:
-    st.text('')
-    st.text('')
-    st.info("👆 Select a folder containing the seismic files.")
+# Option
+st.selectbox(options=['Signal', 'Dispersion', 'Inversion'], key='VIZ_mode', label='**Visualization mode**', index=None, placeholder='Select', on_change=handle_select_mode)
+if st.session_state.VIZ_mode is None:
+    if st.session_state.VIZ_selected_folder is not None:
+        st.session_state.VIZ_selected_folder = None
+    if st.session_state.VIZ_folder_path is not None:
+        st.session_state.VIZ_folder_path = None
+    st.info("👆 Select the type of data to visualize.")
     st.stop()
-       
-if st.session_state.VIZ_folder_path is not None:
-     
-    st.selectbox(options=['Signal', 'Dispersion', 'Inversion'], key='VIZ_mode', label='Entity to visualise', index=None, placeholder='Select a mode')
-    
-    if st.session_state.VIZ_mode == 'Signal':
-        if 'input' in st.session_state.VIZ_folder_path.split('/')[:-2]:
-            st.text('')
-            st.text('')
-            st.success(f"📁 Folder selected: **{st.session_state.VIZ_folder_path}**")
+
+if st.session_state.VIZ_mode == 'Signal':
+    # Folder selection
+    files_depth_1 = glob.glob(f"{input_dir}/*")
+    input_folders = filter(lambda f: os.path.isdir(f), files_depth_1)
+    input_folders = [os.path.relpath(folder, input_dir) for folder in input_folders]
+    input_folders = sorted(input_folders)
+    if input_folders:
+        st.selectbox("**Data folder**", input_folders, key='VIZ_selected_folder', on_change=handle_select_folder, index=None, placeholder='Select')
+    else:
+        st.error("❌ No input data folders found.")
+        st.stop()
+
+    if st.session_state.VIZ_folder_path is None:
+        st.info("👆 Select a folder containing the raw seismic files.")
+        st.stop()
+
+    st.success(f"📁 Selected folder: **{st.session_state.VIZ_folder_path}**")
             
-            # List all files in the folder
-            files = [file for file in os.listdir(st.session_state.VIZ_folder_path)]
-            files = sorted(files)
-            folders = files
+    # List all files in the folder
+    files = [file for file in os.listdir(st.session_state.VIZ_folder_path)]
+    files = sorted(files)
+    folders = files
 
-            # Read all seismic records
-            streams = []
-            for file in folders:
-                stream = read(st.session_state.VIZ_folder_path + file)
-                streams.append(stream)
-            st.session_state.VIZ_streams = streams
+    # Read all seismic records
+    streams = []
+    for file in folders:
+        stream = read(st.session_state.VIZ_folder_path + file)
+        streams.append(stream)
+    st.session_state.VIZ_streams = streams
 
-            # Compute the duration of each seismic record
-            st.session_state.VIZ_durations = [stream[0].stats.endtime - stream[0].stats.starttime for stream in st.session_state.VIZ_streams]
-        
-            st.divider()
-            st.subheader("**Seismic records**")
-            normalize = st.toggle("Normalize by trace", value=False)
-            if normalize:
-                norm = 'trace'
+    # Compute the duration of each seismic record
+    st.session_state.VIZ_durations = [stream[0].stats.endtime - stream[0].stats.starttime for stream in st.session_state.VIZ_streams]
+
+    st.divider()
+    st.subheader("**Seismic records**")
+    normalize = st.toggle("Normalize by trace", value=False)
+    
+    if normalize:
+        norm = 'trace'
+    else:
+        norm = 'global'
+    
+    # Plot the records on a subplot
+    for i, stream in enumerate(st.session_state.VIZ_streams):
+        TX = stream_to_array(stream, len(stream), len(stream[0].data))
+        delta = stream[0].stats.delta
+        total_points = TX.shape[0]
+        if total_points > 1000:
+            factor = total_points // 1000
+            TX = TX[::factor, :]
+        delta = delta * factor
+        x_sensors = arange(1, len(stream), 1)
+        fig = plot_wiggle(TX.T, x_sensors, delta, norm=norm)
+        st.text('')
+        st.text('')
+        st.text('')
+        st.text('')
+        st.markdown(f"**Record {i+1}**")
+        st.plotly_chart(fig, key=f"{i}")
+                
+elif st.session_state.VIZ_mode == 'Dispersion':
+    # Folder selection
+    files_depth_3 = glob.glob(f"{output_dir}/*/*/*")
+    input_folders = filter(lambda f: os.path.isdir(f), files_depth_3)
+    input_folders = [os.path.relpath(folder, output_dir) for folder in input_folders]
+    input_folders = sorted(input_folders)
+    if input_folders:
+        st.selectbox("**Data folder**", input_folders, key='VIZ_selected_folder', on_change=handle_select_folder, index=None, placeholder='Select')
+    else:
+        st.error("❌ No input data folders found.")
+        st.stop()
+
+    if st.session_state.VIZ_folder_path is None:
+        st.info("👆 Select a folder containing the dispersion data.")
+        st.stop()
+
+    st.success(f"📁 Selected folder: **{st.session_state.VIZ_folder_path}**")
+    
+    folders = [xmid for xmid in os.listdir(st.session_state.VIZ_folder_path) if xmid[0:4] == 'xmid']
+    xmids = [float(folder[4:]) for folder in folders]
+    st.session_state.VIZ_xmids, st.session_state.VIZ_folders = zip(*sorted(zip(xmids, folders)))
+
+    # MASW parameters from json file
+    with open(f"{st.session_state.VIZ_folder_path}/computing_params.json", "r") as f:
+        computing_param = json.load(f)
+        st.session_state.VIZ_Nx = computing_param["MASW_length"]
+        st.session_state.VIZ_dx = computing_param["positions"][1] - computing_param["positions"][0]    
+    
+    all_dispersion = []
+    all_fs = []
+    all_vs = []
+    availables = []
+    for folder in st.session_state.VIZ_folders:
+        list_dir = os.listdir(f'{st.session_state.VIZ_folder_path}/{folder}/comp/')
+        if f'{folder}_dispersion.csv' in list_dir and f'{folder}_fs.csv' in list_dir and f'{folder}_vs.csv' in list_dir:
+            all_dispersion.append(np.loadtxt(f'{st.session_state.VIZ_folder_path}/{folder}/comp/{folder}_dispersion.csv', delimiter=','))
+            all_fs.append(np.loadtxt(f'{st.session_state.VIZ_folder_path}/{folder}/comp/{folder}_fs.csv', delimiter=','))
+            all_vs.append(np.loadtxt(f'{st.session_state.VIZ_folder_path}/{folder}/comp/{folder}_vs.csv', delimiter=','))
+            availables.append(True)
+        else:
+            availables.append(False)
+            all_dispersion.append(None)
+            all_fs.append(None)
+            all_vs.append(None)
+    
+    st.divider()
+    st.subheader("**Dispersion images**")
+    for available, xmid, dispersion, fs, vs in zip(availables, st.session_state.VIZ_xmids, all_dispersion, all_fs, all_vs):
+        if available:
+            fig = plot_disp(dispersion, fs, vs, norm='Frequencies', dx=st.session_state.VIZ_dx, Nx=st.session_state.VIZ_Nx)
+            
+            if os.path.exists(f"{st.session_state.VIZ_folder_path}/xmid{xmid}/pick/"):
+                picked_modes = [fname for fname in os.listdir(f'{st.session_state.VIZ_folder_path}/xmid{xmid}/pick/') if fname.endswith(".pvc") and fname.startswith(f"xmid{xmid}_obs_M")]
             else:
-                norm = 'global'
-            
-            # Plot the records on a subplot
-            for i, stream in enumerate(st.session_state.VIZ_streams):
-                XT = stream_to_array(stream, len(stream), len(stream[0].data))
-                x_sensors = arange(1, len(stream), 1)
-                fig = plot_wiggle(XT.T, x_sensors, stream[0].stats.delta, norm=norm)
-                st.text('')
-                st.text('')
-                st.text('')
-                st.text('')
-                st.markdown(f"**Record {i+1}**")
-                st.plotly_chart(fig)
-                
+                picked_modes = []     
+            for picked_mode in picked_modes:
+                pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/xmid{xmid}/pick/{picked_mode}")
+                if len(pvc.shape) == 1:
+                        pvc = pvc.reshape(1,-1)
+                fig.add_trace(go.Scatter(x=pvc[:,0],
+                                    y=pvc[:,1],
+                                    mode='lines',
+                                    name=f'Mode {int(picked_mode.split("_M")[1].split(".")[0])}',
+                                    line=dict(color='white', width=2),
+                                    error_y=dict(type='data', array=pvc[:,2], visible=True, color='white', width=2, thickness=0.75),
+                                    showlegend=False
+                                    ))
+            fig.update_layout(xaxis_range=[min(fs), max(fs)])
+            fig.update_layout(yaxis={'range': [min(vs), max(vs)], 'autorange': False})
+            fig.update_layout(height=400)
+            st.text('')
+            st.text('')
+            st.text('')
+            st.text('')
+            st.markdown(f"**Position: {xmid} m**")
+            st.plotly_chart(fig, key=f"{xmid}")
         else:
             st.text('')
             st.text('')
-            st.error(f"📁 Selected folder **{st.session_state.VIZ_folder_path}** is not an input folder.")
-        
-    elif st.session_state.VIZ_mode in ['Dispersion', 'Inversion']:
-        if "W" in st.session_state.VIZ_folder_path.split('/')[-2] and 'output' in st.session_state.VIZ_folder_path.split('/')[-5]:
             st.text('')
             st.text('')
-            st.success(f"📁 Folder selected: **{st.session_state.VIZ_folder_path}**")
-            
-            folders = [xmid for xmid in os.listdir(st.session_state.VIZ_folder_path) if xmid[0:4] == 'xmid']
-            xmids = [float(folder[4:]) for folder in folders]
-            st.session_state.VIZ_xmids, st.session_state.VIZ_folders = zip(*sorted(zip(xmids, folders)))
-            
-            # MASW parameters from json file
-            with open(f"{st.session_state.VIZ_folder_path}/computing_params.json", "r") as f:
-                computing_param = json.load(f)
-                st.session_state.VIZ_Nx = computing_param["MASW_length"]
-                st.session_state.VIZ_dx = computing_param["positions"][1] - computing_param["positions"][0]    
-                        
-            if st.session_state.VIZ_mode == 'Dispersion':
-                # Read all dispersion files
-                all_dispersion = []
-                all_fs = []
-                all_vs = []
-                availables = []
-                for folder in st.session_state.VIZ_folders:
-                    list_dir = os.listdir(f'{st.session_state.VIZ_folder_path}/{folder}/comp/')
-                    if f'{folder}_dispersion.csv' in list_dir and f'{folder}_fs.csv' in list_dir and f'{folder}_vs.csv' in list_dir:
-                        all_dispersion.append(np.loadtxt(f'{st.session_state.VIZ_folder_path}/{folder}/comp/{folder}_dispersion.csv', delimiter=','))
-                        all_fs.append(np.loadtxt(f'{st.session_state.VIZ_folder_path}/{folder}/comp/{folder}_fs.csv', delimiter=','))
-                        all_vs.append(np.loadtxt(f'{st.session_state.VIZ_folder_path}/{folder}/comp/{folder}_vs.csv', delimiter=','))
-                        availables.append(True)
-                    else:
-                        availables.append(False)
-                        all_dispersion.append(None)
-                        all_fs.append(None)
-                        all_vs.append(None)
-                
-                st.divider()
-                st.subheader("**Dispersion images**")
-                for available, xmid, dispersion, fs, vs in zip(availables, st.session_state.VIZ_xmids, all_dispersion, all_fs, all_vs):
-                    if available:
-                        fig = plot_disp(dispersion, fs, vs, norm='Frequencies', dx=st.session_state.VIZ_dx, Nx=st.session_state.VIZ_Nx)
-                        
-                        if os.path.exists(f"{st.session_state.VIZ_folder_path}/xmid{xmid}/pick/"):
-                            picked_modes = [fname for fname in os.listdir(f'{st.session_state.VIZ_folder_path}/xmid{xmid}/pick/') if fname.endswith(".pvc") and fname.startswith(f"xmid{xmid}_obs_M")]
-                        else:
-                            picked_modes = []     
-                        for picked_mode in picked_modes:
-                            pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/xmid{xmid}/pick/{picked_mode}")
-                            if len(pvc.shape) == 1:
-                                    pvc = pvc.reshape(1,-1)
-                            fig.add_trace(go.Scatter(x=pvc[:,0],
-                                                y=pvc[:,1],
-                                                mode='lines',
-                                                name=f'Mode {int(picked_mode.split("_M")[1].split(".")[0])}',
-                                                line=dict(color='white', width=2),
-                                                error_y=dict(type='data', array=pvc[:,2], visible=True, color='white', width=2, thickness=0.75),
-                                                showlegend=False
-                                                ))
-                        fig.update_layout(xaxis_range=[min(fs), max(fs)])
-                        fig.update_layout(yaxis={'range': [min(vs), max(vs)], 'autorange': False})
-                        fig.update_layout(height=400)
-                        st.text('')
-                        st.text('')
-                        st.text('')
-                        st.text('')
-                        st.markdown(f"**Position: {xmid} m**")
-                        st.plotly_chart(fig)
-                    else:
-                        st.text('')
-                        st.text('')
-                        st.text('')
-                        st.text('')
-                        st.markdown(f"**Position: {xmid} m**")
-                        st.error(f"📁 Dispersion data missing.")
-                
-                # Read picked modes xmid folder
-                nb_picked_modes_by_position = []
-                picked_modes_by_position = []
-                for folder, pos in zip(st.session_state.VIZ_folders, st.session_state.VIZ_xmids):
-                    if os.path.exists(f"{st.session_state.VIZ_folder_path}/{folder}/pick/"):
-                        picked_modes = [int(fname.split("_M")[1].split(".")[0]) for fname in os.listdir(f"{st.session_state.VIZ_folder_path}/{folder}/pick") if fname.endswith(".pvc") and fname.startswith(f"xmid{pos}_obs_M")]
-                        picked_modes = sorted(picked_modes)
-                    else:
-                        picked_modes = []
-                    picked_modes_by_position.append(picked_modes)
-                    nb_picked_modes_by_position.append(len(picked_modes))
-
-                # Count distinct modes
-                distinct_modes = {}
-                for picked_modes in picked_modes_by_position:
-                    for picked_mode in picked_modes:
-                        if picked_mode not in distinct_modes.keys():
-                            distinct_modes[picked_mode] = 1
-                        else:
-                            distinct_modes[picked_mode] += 1
-                distinct_modes = dict(sorted(distinct_modes.items()))
-                
-                
-                if len(distinct_modes) > 0:
-                    st.divider()
-
-                    st.subheader("**Pseudo-section**")
-                    on = st.toggle("OFF: Frequencies | ON: Wavelengths", value=False)
-                
-                for mode, count in distinct_modes.items():
-                    if on:
-                        ws_per_position = []
-                        vs_per_position = []
-                        for j, folder in enumerate(st.session_state.VIZ_folders):
-                            try :
-                                pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/pick/{folder}_obs_M{mode}.pvc")
-                                if len(pvc.shape) == 1:
-                                        pvc = pvc.reshape(1,-1)
-                                pvc = np.round(pvc, 2)
-                                fs = pvc[:,0]
-                                vs = pvc[:,1]
-                                ws, vs = resamp_wavelength(fs, vs)
-                                ws_per_position.append(ws)
-                                vs_per_position.append(vs)
-                            except:
-                                ws_per_position.append([])
-                                vs_per_position.append([])
-                        min_ws = np.min([np.min(ws) for ws in ws_per_position if len(ws) > 0])
-                        max_ws = np.max([np.max(ws) for ws in ws_per_position if len(ws) > 0])
-                        obs_ws = arange(min_ws, max_ws, 1)
-                        obs_v_wx = np.full((len(st.session_state.VIZ_xmids), len(obs_ws)), np.nan)
-                        for j, (ws, vs) in enumerate(zip(ws_per_position, vs_per_position)):
-                            if len(ws) > 0:
-                                fi_start = np.where(obs_ws >= ws[0])[0][0]
-                                fi_end = np.where(obs_ws >= ws[-1])[0][0]
-                                obs_v_wx[j, fi_start:fi_end+1] = vs
-                        fig = plot_pseudo_section(obs_v_wx, obs_ws, st.session_state.VIZ_xmids, wavelength=True)
-                        st.plotly_chart(fig)
-                    else:
-                        fs_per_position = []
-                        vs_per_position = []
-                        for j, folder in enumerate(st.session_state.VIZ_folders):
-                            try :
-                                pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/pick/{folder}_obs_M{mode}.pvc")
-                                if len(pvc.shape) == 1:
-                                        pvc = pvc.reshape(1,-1)
-                                pvc = np.round(pvc, 2)
-                                fs = pvc[:,0]
-                                vs = pvc[:,1]
-                                fs, vs = resamp_frequency(fs, vs)
-                                fs_per_position.append(fs)
-                                vs_per_position.append(vs)
-                            except:
-                                fs_per_position.append([])
-                                vs_per_position.append([])
-                        min_fs = np.min([np.min(fs) for fs in fs_per_position if len(fs) > 0])
-                        max_fs = np.max([np.max(fs) for fs in fs_per_position if len(fs) > 0])
-                        obs_fs = arange(min_fs, max_fs, 1)
-                        obs_v_fx = np.full((len(st.session_state.VIZ_xmids), len(obs_fs)), np.nan)
-                        for j, (fs, vs) in enumerate(zip(fs_per_position, vs_per_position)):
-                            if len(fs) > 0:
-                                fi_start = np.where(obs_fs >= fs[0])[0][0]
-                                fi_end = np.where(obs_fs >= fs[-1])[0][0]
-                                obs_v_fx[j, fi_start:fi_end+1] = vs
-                        fig = plot_pseudo_section(obs_v_fx, obs_fs, st.session_state.VIZ_xmids)
-                        st.plotly_chart(fig) 
-                        
-            if st.session_state.VIZ_mode == 'Inversion':
-                
-                st.divider()
-                
-                st.header("🚨 Inversion results")
-                
-                st.text('')
-                st.text('')
-                
-                if st.session_state.VIZ_v_xd_ridge_raw is None and st.session_state.VIZ_v_xd_layered_raw is None and st.session_state.VIZ_v_xd_smooth_raw is None:
-                    load_sections()
-                
-                if st.session_state.VIZ_v_xd_ridge_raw is None and st.session_state.VIZ_v_xd_layered_raw is None and st.session_state.VIZ_v_xd_smooth_raw is None:
-                    st.text('')
-                    st.text('')
-                    st.error(f"📁 Inversion data missing.")
-                    st.divider()
-                    st.stop()
-                    
-                st.subheader("**Shear wave velocity profile**")
-                
-                st.write('')
-                st.write('')
-                st.markdown(f"🔧 **Display settings**")
-                with st.container(border=True):
-                    columns = st.columns(3)
-                    with columns[0]:
-                        st.radio("**Colormap**", ['Terrain', 'Viridis', 'Jet', 'Gray'],
-                            key='VIZ_cmap')
-                    with columns[1]:
-                        st.radio("**Model**", ['Smooth', 'Layered', 'Ridge'],
-                            key='VIZ_model')
-                    with columns[2]:
-                        st.radio("**Lateral smoothing**", ['Smooth', 'Raw'],
-                            key='VIZ_smoothing')
-                        
-                st.text('')
-                st.text('')
-                    
-                if st.session_state.VIZ_model == 'Ridge':
-                    
-                    if st.session_state.VIZ_v_xd_ridge_raw is not None:
-                        
-                        vs_min = st.session_state.VIZ_vs_min_ridge
-                        vs_max = st.session_state.VIZ_vs_max_ridge
-                        
-                        with st.container(border=True):
-                            st.select_slider(
-                                "**$v_{S}$ range**",
-                                options=arange(np.floor(vs_min), np.ceil(vs_max), 1),
-                                value=(np.floor(vs_min), np.ceil(vs_max)),
-                                key='VIZ_vmin_vmax'
-                            )
-                    
-                        if st.session_state.VIZ_vmin_vmax is None:
-                            vmin = vs_min
-                            vmax = vs_max
-                        else:
-                            vmin = st.session_state.VIZ_vmin_vmax[0]
-                            vmax = st.session_state.VIZ_vmin_vmax[1]
-                        if st.session_state.VIZ_smoothing == 'Smooth':
-                            fig = plot_inverted_section(st.session_state.VIZ_v_xd_ridge_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_ridge, zmin=vmin, zmax=vmax)
-                        elif st.session_state.VIZ_smoothing == 'Raw':
-                            fig = plot_inverted_section(st.session_state.VIZ_v_xd_ridge_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_ridge, zmin=vmin, zmax=vmax)
-                            
-                        fig.update_layout(height=400)
-                        if st.session_state.VIZ_cmap is not None:
-                            if st.session_state.VIZ_cmap == 'Terrain':
-                                    cmap = plt.get_cmap('terrain')
-                                    colorscale = [(i / 255.0, mcolors.rgb2hex(cmap(i / 255.0))) for i in range(256)]
-                                    fig.update_coloraxes(colorscale=colorscale)
-                            else:
-                                fig.update_coloraxes(colorscale=st.session_state.VIZ_cmap)
-                        st.plotly_chart(fig)
-                        
-                        if st.session_state.VIZ_smoothing == 'Smooth':
-                            fig = plot_std_section(st.session_state.VIZ_std_xd_ridge_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_ridge)
-                        elif st.session_state.VIZ_smoothing == 'Raw':
-                            fig = plot_std_section(st.session_state.VIZ_std_xd_ridge_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_ridge)
-                        fig.update_layout(height=400)
-                        st.plotly_chart(fig)
-                        
-                        st.text("")
-                        st.text("")
-                        st.text("")
-                        st.text("")
-                        st.button("Save images", type="primary", use_container_width=True, on_click=save_images)
-                            
-                    else:
-                        vs_min = 0
-                        vs_max = 1
-                        st.text('')
-                        st.text('')
-                        st.error(f"📁 Inversion data missing for ridge model.")
-                        
-                        
-                if st.session_state.VIZ_model == 'Layered':
-                    
-                    if st.session_state.VIZ_v_xd_layered_raw is not None:
-                        
-                        vs_min = st.session_state.VIZ_vs_min_layered
-                        vs_max = st.session_state.VIZ_vs_max_layered
-                        
-                        with st.container(border=True):
-                            st.select_slider(
-                                "**$v_{S}$ range**",
-                                options=arange(np.floor(vs_min), np.ceil(vs_max), 1),
-                                value=(np.floor(vs_min), np.ceil(vs_max)),
-                                key='VIZ_vmin_vmax'
-                            )
-                    
-                        if st.session_state.VIZ_vmin_vmax is None:
-                            vmin = vs_min
-                            vmax = vs_max
-                        else:
-                            vmin = st.session_state.VIZ_vmin_vmax[0]
-                            vmax = st.session_state.VIZ_vmin_vmax[1]
-                        if st.session_state.VIZ_smoothing == 'Smooth':
-                            fig = plot_inverted_section(st.session_state.VIZ_v_xd_layered_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_layered, zmin=vmin, zmax=vmax)
-                        elif st.session_state.VIZ_smoothing == 'Raw':
-                            fig = plot_inverted_section(st.session_state.VIZ_v_xd_layered_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_layered, zmin=vmin, zmax=vmax)
-                            
-                        fig.update_layout(height=400)
-                        if st.session_state.VIZ_cmap is not None:
-                            if st.session_state.VIZ_cmap == 'Terrain':
-                                    cmap = plt.get_cmap('terrain')
-                                    colorscale = [(i / 255.0, mcolors.rgb2hex(cmap(i / 255.0))) for i in range(256)]
-                                    fig.update_coloraxes(colorscale=colorscale)
-                            else:
-                                fig.update_coloraxes(colorscale=st.session_state.VIZ_cmap)
-                        st.plotly_chart(fig)
-                        
-                        if st.session_state.VIZ_smoothing == 'Smooth':
-                            fig = plot_std_section(st.session_state.VIZ_std_xd_layered_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_layered)
-                        elif st.session_state.VIZ_smoothing == 'Raw':
-                            fig = plot_std_section(st.session_state.VIZ_std_xd_layered_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_layered)
-                        fig.update_layout(height=400)
-                        st.plotly_chart(fig)
-                        
-                        st.text("")
-                        st.text("")
-                        st.text("")
-                        st.text("")
-                        st.button("Save images", type="primary", use_container_width=True, on_click=save_images)
-                            
-                    else:
-                        vs_min = 0
-                        vs_max = 1
-                        st.text('')
-                        st.text('')
-                        st.error(f"📁 Inversion data missing for layered model.")
-                        
-                
-                if st.session_state.VIZ_model == 'Smooth':
-                    
-                    if st.session_state.VIZ_v_xd_smooth_raw is not None:
-                        
-                        vs_min = st.session_state.VIZ_vs_min_smooth
-                        vs_max = st.session_state.VIZ_vs_max_smooth
-                        
-                        with st.container(border=True):
-                            st.select_slider(
-                                "**$v_{S}$ range**",
-                                options=arange(np.floor(vs_min), np.ceil(vs_max), 1),
-                                value=(np.floor(vs_min), np.ceil(vs_max)),
-                                key='VIZ_vmin_vmax'
-                            )
-                    
-                        if st.session_state.VIZ_vmin_vmax is None:
-                            vmin = vs_min
-                            vmax = vs_max
-                        else:
-                            vmin = st.session_state.VIZ_vmin_vmax[0]
-                            vmax = st.session_state.VIZ_vmin_vmax[1]
-                        if st.session_state.VIZ_smoothing == 'Smooth':
-                            fig = plot_inverted_section(st.session_state.VIZ_v_xd_smooth_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_smooth, zmin=vmin, zmax=vmax)
-                        elif st.session_state.VIZ_smoothing == 'Raw':
-                            fig = plot_inverted_section(st.session_state.VIZ_v_xd_smooth_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_smooth, zmin=vmin, zmax=vmax)
-                            
-                        fig.update_layout(height=400)
-                        if st.session_state.VIZ_cmap is not None:
-                            if st.session_state.VIZ_cmap == 'Terrain':
-                                    cmap = plt.get_cmap('terrain')
-                                    colorscale = [(i / 255.0, mcolors.rgb2hex(cmap(i / 255.0))) for i in range(256)]
-                                    fig.update_coloraxes(colorscale=colorscale)
-                            else:
-                                fig.update_coloraxes(colorscale=st.session_state.VIZ_cmap)
-                        st.plotly_chart(fig)
-                        
-                        if st.session_state.VIZ_smoothing == 'Smooth':
-                            fig = plot_std_section(st.session_state.VIZ_std_xd_smooth_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_smooth)
-                        elif st.session_state.VIZ_smoothing == 'Raw':
-                            fig = plot_std_section(st.session_state.VIZ_std_xd_smooth_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_smooth)
-                        fig.update_layout(height=400)
-                        st.plotly_chart(fig)
-                        
-                        
-                        st.text("")
-                        st.text("")
-                        st.text("")
-                        st.text("")
-                        st.button("Save images", type="primary", use_container_width=True, on_click=save_images)
-                            
-                    else:
-                        vs_min = 0
-                        vs_max = 1
-                        st.text('')
-                        st.text('')
-                        st.error(f"📁 Inversion data missing for smooth model.")
-                       
-        else:
-            st.text('')
-            st.text('')
-            st.error(f"📁 Selected folder **{st.session_state.VIZ_folder_path}** is not an output folder.")
+            st.markdown(f"**Position: {xmid} m**")
+            st.error(f"📁 Dispersion data missing.")
     
+    # Read picked modes xmid folder
+    nb_picked_modes_by_position = []
+    picked_modes_by_position = []
+    for folder, pos in zip(st.session_state.VIZ_folders, st.session_state.VIZ_xmids):
+        if os.path.exists(f"{st.session_state.VIZ_folder_path}/{folder}/pick/"):
+            picked_modes = [int(fname.split("_M")[1].split(".")[0]) for fname in os.listdir(f"{st.session_state.VIZ_folder_path}/{folder}/pick") if fname.endswith(".pvc") and fname.startswith(f"xmid{pos}_obs_M")]
+            picked_modes = sorted(picked_modes)
+        else:
+            picked_modes = []
+        picked_modes_by_position.append(picked_modes)
+        nb_picked_modes_by_position.append(len(picked_modes))
+
+    # Count distinct modes
+    distinct_modes = {}
+    for picked_modes in picked_modes_by_position:
+        for picked_mode in picked_modes:
+            if picked_mode not in distinct_modes.keys():
+                distinct_modes[picked_mode] = 1
+            else:
+                distinct_modes[picked_mode] += 1
+    distinct_modes = dict(sorted(distinct_modes.items()))
+    
+    if len(distinct_modes) > 0:
+        st.divider()
+
+        st.subheader("**Pseudo-section**")
+        on = st.toggle("OFF: Frequencies | ON: Wavelengths", value=False)
+    
+    for mode, count in distinct_modes.items():
+        if on:
+            ws_per_position = []
+            vs_per_position = []
+            for j, folder in enumerate(st.session_state.VIZ_folders):
+                try :
+                    pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/pick/{folder}_obs_M{mode}.pvc")
+                    if len(pvc.shape) == 1:
+                            pvc = pvc.reshape(1,-1)
+                    pvc = np.round(pvc, 2)
+                    fs = pvc[:,0]
+                    vs = pvc[:,1]
+                    ws, vs = resamp_wavelength(fs, vs)
+                    ws_per_position.append(ws)
+                    vs_per_position.append(vs)
+                except:
+                    ws_per_position.append([])
+                    vs_per_position.append([])
+            min_ws = np.min([np.min(ws) for ws in ws_per_position if len(ws) > 0])
+            max_ws = np.max([np.max(ws) for ws in ws_per_position if len(ws) > 0])
+            obs_ws = arange(min_ws, max_ws, 1)
+            obs_v_wx = np.full((len(st.session_state.VIZ_xmids), len(obs_ws)), np.nan)
+            for j, (ws, vs) in enumerate(zip(ws_per_position, vs_per_position)):
+                if len(ws) > 0:
+                    fi_start = np.where(obs_ws >= ws[0])[0][0]
+                    fi_end = np.where(obs_ws >= ws[-1])[0][0]
+                    obs_v_wx[j, fi_start:fi_end+1] = vs
+            fig = plot_pseudo_section(obs_v_wx, obs_ws, st.session_state.VIZ_xmids, wavelength=True)
+            st.plotly_chart(fig)
+        else:
+            fs_per_position = []
+            vs_per_position = []
+            for j, folder in enumerate(st.session_state.VIZ_folders):
+                try :
+                    pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/pick/{folder}_obs_M{mode}.pvc")
+                    if len(pvc.shape) == 1:
+                            pvc = pvc.reshape(1,-1)
+                    pvc = np.round(pvc, 2)
+                    fs = pvc[:,0]
+                    vs = pvc[:,1]
+                    fs, vs = resamp_frequency(fs, vs)
+                    fs_per_position.append(fs)
+                    vs_per_position.append(vs)
+                except:
+                    fs_per_position.append([])
+                    vs_per_position.append([])
+            min_fs = np.min([np.min(fs) for fs in fs_per_position if len(fs) > 0])
+            max_fs = np.max([np.max(fs) for fs in fs_per_position if len(fs) > 0])
+            obs_fs = arange(min_fs, max_fs, 1)
+            obs_v_fx = np.full((len(st.session_state.VIZ_xmids), len(obs_fs)), np.nan)
+            for j, (fs, vs) in enumerate(zip(fs_per_position, vs_per_position)):
+                if len(fs) > 0:
+                    fi_start = np.where(obs_fs >= fs[0])[0][0]
+                    fi_end = np.where(obs_fs >= fs[-1])[0][0]
+                    obs_v_fx[j, fi_start:fi_end+1] = vs
+            fig = plot_pseudo_section(obs_v_fx, obs_fs, st.session_state.VIZ_xmids)
+            st.plotly_chart(fig)                     
+                        
+elif st.session_state.VIZ_mode == 'Inversion':
+    # Folder selection
+    files_depth_3 = glob.glob(f"{output_dir}/*/*/*")
+    input_folders = filter(lambda f: os.path.isdir(f), files_depth_3)
+    input_folders = [os.path.relpath(folder, output_dir) for folder in input_folders]
+    input_folders = sorted(input_folders)
+    if input_folders:
+        st.selectbox("**Data folder**", input_folders, key='VIZ_selected_folder', on_change=handle_select_folder, index=None, placeholder='Select')
+    else:
+        st.error("❌ No input data folders found.")
+        st.stop()
+
+    if st.session_state.VIZ_folder_path is None:
+        st.info("👆 Select a folder containing the inversion results.")
+        st.stop()
+
+    st.success(f"📁 Selected folder: **{st.session_state.VIZ_folder_path}**")
+    
+    folders = [xmid for xmid in os.listdir(st.session_state.VIZ_folder_path) if xmid[0:4] == 'xmid']
+    xmids = [float(folder[4:]) for folder in folders]
+    st.session_state.VIZ_xmids, st.session_state.VIZ_folders = zip(*sorted(zip(xmids, folders)))
+
+    # MASW parameters from json file
+    with open(f"{st.session_state.VIZ_folder_path}/computing_params.json", "r") as f:
+        computing_param = json.load(f)
+        st.session_state.VIZ_Nx = computing_param["MASW_length"]
+        st.session_state.VIZ_dx = computing_param["positions"][1] - computing_param["positions"][0]                    
+                        
+    st.divider()
+    
+    st.header("🚨 Inversion results")
+    
+    st.text('')
+    st.text('')
+    
+    if st.session_state.VIZ_v_xd_ridge_raw is None and st.session_state.VIZ_v_xd_layered_raw is None and st.session_state.VIZ_v_xd_smooth_raw is None:
+        load_sections()
+    
+    if st.session_state.VIZ_v_xd_ridge_raw is None and st.session_state.VIZ_v_xd_layered_raw is None and st.session_state.VIZ_v_xd_smooth_raw is None:
+        st.text('')
+        st.text('')
+        st.error(f"📁 Inversion data missing.")
+        st.divider()
+        st.stop()
+        
+    st.subheader("**Shear wave velocity profile**")
+    
+    st.write('')
+    st.write('')
+    st.markdown(f"🔧 **Display settings**")
+    with st.container(border=True):
+        columns = st.columns(3)
+        with columns[0]:
+            st.radio("**Colormap**", ['Terrain', 'Viridis', 'Jet', 'Gray'],
+                key='VIZ_cmap')
+        with columns[1]:
+            st.radio("**Model**", ['Smooth', 'Layered', 'Ridge'],
+                key='VIZ_model')
+        with columns[2]:
+            st.radio("**Lateral smoothing**", ['Smooth', 'Raw'],
+                key='VIZ_smoothing')
+            
+    st.text('')
+    st.text('')
+        
+    if st.session_state.VIZ_model == 'Ridge':
+        
+        if st.session_state.VIZ_v_xd_ridge_raw is not None:
+            
+            vs_min = st.session_state.VIZ_vs_min_ridge
+            vs_max = st.session_state.VIZ_vs_max_ridge
+            
+            with st.container(border=True):
+                st.select_slider(
+                    "**$v_{S}$ range**",
+                    options=arange(np.floor(vs_min), np.ceil(vs_max), 1),
+                    value=(np.floor(vs_min), np.ceil(vs_max)),
+                    key='VIZ_vmin_vmax'
+                )
+
+            if st.session_state.VIZ_vmin_vmax is None:
+                vmin = vs_min
+                vmax = vs_max
+            else:
+                vmin = st.session_state.VIZ_vmin_vmax[0]
+                vmax = st.session_state.VIZ_vmin_vmax[1]
+            if st.session_state.VIZ_smoothing == 'Smooth':
+                fig = plot_inverted_section(st.session_state.VIZ_v_xd_ridge_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_ridge, zmin=vmin, zmax=vmax)
+            elif st.session_state.VIZ_smoothing == 'Raw':
+                fig = plot_inverted_section(st.session_state.VIZ_v_xd_ridge_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_ridge, zmin=vmin, zmax=vmax)
+                
+            fig.update_layout(height=400)
+            if st.session_state.VIZ_cmap is not None:
+                if st.session_state.VIZ_cmap == 'Terrain':
+                        cmap = plt.get_cmap('terrain')
+                        colorscale = [(i / 255.0, mcolors.rgb2hex(cmap(i / 255.0))) for i in range(256)]
+                        fig.update_coloraxes(colorscale=colorscale)
+                else:
+                    fig.update_coloraxes(colorscale=st.session_state.VIZ_cmap)
+            st.plotly_chart(fig)
+            
+            if st.session_state.VIZ_smoothing == 'Smooth':
+                fig = plot_std_section(st.session_state.VIZ_std_xd_ridge_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_ridge)
+            elif st.session_state.VIZ_smoothing == 'Raw':
+                fig = plot_std_section(st.session_state.VIZ_std_xd_ridge_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_ridge)
+            fig.update_layout(height=400)
+            st.plotly_chart(fig)
+            
+            st.text("")
+            st.text("")
+            st.text("")
+            st.text("")
+            st.button("Save images", type="primary", use_container_width=True, on_click=save_images)
+            st.markdown(r"🛈 *Will save the above $v_{S}$ and standard deviation sections, and the corresponding $v_{R}$ pseudo-sections.*")
+                
+        else:
+            vs_min = 0
+            vs_max = 1
+            st.text('')
+            st.text('')
+            st.error(f"📁 Inversion data missing for ridge model.")
+            
+    if st.session_state.VIZ_model == 'Layered':
+        
+        if st.session_state.VIZ_v_xd_layered_raw is not None:
+            
+            vs_min = st.session_state.VIZ_vs_min_layered
+            vs_max = st.session_state.VIZ_vs_max_layered
+            
+            with st.container(border=True):
+                st.select_slider(
+                    "**$v_{S}$ range**",
+                    options=arange(np.floor(vs_min), np.ceil(vs_max), 1),
+                    value=(np.floor(vs_min), np.ceil(vs_max)),
+                    key='VIZ_vmin_vmax'
+                )
+
+            if st.session_state.VIZ_vmin_vmax is None:
+                vmin = vs_min
+                vmax = vs_max
+            else:
+                vmin = st.session_state.VIZ_vmin_vmax[0]
+                vmax = st.session_state.VIZ_vmin_vmax[1]
+            if st.session_state.VIZ_smoothing == 'Smooth':
+                fig = plot_inverted_section(st.session_state.VIZ_v_xd_layered_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_layered, zmin=vmin, zmax=vmax)
+            elif st.session_state.VIZ_smoothing == 'Raw':
+                fig = plot_inverted_section(st.session_state.VIZ_v_xd_layered_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_layered, zmin=vmin, zmax=vmax)
+                
+            fig.update_layout(height=400)
+            if st.session_state.VIZ_cmap is not None:
+                if st.session_state.VIZ_cmap == 'Terrain':
+                        cmap = plt.get_cmap('terrain')
+                        colorscale = [(i / 255.0, mcolors.rgb2hex(cmap(i / 255.0))) for i in range(256)]
+                        fig.update_coloraxes(colorscale=colorscale)
+                else:
+                    fig.update_coloraxes(colorscale=st.session_state.VIZ_cmap)
+            st.plotly_chart(fig)
+            
+            if st.session_state.VIZ_smoothing == 'Smooth':
+                fig = plot_std_section(st.session_state.VIZ_std_xd_layered_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_layered)
+            elif st.session_state.VIZ_smoothing == 'Raw':
+                fig = plot_std_section(st.session_state.VIZ_std_xd_layered_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_layered)
+            fig.update_layout(height=400)
+            st.plotly_chart(fig)
+            
+            st.text("")
+            st.text("")
+            st.text("")
+            st.text("")
+            st.button("Save images", type="primary", use_container_width=True, on_click=save_images)
+            st.markdown(r"🛈 *Will save the above $v_{S}$ and standard deviation sections, and the corresponding $v_{R}$ pseudo-sections.*")
+                
+        else:
+            vs_min = 0
+            vs_max = 1
+            st.text('')
+            st.text('')
+            st.error(f"📁 Inversion data missing for layered model.")
+    
+    if st.session_state.VIZ_model == 'Smooth':
+        
+        if st.session_state.VIZ_v_xd_smooth_raw is not None:
+            
+            vs_min = st.session_state.VIZ_vs_min_smooth
+            vs_max = st.session_state.VIZ_vs_max_smooth
+            
+            with st.container(border=True):
+                st.select_slider(
+                    "**$v_{S}$ range**",
+                    options=arange(np.floor(vs_min), np.ceil(vs_max), 1),
+                    value=(np.floor(vs_min), np.ceil(vs_max)),
+                    key='VIZ_vmin_vmax'
+                )
+        
+            if st.session_state.VIZ_vmin_vmax is None:
+                vmin = vs_min
+                vmax = vs_max
+            else:
+                vmin = st.session_state.VIZ_vmin_vmax[0]
+                vmax = st.session_state.VIZ_vmin_vmax[1]
+            if st.session_state.VIZ_smoothing == 'Smooth':
+                fig = plot_inverted_section(st.session_state.VIZ_v_xd_smooth_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_smooth, zmin=vmin, zmax=vmax)
+            elif st.session_state.VIZ_smoothing == 'Raw':
+                fig = plot_inverted_section(st.session_state.VIZ_v_xd_smooth_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_smooth, zmin=vmin, zmax=vmax)
+                
+            fig.update_layout(height=400)
+            if st.session_state.VIZ_cmap is not None:
+                if st.session_state.VIZ_cmap == 'Terrain':
+                        cmap = plt.get_cmap('terrain')
+                        colorscale = [(i / 255.0, mcolors.rgb2hex(cmap(i / 255.0))) for i in range(256)]
+                        fig.update_coloraxes(colorscale=colorscale)
+                else:
+                    fig.update_coloraxes(colorscale=st.session_state.VIZ_cmap)
+            st.plotly_chart(fig)
+            
+            if st.session_state.VIZ_smoothing == 'Smooth':
+                fig = plot_std_section(st.session_state.VIZ_std_xd_smooth_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_smooth)
+            elif st.session_state.VIZ_smoothing == 'Raw':
+                fig = plot_std_section(st.session_state.VIZ_std_xd_smooth_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_smooth)
+            fig.update_layout(height=400)
+            st.plotly_chart(fig)
+            
+            st.text("")
+            st.text("")
+            st.text("")
+            st.text("")
+            st.button("Save images", type="primary", use_container_width=True, on_click=save_images)
+            st.markdown(r"🛈 *Will save the above $v_{S}$ and standard deviation sections, and the corresponding $v_{R}$ pseudo-sections.*")
+            
+                
+        else:
+            vs_min = 0
+            vs_max = 1
+            st.text('')
+            st.text('')
+            st.error(f"📁 Inversion data missing for smooth model.")
+                    
     
 st.divider() # --------------------------------------------------------------------------------------------------------------------------------------
 ### END INTERFACE------------------------------------------------------------------------------------------------------------------------------------

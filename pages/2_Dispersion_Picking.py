@@ -6,11 +6,10 @@ Date : Feb 4, 2025
 """
 
 import os
+import glob
 import numpy as np
 import pandas as pd
 import streamlit as st
-import tkinter as tk
-from tkinter import filedialog
 import json
 import pandas as pd
 import plotly.graph_objects as go
@@ -19,29 +18,25 @@ from modules.dispersion import extract_curve, lorentzian_error, resamp, resamp_w
 from modules.display import plot_disp, plot_pseudo_section, display_dispersion_img
 from modules.misc import arange
 
+from Paths import output_dir
+
 import warnings
 warnings.filterwarnings("ignore")
 
 
 ### FUNCTIONS --------------------------------------------------------------------------------------------------------------------------------------
-def select_folder():
-   root = tk.Tk()
-   root.withdraw()
-   folder_path = filedialog.askdirectory(master=root)
-   root.destroy()
-   return folder_path
-
 def clear_session():
     st.cache_data.clear()
     st.session_state.clear()
 
 def initialize_session():
+    for key in st.session_state:
+        if 'DISP' not in key:
+            st.session_state.pop(key)
     if 'DISP_folders' not in st.session_state:
         st.session_state.DISP_folders = None
-        
     if 'DISP_index' not in st.session_state:
         st.session_state.DISP_index = 0
-        
     if "DISP_clicked_pick" not in st.session_state:
         st.session_state.DISP_clicked_pick = False
 ### -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -104,6 +99,34 @@ def set_clicked_pick():
 
 def cancel_picking():
     st.session_state.DISP_clicked_pick = False
+    
+def handle_select_folder():
+    selected_folder_tmp = st.session_state.DISP_selected_folder
+    clear_session()
+    initialize_session()
+    st.session_state.DISP_selected_folder = selected_folder_tmp
+    
+    if st.session_state.DISP_selected_folder is not None:
+        st.session_state.DISP_folder_path = f"{output_dir}/{st.session_state.DISP_selected_folder}/"
+        
+        # xmids folders
+        DISP_folders = [folder for folder in os.listdir(st.session_state.DISP_folder_path) if os.path.isdir(os.path.join(st.session_state.DISP_folder_path, folder))]
+        
+        # Positions of xmids folders
+        DISP_positions = [float(folder[4:]) for folder in DISP_folders]
+        
+        # Sort by position
+        DISP_positions, DISP_folders = zip(*sorted(zip(DISP_positions, DISP_folders)))
+        
+        # Save in session state
+        st.session_state.DISP_folders = DISP_folders
+        st.session_state.DISP_positions = DISP_positions
+        
+        # MASW parameters from json file
+        with open(f"{st.session_state.DISP_folder_path}/computing_params.json", "r") as f:
+            computing_param = json.load(f)
+            st.session_state.DISP_Nx = computing_param["MASW_length"]
+            st.session_state.DISP_dx = computing_param["positions"][1] - computing_param["positions"][0] 
 ### -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -122,54 +145,32 @@ st.title("📌 Dispersion Picking")
 st.write("🛈 Dispersion image semi-automatic picking.")
 
 st.divider() # --------------------------------------------------------------------------------------------------------------------------------------
-st.header("🚨 Select folder")
+st.header("🚨 Data selection")
 
 st.text('')
 st.text('')
 
-# Folder selection button
-folder_select_button = st.button("Select Folder", type="primary", use_container_width=True)
-
-if folder_select_button:
-    
-    # Clear and initialize session
-    clear_session()
-    initialize_session()
-    
-    # Main folder with all xmids folders
-    folder_path = select_folder()
-    folder_path = f"{folder_path}/"
-    st.session_state.DISP_folder_path = folder_path
-    
-    # xmids folders
-    DISP_folders = [folder for folder in os.listdir(st.session_state.DISP_folder_path) if os.path.isdir(os.path.join(st.session_state.DISP_folder_path, folder))]
-    
-    # Positions of xmids folders
-    DISP_positions = [float(folder[4:]) for folder in DISP_folders]
-    
-    # Sort by position
-    DISP_positions, DISP_folders = zip(*sorted(zip(DISP_positions, DISP_folders)))
-    
-    # Save in session state
-    st.session_state.DISP_folders = DISP_folders
-    st.session_state.DISP_positions = DISP_positions
-    
-    # MASW parameters from json file
-    with open(f"{st.session_state.DISP_folder_path}/computing_params.json", "r") as f:
-        computing_param = json.load(f)
-        st.session_state.DISP_Nx = computing_param["MASW_length"]
-        st.session_state.DISP_dx = computing_param["positions"][1] - computing_param["positions"][0]       
-        
+# Folder selection
+files_depth_3 = glob.glob(f"{output_dir}/*/*/*")
+input_folders = filter(lambda f: os.path.isdir(f), files_depth_3)
+input_folders = [os.path.relpath(folder, output_dir) for folder in input_folders]
+input_folders = sorted(input_folders)
+if input_folders:
+    st.selectbox("**Data folder**", input_folders, key='DISP_selected_folder', on_change=handle_select_folder, index=None, placeholder='Select')
+else:
+    st.error("❌ No output data folders found.")
+    st.stop()
+      
 if st.session_state.DISP_folders is None:
-    st.text('')
-    st.text('')
-    st.info("👆 Select a folder containing the seismic files.")
+    st.info("👆 Select a folder containing the computed dispersion images to be picked.")
     st.stop()
     
+st.success("👌 Dispersion images loaded.")
+
 st.text('')
 st.text('')
 
-st.success("👌 Dispersion files loaded.")
+st.markdown("**Summary:**")
 data = {
     'Folder' : [st.session_state.DISP_folder_path],
     'MASW positions [m]' : [st.session_state.DISP_positions],
