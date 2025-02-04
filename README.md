@@ -31,7 +31,7 @@ cd PAC/
 ```sh
 streamlit run Home.py
 ```
-or sometimes
+if it doesn't work, try
 ```sh
 streamlit run Home.py --server.enableXsrfProtection false
 ```
