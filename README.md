@@ -23,7 +23,7 @@ Dispersion curves can be semi-automatically picked on a interactive interface an
 ### Clone Repository
 ```sh
 git clone https://github.com/JoseCunhaTeixeira/PAC.git
-cd PAC/src/
+cd PAC/
 ```
 
 ## Usage
