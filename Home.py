@@ -17,8 +17,11 @@ streamlit run Home.py --server.enableXsrfProtection false
 
 import streamlit as st
 
-from Paths import input_dir, output_dir
 
+
+# Clear cache and session state
+st.cache_data.clear()
+st.session_state.clear()
 
 
 ### HEADER ----------------------------------------------------------------------------------------

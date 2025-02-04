@@ -6,11 +6,10 @@ Date : Feb 4, 2025
 """
 
 import os
+import glob
 import numpy as np
 import pandas as pd
 import streamlit as st
-import tkinter as tk
-from tkinter import filedialog
 import concurrent.futures
 import subprocess
 import json
@@ -21,6 +20,7 @@ from scipy.ndimage import generic_filter
 from modules.dispersion import resamp_wavelength, resamp_frequency
 from modules.display import plot_pseudo_section, display_inverted_section, display_pseudo_sections
 from modules.misc import arange
+from Paths import output_dir
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -28,13 +28,6 @@ warnings.filterwarnings("ignore")
 
 
 ### FUNCTIONS ---------------------------------------------------------------------------------------------------------------------------------------
-def select_folder():
-   root = tk.Tk()
-   root.withdraw()
-   folder_path = filedialog.askdirectory(master=root)
-   root.destroy()
-   return folder_path
-
 def run_script(script):
     command = ["python3"] + script.split()
     subprocess.run(command)
@@ -44,6 +37,10 @@ def clear_session():
     st.session_state.clear()
 
 def initialize_session():
+    for key in st.session_state:
+        if 'INV' not in key:
+            st.session_state.pop(key)
+            
     if "INV_folders" not in st.session_state:
         st.session_state.INV_folders = None
     
@@ -165,6 +162,25 @@ def set_algorithm():
     if st.session_state.INV_n_iterations is not None:
         st.session_state.INV_n_iterations = None
     pass
+
+def handle_select_folder():
+    selected_folder_tmp = st.session_state.INV_selected_folder
+    clear_session()
+    initialize_session()
+    st.session_state.INV_selected_folder = selected_folder_tmp
+    
+    if st.session_state.INV_selected_folder is not None:
+        st.session_state.INV_folder_path = f"{output_dir}/{st.session_state.INV_selected_folder}/"
+    
+        # xmids folders
+        INV_folders = [folder for folder in os.listdir(st.session_state.INV_folder_path) if os.path.isdir(os.path.join(st.session_state.INV_folder_path, folder))]
+        
+        # Positions of xmids folders
+        INV_positions = [float(folder[4:]) for folder in INV_folders]
+        INV_positions, INV_folders = zip(*sorted(zip(INV_positions, INV_folders)))
+        
+        st.session_state.INV_folders = INV_folders
+        st.session_state.INV_positions = INV_positions
 ### -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -183,48 +199,34 @@ st.title("📐 Inversion")
 st.write("🛈 Surface wave dispersion inversion.")
 
 st.divider() # --------------------------------------------------------------------------------------------------------------------------------------
-st.header("🚨 Select folder")
+st.header("🚨 Data selection")
 
 st.text('')
 st.text('')
 
-# Folder selection button
-folder_select_button = st.button("Select Folder", type="primary", use_container_width=True)
-
-if folder_select_button:
-    
-    # Clear and initialize session
-    clear_session()
-    initialize_session()
-    
-    if st.session_state.INV_modes is not None:
-        st.session_state.INV_modes = []
-    
-    # Main folder with all xmids folders
-    INV_folder_path= select_folder()
-    INV_folder_path = f"{INV_folder_path}/"
-    st.session_state.INV_folder_path = INV_folder_path
-    
-    # xmids folders
-    INV_folders = [folder for folder in os.listdir(st.session_state.INV_folder_path) if os.path.isdir(os.path.join(st.session_state.INV_folder_path, folder))]
-    
-    # Positions of xmids folders
-    INV_positions = [float(folder[4:]) for folder in INV_folders]
-    INV_positions, INV_folders = zip(*sorted(zip(INV_positions, INV_folders)))
-    
-    st.session_state.INV_folders = INV_folders
-    st.session_state.INV_positions = INV_positions
-        
-if st.session_state.INV_folders is None:
-    st.text('')
-    st.text('')
-    st.info("👆 Please select a folder containing the picked dispersion curves.")
+# Folder selection
+files_depth_3 = glob.glob(f"{output_dir}/*/*/*")
+input_folders = filter(lambda f: os.path.isdir(f), files_depth_3)
+input_folders = [os.path.relpath(folder, output_dir) for folder in input_folders]
+input_folders = sorted(input_folders)
+if input_folders:
+    st.selectbox("**Data folder**", input_folders, key='INV_selected_folder', on_change=handle_select_folder, index=None, placeholder='Select')
+else:
+    st.error("❌ No output data folders found.")
     st.stop()
     
-st.text('')
-st.text('')
-st.success("👌 Picked dispersion curves loaded.")
+if st.session_state.INV_folders is None:
+    if st.session_state.INV_modes is not None:
+        st.session_state.INV_modes = []
+    st.info("👆 Please select a folder containing the picked dispersion curves to be inverted.")
+    st.stop()
+    
+st.success("👌 Dispersion curves loaded.")
 
+st.text('')
+st.text('')
+
+st.markdown("**Summary:**")
 data = {
     'Folder' : [st.session_state.INV_folder_path],
     'MASW positions [m]' : [st.session_state.INV_positions],

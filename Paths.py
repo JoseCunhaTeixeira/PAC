@@ -9,9 +9,8 @@ import os
 
 
 
-main_dir = "./"
-input_dir = f"{main_dir}input/"
-output_dir = f"{main_dir}output/"
+input_dir = f"./input"
+output_dir = f"./output"
 
 if not os.path.exists(f"{input_dir}"):
     os.makedirs(f"{input_dir}")
