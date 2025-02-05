@@ -58,7 +58,7 @@ Content:
   
 ## License
 This project is under Creative Commons Attribution 4.0 International license, allowing re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited.
-It is part of the PhD thesis of José Cunha Teixeira and was funded by UMR 7619 METIS (Sorbonne University), Mines Paris - PSL, SNCF Réseau, and the European Union.
+It is part of the PhD thesis of José Cunha Teixeira and was funded by a cooperation between Sorbonne University, Mines Paris - PSL, SNCF Réseau, and the European Union.
 Please cite as Cunha Teixeira, J. (2025). PAC - Passive and Active Computation of MASW. Zenodo. doi:[10.5281/zenodo.14808813](https://doi.org/10.5281/zenodo.14808813)
 
 ## Acknowledgments
