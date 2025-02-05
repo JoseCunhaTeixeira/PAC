@@ -66,10 +66,4 @@ st.text("")
 st.text("")
 
 st.image("./home_images/logo2.png")
-
-st.text("")
-st.text("")
-st.text("")
-st.text("")
-st.write(f"*streamlit version: {st.__version__}*")
 ### -----------------------------------------------------------------------------------------------
