@@ -59,7 +59,6 @@ st.text("")
 st.text("")
 st.text("")
 
-
 st.image("./home_images/logo.png")
 
 st.text("")
