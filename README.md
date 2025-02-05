@@ -8,7 +8,7 @@ Dispersion curves can be semi-automatically picked on an interactive interface a
 - **Hybrid Processing:** Supports both passive and active MASW methods without needing source position information.
 - **Signal Processing Tools:** Uses an automatic source detection algorithm combined with seismic interferometry.
 - **Automated Dispersion Analysis:** Extracts and visualizes dispersion images and curves.
-- **Velocity Inversion:** Computes shear wave velocity profiles from dispersion data using the MCMC algorithm [BayesBay](https://github.com/keurfonluu/disba) and forward modeling algorithm [Disba].(https://github.com/keurfonluu/disba)
+- **Velocity Inversion:** Computes shear wave velocity profiles from dispersion data using the MCMC algorithm [BayesBay](https://github.com/keurfonluu/disba) and forward modeling algorithm [Disba](https://github.com/keurfonluu/disba).
 - **User-Friendly Interface:** Streamlined workflow with visualization capabilities.
 - **Python-Based:** Lightweight and extensible for custom modifications.
 
