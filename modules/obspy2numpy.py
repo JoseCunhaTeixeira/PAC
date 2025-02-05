@@ -5,16 +5,12 @@ License : Creative Commons Attribution 4.0 International
 Date : Feb 4, 2025
 """
 
-
-
-
 import numpy as np
 from obspy.core import AttribDict
 from obspy.core.stream import Stream
 from obspy.core.trace import Trace, Stats
 from obspy.core.utcdatetime import UTCDateTime
 from obspy.io.segy.segy import SEGYBinaryFileHeader
-
 
 
 

@@ -5,12 +5,8 @@ License : Creative Commons Attribution 4.0 International
 Date : Feb 4, 2025
 """
 
-
-
-
 import numpy as np
 from scipy.signal.windows import tukey
-
 
 
 

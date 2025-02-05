@@ -5,9 +5,6 @@ License : Creative Commons Attribution 4.0 International
 Date : Feb 4, 2025
 """
 
-
-
-
 import numpy as np
 from scipy.fft import rfft, rfftfreq
 from scipy.interpolate import interp1d
