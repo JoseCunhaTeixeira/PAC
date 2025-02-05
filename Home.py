@@ -12,9 +12,6 @@ or
 streamlit run Home.py --server.enableXsrfProtection false
 """
 
-
-
-
 import streamlit as st
 
 

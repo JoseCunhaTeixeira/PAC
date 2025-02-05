@@ -22,7 +22,6 @@ CM = 1/2.54
 
 
 
-
 ### -----------------------------------------------------------------------------------------------
 def plot_wiggle(XT, positions, dt, norm=None):
     Nt = XT.shape[1]
@@ -127,7 +126,7 @@ def plot_disp(FV, fs, vs, dx=None, Nx=None, norm=None):
         vs_min[vs_min < np.min(vs)] = np.nan
         fig.add_trace(go.Scatter(x=fs, y=vs_min, mode='lines', name="&#955;<sub>nyq</sub>", line=dict(color='grey', width=2, dash='dash')))
         if Nx is not None:
-            lambda_max = 6*(Nx-1)*dx
+            lambda_max = (Nx-1)*dx
             vs_max = fs * lambda_max
             vs_max[vs_max > np.max(vs)] = np.nan
             vs_max[vs_max < np.min(vs)] = np.nan
