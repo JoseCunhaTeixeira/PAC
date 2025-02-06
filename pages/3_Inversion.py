@@ -426,7 +426,7 @@ st.header("🚨 Parameter space")
 st.text('')
 st.text('')
 
-st.number_input("Number of layers", value=None, step=1, key='INV_nb_layers', placeholder='Enter a value', format="%i", on_change=set_nb_layers_INV)
+st.number_input("Number of layers (including half-space)", value=None, step=1, key='INV_nb_layers', placeholder='Enter a value', format="%i", on_change=set_nb_layers_INV)
 
 if st.session_state.INV_nb_layers is None:
     st.text('')
