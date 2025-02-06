@@ -60,14 +60,14 @@ def plot_MASW(geophone_positions, MASW_length_idx, MASW_step_idx):
     # Create a scatter plot
     fig = go.Figure()
     
-    # Add scatter points for selected geophones in blue
+    # Add scatter points for selected sensors in blue
     fig.add_trace(go.Scatter(
         x=geophone_positions,
         y=[5] * len(geophone_positions),
         mode='markers',
         marker=dict(symbol='triangle-down', size=10, color='#1f77b4'),
         showlegend=True,
-        name='Geophones',
+        name='Sensor',
     ))
     
     # Add scatter points for MASW windows middle positions in red
@@ -82,7 +82,7 @@ def plot_MASW(geophone_positions, MASW_length_idx, MASW_step_idx):
 
     # Update layout to hide the y-axis
     fig.update_layout(
-        title="Geophones and MASW positions",
+        title="Sensor and MASW positions",
         xaxis=dict(
             title="Position [m]",
             side="top",
@@ -323,29 +323,29 @@ st.dataframe(df, hide_index=True, use_container_width=True)
 
 st.divider() # ----------------------------------------------------------------------------------------------------------------------------------
 
-st.header("🚨 Geophone positions")
+st.header("🚨 Sensor positions")
 
 st.text('')
 st.text('')
 
-st.number_input("First geophone position [m]", key='COMP_x_start', value=None, step=0.01, placeholder='Enter a value', format="%0.3f", on_change=set_x_start)
-st.number_input("Geophone spacing [m]", key='COMP_x_step', value=None, step=0.01, placeholder='Enter a value', format="%0.3f", on_change=set_x_step)
+st.number_input("First sensor position [m]", key='COMP_x_start', value=None, step=0.01, placeholder='Enter a value', format="%0.3f", on_change=set_x_start)
+st.number_input("Sensor spacing [m]", key='COMP_x_step', value=None, step=0.01, placeholder='Enter a value', format="%0.3f", on_change=set_x_step)
 
 if st.session_state.COMP_x_start is None or st.session_state.COMP_x_step is None:
     st.text('')
     st.text('')
-    st.info("👆 Define all geophone positions.") 
+    st.info("👆 Define all sensor positions.") 
     st.stop()
     
 st.session_state.COMP_positions = [round(st.session_state.COMP_x_start + i*st.session_state.COMP_x_step, 3) for i in range(len(st.session_state.COMP_streams[0]))]
    
 st.text('')
 st.text('')
-st.success("👌 Geophone positions defined.")
+st.success("👌 Sensor positions defined.")
 
 data = {
-    'Number of geophones [#]' : [len(st.session_state.COMP_streams[0])],
-    'Geophone positions [m]' : [st.session_state.COMP_positions],
+    'Number of sensors [#]' : [len(st.session_state.COMP_streams[0])],
+    'Sensors positions [m]' : [st.session_state.COMP_positions],
 }
 df = pd.DataFrame(data)
 st.dataframe(df, hide_index=True, use_container_width=True)
@@ -357,8 +357,8 @@ st.header("🚨 MASW parameters")
 st.text('')
 st.text('')
 
-st.number_input('MASW window length [number of geophones]', key='COMP_MASW_length', value=None, step=1, placeholder='Enter a value', format="%i", on_change=set_MASW)
-st.number_input('MASW window step [number of geophones]', key='COMP_MASW_step', value=None, step=1, placeholder='Enter a value', format="%i", on_change=set_MASW)
+st.number_input('MASW window length [number of sensors]', key='COMP_MASW_length', value=None, step=1, placeholder='Enter a value', format="%i", on_change=set_MASW)
+st.number_input('MASW window step [number of sensors]', key='COMP_MASW_step', value=None, step=1, placeholder='Enter a value', format="%i", on_change=set_MASW)
 
 if st.session_state.COMP_MASW_length is None or st.session_state.COMP_MASW_step is None:
     st.text('')
@@ -370,6 +370,7 @@ fig_MASW, x_mids, windows_idx = plot_MASW(st.session_state.COMP_positions, st.se
 st.session_state.COMP_x_mids = [round(x, 2) for x in x_mids]
 st.session_state.COMP_nb_scripts = len(x_mids)
 st.session_state.COMP_windows_idx = windows_idx
+set_nb_max_subproc()
 
 st.text('')
 st.text('')
@@ -418,7 +419,7 @@ st.number_input('Segment window step [s]', key='COMP_segment_step', value=None, 
 
 st.text('')
 
-st.number_input("Minimum FK ration threshold [-]", key="COMP_FK_ratio_threshold", value=None, step=0.10, on_change=set_FK_ratio_threshold, placeholder='Enter a value', format="%0.2f")
+st.number_input("Minimum FK ratio threshold [-]", key="COMP_FK_ratio_threshold", value=None, step=0.10, on_change=set_FK_ratio_threshold, placeholder='Enter a value', format="%0.2f")
 
 if st.session_state.COMP_segment_length is None or st.session_state.COMP_segment_step is None or st.session_state.COMP_FK_ratio_threshold is None:
     st.text('')
