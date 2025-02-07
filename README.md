@@ -42,7 +42,7 @@ Content:
 - `scripts/`: MASW and inversion scripts
 - `modules/`: Surface wave signal processing functions
 - `Paths.py`: Paths to the PAC main folder, and output and input directories
-- **`input/`: Contains one folder per profile with raw seismic records**
+- **`input/`: Contains one folder per profile with your raw seismic records**
     - **`profile_1/`: seismic files for profile 1**
     - **`profile_2/`: seismic files for profile 2**
     - **...**
