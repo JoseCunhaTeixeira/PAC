@@ -430,7 +430,7 @@ def display_dispersion_img(FV_arr, fs, vs, path, obs_modes=[], pred_modes=[], fu
         vs_min[vs_min < np.min(vs)] = np.nan
         plt.plot(fs, vs_min, color='grey', linestyle='--', linewidth=1.0)
         if Nx is not None:
-            lambda_max = 6*(Nx-1)*dx
+            lambda_max = (Nx-1)*dx
             vs_max = fs * lambda_max
             vs_max[vs_max > np.max(vs)] = np.nan
             vs_max[vs_max < np.min(vs)] = np.nan
