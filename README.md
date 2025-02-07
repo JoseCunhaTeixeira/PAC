@@ -28,6 +28,7 @@ cd PAC/
 ## Usage
 ### Running the app
 ```sh
+cd PAC/
 streamlit run Home.py
 ```
 if it doesn't work, try
