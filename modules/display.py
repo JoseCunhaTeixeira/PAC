@@ -130,7 +130,7 @@ def plot_disp(FV, fs, vs, dx=None, Nx=None, norm=None):
             vs_max = fs * lambda_max
             vs_max[vs_max > np.max(vs)] = np.nan
             vs_max[vs_max < np.min(vs)] = np.nan
-            fig.add_trace(go.Scatter(x=fs, y=vs_max, mode='lines', name='6<i>L</i><sub>window</sub>', line=dict(color='grey', width=2, dash='dash')))
+            fig.add_trace(go.Scatter(x=fs, y=vs_max, mode='lines', name='<i>L</i><sub>window</sub>', line=dict(color='grey', width=2, dash='dash')))
     fig.update_layout(
         coloraxis_colorbar=dict(
             title=dict(
