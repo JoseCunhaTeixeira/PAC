@@ -298,7 +298,7 @@ else:
     st.stop()
 
 if st.session_state.COMP_folder_path is None:
-    st.info("👆 Select a folder containing the raw seismic files to be processed.")
+    st.info("👆 Select a folder containing the raw seismic files to be processed. Ensure that the folders, each corresponding to a single profile, are placed inside PAC/input/. See [supported formats](https://docs.obspy.org/packages/autogen/obspy.core.stream.read.html).")
     if st.session_state.COMP_x_start is not None or st.session_state.COMP_x_step is not None:
         st.session_state.COMP_x_start = None
         st.session_state.COMP_x_step = None
