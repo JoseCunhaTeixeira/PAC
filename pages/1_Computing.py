@@ -114,6 +114,8 @@ def initialize_session():
         st.session_state.COMP_x_start = None
     if 'COMP_x_step' not in st.session_state:
         st.session_state.COMP_x_step = None
+    if 'COMP_nb_max_subproc' not in st.session_state:
+        st.session_state.COMP_nb_max_subproc = None
 ### -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
