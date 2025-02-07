@@ -426,7 +426,7 @@ st.number_input("Minimum FK ratio threshold [-]", key="COMP_FK_ratio_threshold",
 if st.session_state.COMP_segment_length is None or st.session_state.COMP_segment_step is None or st.session_state.COMP_FK_ratio_threshold is None:
     st.text('')
     st.text('')
-    st.info("👆 Define all segment parameters.")
+    st.info("👆 Define all segment parameters. For reference, see the information provided in [Cunha Teixeira et al. (2025)](https://doi.org/10.26443/seismica.v4i1.1150).")
     st.stop()
 
 st.text('')
@@ -444,7 +444,7 @@ st.markdown("🛈 *Order 0 corresponds to a linear stack.*")
 if st.session_state.COMP_pws_nu is None:
     st.text('')
     st.text('')
-    st.info("👆 Define the stacking order.")
+    st.info("👆 Define the stacking order. For reference, see the information provided in [Schimmel & Paulssen (1997)](https://doi.org/10.1111/j.1365-246X.1997.tb05664.x).")
     st.stop()
     
 st.text('')
