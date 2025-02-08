@@ -37,9 +37,12 @@ def phase_shift(XT, si, offsets, vmin, vmax, dv, fmax):
     XF = rfft(XT, axis=(1), n=Nt)
 
     fs = rfftfreq(Nt, si)
-    imax = np.where(fs > fmax)[0][0]
-    fs = fs[0:imax+1]
-    XF = XF[: , 0:imax+1]
+    try :
+        fimax = np.where(fs >= fmax)[0][0]
+    except :
+        fimax = len(fs)-1
+    fs = fs[0:fimax+1]
+    XF = XF[: , 0:fimax+1]
 
     vs = arange(vmin, vmax, dv)
 
@@ -178,10 +181,13 @@ def resamp(f, v, err, wmax=None):
         err_resamp = func_err(w_resamp)
         if wmax is not None:
             if max(w_resamp) > wmax:
-                idx = np.where(w_resamp >= wmax)[0][0]
-                w_resamp = w_resamp[:idx]
-                v_resamp = v_resamp[:idx]
-                err_resamp = err_resamp[:idx]
+                try:
+                    idx = np.where(w_resamp >= wmax)[0][0]
+                except:
+                    idx = len(w_resamp)-1
+                w_resamp = w_resamp[:idx+1]
+                v_resamp = v_resamp[:idx+1]
+                err_resamp = err_resamp[:idx+1]
         f_resamp = v_resamp/w_resamp
         f_resamp, v_resamp, err_resamp = zip(*sorted(zip(f_resamp, v_resamp, err_resamp)))
     else : 
