@@ -116,21 +116,24 @@ def handle_select_folder():
         # xmids folders
         DISP_folders = [folder for folder in os.listdir(st.session_state.DISP_folder_path) if os.path.isdir(os.path.join(st.session_state.DISP_folder_path, folder))]
         
-        # Positions of xmids folders
-        DISP_positions = [float(folder[4:]) for folder in DISP_folders]
-        
-        # Sort by position
-        DISP_positions, DISP_folders = zip(*sorted(zip(DISP_positions, DISP_folders)))
-        
-        # Save in session state
-        st.session_state.DISP_folders = DISP_folders
-        st.session_state.DISP_positions = DISP_positions
-        
-        # MASW parameters from json file
-        with open(f"{st.session_state.DISP_folder_path}/computing_params.json", "r") as f:
-            computing_param = json.load(f)
-            st.session_state.DISP_Nx = computing_param["MASW_length"]
-            st.session_state.DISP_dx = computing_param["positions"][1] - computing_param["positions"][0] 
+        if len(DISP_folders) > 0:
+            # Positions of xmids folders
+            DISP_positions = [float(folder[4:]) for folder in DISP_folders]
+            
+            # Sort by position
+            DISP_positions, DISP_folders = zip(*sorted(zip(DISP_positions, DISP_folders)))
+            
+            # Save in session state
+            st.session_state.DISP_folders = DISP_folders
+            st.session_state.DISP_positions = DISP_positions
+            
+            # MASW parameters from json file
+            with open(f"{st.session_state.DISP_folder_path}/computing_params.json", "r") as f:
+                computing_param = json.load(f)
+                st.session_state.DISP_Nx = computing_param["MASW_length"]
+                st.session_state.DISP_dx = computing_param["positions"][1] - computing_param["positions"][0] 
+        else:
+            st.session_state.DISP_folders = DISP_folders            
 ### -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -167,6 +170,9 @@ else:
       
 if st.session_state.DISP_folders is None:
     st.info("👆 Select a folder containing the computed dispersion images to be picked.")
+    st.stop()
+elif len(st.session_state.DISP_folders) < 1:
+    st.error("❌ Selected output data empty.")
     st.stop()
     
 st.success("👌 Dispersion images loaded.")

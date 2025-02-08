@@ -175,12 +175,15 @@ def handle_select_folder():
         # xmids folders
         INV_folders = [folder for folder in os.listdir(st.session_state.INV_folder_path) if os.path.isdir(os.path.join(st.session_state.INV_folder_path, folder))]
         
-        # Positions of xmids folders
-        INV_positions = [float(folder[4:]) for folder in INV_folders]
-        INV_positions, INV_folders = zip(*sorted(zip(INV_positions, INV_folders)))
-        
-        st.session_state.INV_folders = INV_folders
-        st.session_state.INV_positions = INV_positions
+        if len(INV_folders) > 0:
+            # Positions of xmids folders
+            INV_positions = [float(folder[4:]) for folder in INV_folders]
+            INV_positions, INV_folders = zip(*sorted(zip(INV_positions, INV_folders)))
+            
+            st.session_state.INV_folders = INV_folders
+            st.session_state.INV_positions = INV_positions
+        else:
+            st.session_state.INV_folders = INV_folders
 ### -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -219,6 +222,11 @@ if st.session_state.INV_folders is None:
     if st.session_state.INV_modes is not None:
         st.session_state.INV_modes = []
     st.info("👆 Please select a folder containing the picked dispersion curves to be inverted.")
+    st.stop()
+elif len(st.session_state.INV_folders) < 1:
+    if st.session_state.INV_modes is not None:
+        st.session_state.INV_modes = []
+    st.error("❌ Selected output data empty.")
     st.stop()
     
 st.success("👌 Dispersion curves loaded.")
