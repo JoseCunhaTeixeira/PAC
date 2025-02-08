@@ -209,8 +209,14 @@ for file, stream, duration in zip(files, streams, durations):
         
         # Compute the FK diagram
         fs = rfftfreq(TX_tmp.shape[0], dt)
-        fimax = np.where(fs >= f_max)[0][0]
-        fimin = np.where(fs >= f_min)[0][0]
+        try :
+            fimax = np.where(fs >= f_max)[0][0]
+        except :
+            fimax = len(fs)-1
+        try :
+            fimin = np.where(fs >= f_min)[0][0]
+        except :
+            fimin = 0
         fs = fs[fimin:fimax+1]
         
         ks = fftfreq(TX_tmp.shape[1], positions[1]-positions[0])
