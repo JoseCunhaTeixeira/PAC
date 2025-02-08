@@ -5,16 +5,16 @@ License : Creative Commons Attribution 4.0 International
 Date : Feb 4, 2025
 """
 
+import sys
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from scipy.fft import fft, fftfreq
 import matplotlib.pyplot as plt
-from modules.misc import verify_expected
 import matplotlib.colors as mcolors
 
-from modules.misc import arange
-
+sys.path.append("./modules/")
+from misc import arange, verify_expected
 
 plt.rcParams.update({'font.size': 14})
 _DPI = 300

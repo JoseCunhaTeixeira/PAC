@@ -5,8 +5,8 @@ License : Creative Commons Attribution 4.0 International
 Date : Feb 4, 2025
 """
 
-import sys
 import os
+import sys
 import argparse
 import json
 import numpy as np
@@ -18,11 +18,12 @@ from scipy.signal import butter, correlate, filtfilt
 from scipy.signal.windows import tukey
 from math import isclose
 
-from modules.misc import arange
-from modules.signal_processing import normalize, whiten, cut
-from modules.display import display_dispersion_img, display_spectrum_img_fromArray, display_seismic_wiggle_fromStream
-from modules.obspy2numpy import array_to_stream, stream_to_array
-from modules.dispersion import phase_shift
+sys.path.append("./modules/")
+from misc import arange
+from signal_processing import normalize, whiten, cut
+from display import display_dispersion_img, display_spectrum_img_fromArray, display_seismic_wiggle_fromStream
+from obspy2numpy import array_to_stream, stream_to_array
+from dispersion import phase_shift
 
 # Do not display warnings
 import warnings

@@ -6,6 +6,7 @@ Date : Feb 4, 20252025
 """
 
 import os
+import sys
 import glob
 import numpy as np
 import streamlit as st
@@ -16,12 +17,13 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from scipy.ndimage import generic_filter
 
-from modules.dispersion import resamp_wavelength, resamp_frequency
-from modules.display import plot_pseudo_section, plot_wiggle, plot_disp, plot_inverted_section, plot_std_section, display_inverted_section, display_pseudo_sections
-from modules.obspy2numpy import stream_to_array
-from modules.misc import arange
-
 from Paths import input_dir, output_dir
+
+sys.path.append("./modules/")
+from dispersion import resamp_wavelength, resamp_frequency
+from display import plot_pseudo_section, plot_wiggle, plot_disp, plot_inverted_section, plot_std_section, display_inverted_section, display_pseudo_sections
+from obspy2numpy import stream_to_array
+from misc import arange
 
 import warnings
 warnings.filterwarnings("ignore")

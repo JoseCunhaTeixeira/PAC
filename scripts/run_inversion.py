@@ -22,8 +22,9 @@ from disba import DispersionError
 import arviz as az
 import matplotlib.pyplot as plt
 
-from modules.misc import arange
-from modules.display import display_dispersion_img
+sys.path.append("./modules/")
+from misc import arange
+from display import display_dispersion_img
 
 
 

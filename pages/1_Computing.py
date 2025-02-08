@@ -6,6 +6,7 @@ Date : Feb 4, 2025
 """
 
 import os
+import sys
 import glob
 import time
 import pandas as pd
@@ -20,6 +21,11 @@ from Paths import output_dir, input_dir, work_dir
 
 import warnings
 warnings.filterwarnings("ignore")
+
+# if sys.platform != "win32":
+#     multiprocessing.set_start_method("fork", force=True)  # Use fork on Unix-based OS
+# else:
+#     multiprocessing.set_start_method("spawn", force=True)  # Use spawn on Windows
 
 
 
@@ -97,7 +103,8 @@ def plot_MASW(geophone_positions, MASW_length_idx, MASW_step_idx):
     return fig, x_mids, windows_idx
 
 def run_script(script):
-    command = ["python3"] + script.split()
+    python_cmd = sys.executable
+    command = [python_cmd] + script.split()
     subprocess.run(command)
     
 def clear_session():
@@ -539,8 +546,8 @@ if st.button("Compute", type="primary", use_container_width=True):
     start = time.time()
     
     scripts = [f"{work_dir}/scripts/run_passive-MASW.py -ID {i} -r {output_dir}" for i in range(st.session_state.COMP_nb_scripts)]
-    
-    with concurrent.futures.ProcessPoolExecutor(max_workers=st.session_state.COMP_nb_max_subproc) as executor:
+    Executor = concurrent.futures.ProcessPoolExecutor if sys.platform == "linux" else concurrent.futures.ThreadPoolExecutor
+    with Executor(max_workers=st.session_state.COMP_nb_max_subproc) as executor:
         executor.map(run_script, scripts)
     
     end = time.time()

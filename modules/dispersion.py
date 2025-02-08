@@ -5,13 +5,15 @@ License : Creative Commons Attribution 4.0 International
 Date : Feb 4, 2025
 """
 
+import sys
 import numpy as np
 from scipy.fft import rfft, rfftfreq
 from scipy.interpolate import interp1d
 from scipy.signal import savgol_filter
 from matplotlib.path import Path
 
-from modules.misc import arange
+sys.path.append("./modules/")
+from misc import arange
 
 
 
