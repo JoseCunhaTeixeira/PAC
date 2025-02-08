@@ -6,6 +6,7 @@ Date : Feb 4, 2025
 """
 
 import os
+import sys
 import glob
 import numpy as np
 import pandas as pd
@@ -17,10 +18,12 @@ import pandas as pd
 import time
 from scipy.ndimage import generic_filter
 
-from modules.dispersion import resamp_wavelength, resamp_frequency
-from modules.display import plot_pseudo_section, display_inverted_section, display_pseudo_sections
-from modules.misc import arange
 from Paths import output_dir, work_dir
+
+sys.path.append("./modules/")
+from dispersion import resamp_wavelength, resamp_frequency
+from display import plot_pseudo_section, display_inverted_section, display_pseudo_sections
+from misc import arange
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -29,7 +32,8 @@ warnings.filterwarnings("ignore")
 
 ### FUNCTIONS ---------------------------------------------------------------------------------------------------------------------------------------
 def run_script(script):
-    command = ["python3"] + script.split()
+    python_cmd = sys.executable
+    command = [python_cmd] + script.split()
     subprocess.run(command)
     
 def clear_session():
@@ -569,7 +573,8 @@ if st.button("Compute", type="primary", use_container_width=True):
     
     # Run inversion scripts
     scripts = [f"{work_dir}/scripts/run_inversion.py -ID {i} -r {st.session_state.INV_folder_path}" for i in range(st.session_state.INV_nb_scripts)]
-    with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+    Executor = concurrent.futures.ProcessPoolExecutor if sys.platform == "linux" else concurrent.futures.ThreadPoolExecutor
+    with Executor(max_workers=1) as executor:
         executor.map(run_script, scripts)
     
     # Plot entire inverted vs section

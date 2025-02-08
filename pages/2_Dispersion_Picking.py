@@ -6,6 +6,7 @@ Date : Feb 4, 2025
 """
 
 import os
+import sys
 import glob
 import numpy as np
 import pandas as pd
@@ -14,9 +15,10 @@ import json
 import pandas as pd
 import plotly.graph_objects as go
 
-from modules.dispersion import extract_curve, lorentzian_error, resamp, resamp_wavelength, resamp_frequency
-from modules.display import plot_disp, plot_pseudo_section, display_dispersion_img
-from modules.misc import arange
+sys.path.append("./modules/")
+from dispersion import extract_curve, lorentzian_error, resamp, resamp_wavelength, resamp_frequency
+from display import plot_disp, plot_pseudo_section, display_dispersion_img
+from misc import arange
 
 from Paths import output_dir
 
