@@ -28,6 +28,11 @@ from misc import arange
 import warnings
 warnings.filterwarnings("ignore")
 
+# if sys.platform != "win32":
+#     multiprocessing.set_start_method("fork", force=True)  # Use fork on Unix-based OS
+# else:
+#     multiprocessing.set_start_method("spawn", force=True)  # Use spawn on Windows
+
 
 
 ### FUNCTIONS ---------------------------------------------------------------------------------------------------------------------------------------
