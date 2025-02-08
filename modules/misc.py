@@ -2,7 +2,6 @@
 Author : José CUNHA TEIXEIRA
 Affiliation : SNCF Réseau, UMR 7619 METIS (Sorbonne University), Mines Paris - PSL
 License : Creative Commons Attribution 4.0 International
-Date : Feb 4, 2025 UMR 7619 METIS
 Date : Feb 4, 2025
 """
 
