@@ -39,7 +39,11 @@ warnings.filterwarnings("ignore")
 def run_script(script):
     python_cmd = sys.executable
     command = [python_cmd] + script.split()
-    subprocess.run(command)
+    try:
+        subprocess.run(command, check=True, stderr=subprocess.PIPE)
+        return 0
+    except Exception as e:
+        return 1
     
 def clear_session():
     st.cache_data.clear()
@@ -580,7 +584,9 @@ if st.button("Compute", type="primary", use_container_width=True):
     scripts = [f"{work_dir}/scripts/run_inversion.py -ID {i} -r {st.session_state.INV_folder_path}" for i in range(st.session_state.INV_nb_scripts)]
     Executor = concurrent.futures.ProcessPoolExecutor if sys.platform == "linux" else concurrent.futures.ThreadPoolExecutor
     with Executor(max_workers=1) as executor:
-        executor.map(run_script, scripts)
+        results = list(executor.map(run_script, scripts))
+        
+    nb_sucess = results.count(0)
     
     # Plot entire inverted vs section
     print("\033[1mPlotting inverted section...\033[0m")
@@ -694,7 +700,12 @@ if st.button("Compute", type="primary", use_container_width=True):
     loading_message.empty()
     st.text('')
     st.text('')
-    st.success(f"👌 Inversion completed for {st.session_state.INV_nb_scripts} MASW postions.")
+    if nb_sucess == st.session_state.INV_nb_scripts:
+        st.success(f"👌 Inversion completed for all {st.session_state.INV_nb_scripts} MASW postions.")
+    elif nb_sucess == 0:
+        st.error(f"❌ Inversion failed for all {st.session_state.INV_nb_scripts} MASW postions.")
+    else:
+        st.warning(f"⚠️ Inversion only completed for {nb_sucess} over {st.session_state.INV_nb_scripts} MASW postions.")
     st.info(f"🕒 Inversion took {end - start:.2f} seconds.")
     
 else:

@@ -105,7 +105,11 @@ def plot_MASW(geophone_positions, MASW_length_idx, MASW_step_idx):
 def run_script(script):
     python_cmd = sys.executable
     command = [python_cmd] + script.split()
-    subprocess.run(command)
+    try:
+        subprocess.run(command, check=True, stderr=subprocess.PIPE)
+        return 0
+    except Exception as e:
+        return 1
     
 def clear_session():
     st.cache_data.clear()
@@ -548,7 +552,9 @@ if st.button("Compute", type="primary", use_container_width=True):
     scripts = [f"{work_dir}/scripts/run_passive-MASW.py -ID {i} -r {output_dir}" for i in range(st.session_state.COMP_nb_scripts)]
     Executor = concurrent.futures.ProcessPoolExecutor if sys.platform == "linux" else concurrent.futures.ThreadPoolExecutor
     with Executor(max_workers=st.session_state.COMP_nb_max_subproc) as executor:
-        executor.map(run_script, scripts)
+        results = list(executor.map(run_script, scripts))
+        
+    nb_success = results.count(0)
     
     end = time.time()
     print(f"\033[1mComputation completed in {end - start:.2f} seconds.\033[0m")
@@ -556,7 +562,12 @@ if st.button("Compute", type="primary", use_container_width=True):
     loading_message.empty()
     st.text('')
     st.text('')
-    st.success(f"👌 Computation completed for {st.session_state.COMP_nb_scripts} MASW postions.")
+    if nb_success == st.session_state.COMP_nb_scripts:
+        st.success(f"👌 Computation completed for all {st.session_state.COMP_nb_scripts} MASW postions.")
+    elif nb_success == 0:
+        st.error(f"❌ Computation failed for all {st.session_state.COMP_nb_scripts} MASW postions.")
+    else:
+        st.warning(f"⚠️ Computation only completed for {nb_success} over {st.session_state.COMP_nb_scripts} MASW postions.")
     st.info(f"🕒 Computation took {end - start:.2f} seconds.")
 
 else:
