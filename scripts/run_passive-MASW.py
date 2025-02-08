@@ -368,10 +368,11 @@ for file, stream, duration in zip(files, streams, durations):
 
 ### STACK INTERFEROMETRY --------------------------------------------------------------------------
 FK_ratios = np.array(FK_ratios)
-try :
+if FK_ratios.size > 0:
     FK_ratios = FK_ratios[FK_ratios[:, 1].argsort()]
-except :
-    raise SystemExit(f"\033[91mID {ID} | x_mid {x_mid} | No segment with FK ratio above {FK_ratio_threshold}\033[0m")
+else:
+    print(f"\033[91mID {ID} | x_mid {x_mid} | No segment with FK ratio above {FK_ratio_threshold}\033[0m")
+    raise Exception("No segment selected")
 
 interf_db = np.delete(interf_db, to_del, 2)
 
