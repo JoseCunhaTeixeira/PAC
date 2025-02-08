@@ -596,6 +596,12 @@ if st.session_state.VIZ_mode == 'Signal':
         st.info("👆 Select a folder containing the raw seismic files.")
         st.stop()
 
+    files = [file for file in os.listdir(st.session_state.VIZ_folder_path)]
+
+    if len(files) < 1:
+        st.error("❌ Selected input data folder empty.")
+        st.stop()
+
     st.success(f"📁 Selected folder: **{st.session_state.VIZ_folder_path}**")
             
     # List all files in the folder
@@ -656,9 +662,14 @@ elif st.session_state.VIZ_mode == 'Dispersion':
         st.info("👆 Select a folder containing the dispersion data.")
         st.stop()
 
+    folders = [xmid for xmid in os.listdir(st.session_state.VIZ_folder_path) if xmid[0:4] == 'xmid']
+
+    if len(folders) < 1:
+        st.error("❌ Selected output data folder empty.")
+        st.stop()
+
     st.success(f"📁 Selected folder: **{st.session_state.VIZ_folder_path}**")
     
-    folders = [xmid for xmid in os.listdir(st.session_state.VIZ_folder_path) if xmid[0:4] == 'xmid']
     xmids = [float(folder[4:]) for folder in folders]
     st.session_state.VIZ_xmids, st.session_state.VIZ_folders = zip(*sorted(zip(xmids, folders)))
 
@@ -832,9 +843,14 @@ elif st.session_state.VIZ_mode == 'Inversion':
         st.info("👆 Select a folder containing the inversion results.")
         st.stop()
 
-    st.success(f"📁 Selected folder: **{st.session_state.VIZ_folder_path}**")
-    
     folders = [xmid for xmid in os.listdir(st.session_state.VIZ_folder_path) if xmid[0:4] == 'xmid']
+
+    if len(folders) < 1:
+        st.error("❌ Selected output data folder empty.")
+        st.stop()
+
+    st.success(f"📁 Selected folder: **{st.session_state.VIZ_folder_path}**")
+
     xmids = [float(folder[4:]) for folder in folders]
     st.session_state.VIZ_xmids, st.session_state.VIZ_folders = zip(*sorted(zip(xmids, folders)))
 

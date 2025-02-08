@@ -304,6 +304,10 @@ if st.session_state.COMP_folder_path is None:
         st.session_state.COMP_x_step = None
     st.stop()
 
+if len(st.session_state.COMP_files) < 1:
+    st.error("❌ Selected input data folder empty.")
+    st.stop()
+
 st.success(f"👌 Seismic files loaded.")
 
 st.text('')
