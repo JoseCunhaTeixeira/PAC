@@ -16,7 +16,8 @@ Dispersion curves can be semi-automatically picked on an interactive interface a
 ### Requirements
 - Python 3.10+
 - Required libraries: `numpy`, `pandas`, `scipy`, `matplotlib`, `plotly`, `bayesbay`, `streamlit`, `obspy`, `arviz`, `disba`
-- On Mac OS, subprocess mapping may be incompatible with Streamlit, and BayesBay needs to be installed from source with no architecture target specified on the Makefile.
+- On Windows and Mac OS, subprocess mapping may be incompatible with Streamlit (**corrected on 2025/01/08, it should now work**).
+- On Mac OS, BayesBay needs to be installed from source with no architecture target specified on the Makefile.
 - Developed on Linux Ubuntu 22.04.5 LTS under Streamlit 1.41.1 and Python 3.10.12.
 
 ### Clone Repository
