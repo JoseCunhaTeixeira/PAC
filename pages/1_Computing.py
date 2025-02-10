@@ -106,7 +106,7 @@ def run_script(script):
     python_cmd = sys.executable
     command = [python_cmd] + script.split()
     try:
-        subprocess.run(command, check=True, stderr=subprocess.PIPE)
+        subprocess.run(command, check=True)
         return 0
     except Exception as e:
         return 1
@@ -155,6 +155,7 @@ def handle_select_folder():
 
         # Compute the duration of each seismic record
         st.session_state.COMP_durations = [stream[0].stats.endtime - stream[0].stats.starttime for stream in st.session_state.COMP_streams]
+        st.session_state.COMP_deltas = [stream[0].stats.delta for stream in st.session_state.COMP_streams]
     
 
 def handle_set():
@@ -334,6 +335,7 @@ st.dataframe(df, hide_index=True, use_container_width=True)
 data = {
     'Files' : [st.session_state.COMP_files],
     'Durations [s]' : [st.session_state.COMP_durations],
+    'Time samplings [s]' : [st.session_state.COMP_deltas]
 }
 df = pd.DataFrame(data)
 st.dataframe(df, hide_index=True, use_container_width=True)
