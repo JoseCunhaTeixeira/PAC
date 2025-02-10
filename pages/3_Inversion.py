@@ -40,7 +40,7 @@ def run_script(script):
     python_cmd = sys.executable
     command = [python_cmd] + script.split()
     try:
-        subprocess.run(command, check=True, stderr=subprocess.PIPE)
+        subprocess.run(command, check=True)
         return 0
     except Exception as e:
         return 1
