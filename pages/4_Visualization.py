@@ -179,11 +179,13 @@ def load_sections():
         max_depth_median_ensemble = np.nanmax([np.sum(gm[:,0]) for gm in all_gm_median_ensemble if gm is not None])
     else:
         max_depth_median_ensemble = np.nan
-    depth_max = np.nanmax([max_depth_median_layered, max_depth_vertical_smooth_median_layered, max_depth_best_layered, max_depth_vertical_smooth_best_layered, max_depth_median_ensemble])
-    dz = 0.01
-    
+    depth_max = np.nanmax([max_depth_median_layered, max_depth_vertical_smooth_median_layered, max_depth_best_layered, max_depth_vertical_smooth_best_layered, max_depth_median_ensemble])   
 
     if not all(gm is None for gm in all_gm_median_layered) and not all(gm is None for gm in all_std_median_layered):
+        if all_gm_median_layered[0][0,0] < 0.1:
+            dz = all_gm_median_layered[0][0,0]
+        else:
+            dz = 0.1
         st.session_state.VIZ_depths_median_layered = arange(0, depth_max, dz)
         
         st.session_state.VIZ_v_xd_median_layered = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_median_layered)), np.nan)
@@ -222,6 +224,10 @@ def load_sections():
         st.session_state.VIZ_vs_max_median_layered = None
 
     if not all(gm is None for gm in all_gm_verticalsmooth_median_layered) and not all(gm is None for gm in all_std_verticalsmooth_median_layered):
+        if all_gm_verticalsmooth_median_layered[0][0,0] < 0.1:
+            dz = all_gm_verticalsmooth_median_layered[0][0,0]
+        else:
+            dz = 0.1
         st.session_state.VIZ_depths_verticalsmooth_median_layered = arange(0, depth_max, dz)
         
         st.session_state.VIZ_v_xd_verticalsmooth_median_layered = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_verticalsmooth_median_layered)), np.nan)
@@ -261,6 +267,10 @@ def load_sections():
 
     
     if not all(gm is None for gm in all_gm_best_layered):
+        if all_gm_best_layered[0][0,0] < 0.1:
+            dz = all_gm_best_layered[0][0,0]
+        else:
+            dz = 0.1
         st.session_state.VIZ_depths_best_layered = arange(0, depth_max, dz)
         
         st.session_state.VIZ_v_xd_best_layered = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_best_layered)), np.nan)
@@ -289,6 +299,10 @@ def load_sections():
         st.session_state.VIZ_vs_max_best_layered = None
 
     if not all(gm is None for gm in all_gm_verticalsmooth_best_layered):
+        if all_gm_verticalsmooth_best_layered[0][0,0] < 0.1:
+            dz = all_gm_verticalsmooth_best_layered[0][0,0]
+        else:
+            dz = 0.1
         st.session_state.VIZ_depths_verticalsmooth_best_layered = arange(0, depth_max, dz)
         
         st.session_state.VIZ_v_xd_verticalsmooth_best_layered = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_verticalsmooth_best_layered)), np.nan)
@@ -318,6 +332,10 @@ def load_sections():
 
     
     if not all(gm is None for gm in all_gm_median_ensemble) and not all(gm is None for gm in all_std_median_ensemble):
+        if all_gm_median_ensemble[0][0,0] < 0.1:
+            dz = all_gm_median_ensemble[0][0,0]
+        else:
+            dz = 0.1
         st.session_state.VIZ_depths_median_ensemble = arange(0, depth_max, dz)
         
         st.session_state.VIZ_v_xd_median_ensemble = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_median_ensemble)), np.nan)
