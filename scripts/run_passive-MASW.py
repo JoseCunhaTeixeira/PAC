@@ -154,6 +154,7 @@ for file, stream, duration in zip(files, streams, durations):
     TX_raw = stream_to_array(stream, len(stream), Nt)
     
     
+    
     ### FILTERING (optional) ----------------------------------------------------------------------
     # Can help to remove some noise induced by the electrical frequency of the railway (50 Hz in France)
     # lowcut = 49
@@ -196,16 +197,16 @@ for file, stream, duration in zip(files, streams, durations):
         ### CUT SEGMENT ---------------------------------------------------------------------------
         TX, _ = cut(TX_raw, ts_raw, cut_start, cut_start+segment_length)
         
-
+        
         ### FK SELECTION --------------------------------------------------------------------------
-        TX_tmp = np.copy(TX)
-
-        ### Zero padding for better resolution if length is less than 2000 samples (arbitrary), can improve results of FK selection but takes more time to compute
+        # Zero padding for better resolution if length is less than 2000 samples [can improve results but takes more time to compute]
+        # TX_tmp = np.copy(TX)
         # nb_zeros_for_f = max(0, 2000-TX_tmp.shape[0])
-        # TX_tmp = np.pad(TX_tmp, ((0,nb_zeros_for_f), (0,0)), mode='constant', constant_values=0)
         # nb_zeros_for_k = max(0, 2000-TX_tmp.shape[1])
-        # TX_tmp = np.pad(TX_tmp, ((0,0), (0,nb_zeros_for_k)), mode='constant', constant_values=0)
-
+        # TX_tmp = np.pad(TX_tmp, ((0,nb_zeros_for_f), (0,nb_zeros_for_k)), mode='constant', constant_values=0)
+        # If not needed, comment the lines above and uncomment the line below
+        TX_tmp = np.copy(TX)
+        
         # Compute the FK diagram
         fs = rfftfreq(TX_tmp.shape[0], dt)
         try :
@@ -421,11 +422,6 @@ display_spectrum_img_fromArray(interf_db_stack.T, dt, offsets, path1=name_path1,
 
 ### SLANT STACK -----------------------------------------------------------------------------------
 arr = np.copy(interf_db_stack)
-
-### Zero padding for better frequency resolution in the dispersion image
-nb_zeros_target = int(5/dt) # Add zeros so the virtual shot gather is 5 seconds long
-nb_zeros_for_f = max(0, nb_zeros_target-arr.shape[0])
-arr = np.pad(arr, ((0,0), (0,nb_zeros_for_f)), mode='constant', constant_values=0)
 
 offsets = np.abs(positions - positions[0])
 (fs, vs, FV) = phase_shift(arr, dt, offsets, v_min, v_max, dv, f_max)

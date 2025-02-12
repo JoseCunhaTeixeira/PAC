@@ -21,6 +21,7 @@ from disba import DispersionError
 
 import arviz as az
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 
 sys.path.append("./modules/")
 from misc import arange
@@ -261,11 +262,9 @@ for chain in inversion.chains:
 
 ### PLOT RESULTS ----------------------------------------------------------------------------------
 depth_max = np.nansum(thickness_maxs) + 1 
-dz = 0.1
+dz = 0.01
 
 results = inversion.get_results(concatenate_chains=True)
-
-
 
 # Extract sampled models
 all_sampled_vs = []
@@ -287,13 +286,102 @@ all_sampled_gm = np.array(all_sampled_gm)
 
 
 
+# Misfits
+misfits = np.zeros(len(results[f'rayleigh_M{modes[0]}.dpred']))
+for mode, vr_obs in zip(modes, vr_obs_per_mode):
+    d_pred = np.array(results[f'rayleigh_M{mode}.dpred'])
+    for i, vr_pred in enumerate(d_pred):
+        misfits[i] += np.sum((vr_obs - vr_pred)**2)
+misfits /= np.sum([len(vr_obs) for vr_obs in vr_obs_per_mode])
+misfits = np.sqrt(misfits)
+
+
+# Best layered model
+idx = np.argmin(misfits)
+best_layered_gm = all_sampled_gm[idx]
+
+
+# Smooth best layered model
+thick_vals = best_layered_gm[:,0]
+vp_vals = best_layered_gm[:,1]
+vs_vals = best_layered_gm[:,2]
+rho_vals = best_layered_gm[:,3]
+
+best_layered_gm[-1,0] = (depth_max - np.sum(best_layered_gm[:-1,0]))/2
+
+depth_vals = [0]
+vp_vals = [vp_vals[0]]
+vs_vals = [vs_vals[0]]
+rho_vals = [rho_vals[0]]
+
+for i, (thick, vp, vs, rho) in enumerate(zip(best_layered_gm[:,0], best_layered_gm[:,1], best_layered_gm[:,2], best_layered_gm[:,3])):
+    current_thick = best_layered_gm[i,0]
+    current_vp = best_layered_gm[i,1]
+    current_vs = best_layered_gm[i,2]
+    current_rho = best_layered_gm[i,3]
+
+    depth_vals.append(depth_vals[-1] + current_thick/2)
+    vp_vals.append(current_vp)
+    vs_vals.append(current_vs)
+    rho_vals.append(current_rho)
+
+    if i == len(best_layered_gm)-1:
+        break
+
+    next_vp = best_layered_gm[i+1,1]
+    next_vs = best_layered_gm[i+1,2]
+    next_rho = best_layered_gm[i+1,3]
+
+    depth_vals.append(depth_vals[-1] + current_thick/2)
+    vp_vals.append((current_vp + next_vp)/2)
+    vs_vals.append((current_vs + next_vs)/2)
+    rho_vals.append((current_rho + next_rho)/2)
+
+depth = depth_vals[-1] + dz
+depth = np.round(depth, 2)
+while depth < depth_max:
+    depth_vals = np.append(depth_vals, depth)
+    vp_vals = np.append(vp_vals, vp_vals[-1])
+    vs_vals = np.append(vs_vals, vs_vals[-1])
+    rho_vals = np.append(rho_vals, rho_vals[-1])
+    depth += dz
+depth_vals = np.append(depth_vals, depth)
+vp_vals = np.append(vp_vals, vp_vals[-1])
+vs_vals = np.append(vs_vals, vs_vals[-1])
+rho_vals = np.append(rho_vals, rho_vals[-1])
+
+depth_vals = np.round(depth_vals, 2)
+
+depth_vals = np.array(depth_vals)
+vp_vals = np.array(vp_vals)
+vs_vals = np.array(vs_vals)
+rho_vals = np.array(rho_vals)
+
+depth_vals_smooth = arange(min(depth_vals), max(depth_vals), dz)
+depth_vals_smooth = np.round(depth_vals_smooth, 2)
+
+f = interp1d(depth_vals, vp_vals, kind='cubic')
+vp_smooth = f(depth_vals_smooth)
+
+f = interp1d(depth_vals, vs_vals, kind='cubic')
+vs_smooth = f(depth_vals_smooth)
+
+f = interp1d(depth_vals, rho_vals, kind='cubic')
+rho_smooth = f(depth_vals_smooth)
+
+vp_smooth = vp_smooth[:-1]
+vs_smooth = vs_smooth[:-1]
+rho_smooth = rho_smooth[:-1]
+
+smooth_best_layered_gm = np.column_stack((np.full_like(vp_smooth, dz), vp_smooth, vs_smooth, rho_smooth))
+
+
 # Median layered model
 median_layered_gm = np.median(all_sampled_gm, axis=0)
 median_layered_std = np.std(all_sampled_gm, axis=0)
 
 
-
-# Median smooth model
+# Smooth median layered model
 thick_vals = median_layered_gm[:,0]
 vp_vals = median_layered_gm[:,1]
 vs_vals = median_layered_gm[:,2]
@@ -347,8 +435,8 @@ for i, (thick, vp, vs, rho, std_vp, std_vs, std_rho) in enumerate(zip(median_lay
     std_vs_vals.append((current_std_vs + next_std_vs)/2)
     std_rho_vals.append((current_std_rho + next_std_rho)/2)
 
-depth = depth_vals[-1] + 0.1
-depth = np.round(depth, 1)
+depth = depth_vals[-1] + dz
+depth = np.round(depth, 2)
 while depth < depth_max:
     depth_vals = np.append(depth_vals, depth)
     vp_vals = np.append(vp_vals, vp_vals[-1])
@@ -366,7 +454,7 @@ std_vp_vals = np.append(std_vp_vals, std_vp_vals[-1])
 std_vs_vals = np.append(std_vs_vals, std_vs_vals[-1])
 std_rho_vals = np.append(std_rho_vals, std_rho_vals[-1])
 
-depth_vals = np.round(depth_vals, 1)
+depth_vals = np.round(depth_vals, 2)
 
 depth_vals = np.array(depth_vals)
 vp_vals = np.array(vp_vals)
@@ -377,7 +465,7 @@ std_vs_vals = np.array(std_vs_vals)
 std_rho_vals = np.array(std_rho_vals)
 
 depth_vals_smooth = arange(min(depth_vals), max(depth_vals), dz)
-depth_vals_smooth = np.round(depth_vals_smooth, 1)
+depth_vals_smooth = np.round(depth_vals_smooth, 2)
 
 f = interp1d(depth_vals, vp_vals, kind='cubic')
 vp_smooth = f(depth_vals_smooth)
@@ -404,24 +492,24 @@ std_vp_smooth = std_vp_smooth[:-1]
 std_vs_smooth = std_vs_smooth[:-1]
 std_rho_smooth = std_rho_smooth[:-1]
 
-median_smooth_gm = np.column_stack((np.full_like(vp_smooth, dz), vp_smooth, vs_smooth, rho_smooth))
-median_smooth_std = np.column_stack((np.full_like(vp_smooth, dz), std_vp_smooth, std_vs_smooth, std_rho_smooth))
+smooth_median_layered_gm = np.column_stack((np.full_like(vp_smooth, dz), vp_smooth, vs_smooth, rho_smooth))
+smooth_median_layered_std = np.column_stack((np.full_like(vp_smooth, dz), std_vp_smooth, std_vs_smooth, std_rho_smooth))
 
 
 
-# Median ridge model
-all_ridge_gm = []
+# Median ensemble model
+all_ensemble_gm = []
 for gm in all_sampled_gm:
-    ridge_gm = []
+    ensemble_gm = []
     for thick, vp, vs, rho in gm:
-        ridge_gm += [[dz, vp, vs, rho]]*int(thick/dz)
-    if len(ridge_gm) < depth_max/dz:
-        ridge_gm += [[dz, vp, vs, rho]]*int(depth_max/dz - len(ridge_gm))
-    all_ridge_gm.append(ridge_gm)
-all_ridge_gm = np.array(all_ridge_gm)
+        ensemble_gm += [[dz, vp, vs, rho]]*int(thick/dz)
+    if len(ensemble_gm) < depth_max/dz:
+        ensemble_gm += [[dz, vp, vs, rho]]*int(depth_max/dz - len(ensemble_gm))
+    all_ensemble_gm.append(ensemble_gm)
+all_ensemble_gm = np.array(all_ensemble_gm)
 
-median_ridge_gm = np.median(all_ridge_gm, axis=0)
-median_ridge_std = np.std(all_ridge_gm, axis=0)
+median_ensemble_gm = np.median(all_ensemble_gm, axis=0)
+median_ensemble_std = np.std(all_ensemble_gm, axis=0)
 
 
 median_layered_gm[-1,0] = 1
@@ -430,53 +518,67 @@ median_layered_gm[-1,0] = 1
 # Save models
 print(f'ID {ID} | x_mid {x_mid} | Saving results in {output_dir}')
 
+# Save best layered model
+with open(f"{output_dir}/xmid{x_mid}_best_layered_model.gm", "w") as f:
+    f.write(f"{len(best_layered_gm)}\n")
+    np.savetxt(f, best_layered_gm, fmt="%.4f")
+# Save best layered dispersion
+for mode, fs_obs in zip(modes, fs_obs_per_mode):
+    best_layered_dc = forward_model_disba(best_layered_gm[:,0], best_layered_gm[:,2], mode, fs_obs)
+    with open(f"{output_dir}/xmid{x_mid}_best_layered_M{mode}.pvc", "w") as f:
+        np.savetxt(f, np.column_stack((fs_obs, best_layered_dc)), fmt="%.4f")
+
+# Save smooth best layered model
+with open(f"{output_dir}/xmid{x_mid}_smooth_best_layered_model.gm", "w") as f:
+    f.write(f"{len(smooth_best_layered_gm)}\n")
+    np.savetxt(f, smooth_best_layered_gm, fmt="%.4f")
+# Save smooth best layered dispersion
+for mode, fs_obs in zip(modes, fs_obs_per_mode):
+    smooth_best_layered_dc = forward_model_disba(smooth_best_layered_gm[:,0], smooth_best_layered_gm[:,2], mode, fs_obs)
+    with open(f"{output_dir}/xmid{x_mid}_smooth_best_layered_M{mode}.pvc", "w") as f:
+        np.savetxt(f, np.column_stack((fs_obs, smooth_best_layered_dc)), fmt="%.4f")
+
 # Save median layered model
 with open(f"{output_dir}/xmid{x_mid}_median_layered_model.gm", "w") as f:
     f.write(f"{len(median_layered_gm)}\n")
     np.savetxt(f, median_layered_gm, fmt="%.4f")
-    
 # Save median layered std
 with open(f"{output_dir}/xmid{x_mid}_median_layered_std.gm", "w") as f:
     f.write(f"{len(median_layered_std)}\n")
     np.savetxt(f, median_layered_std, fmt="%.4f")
-    
 # Save median layered dispersion
 for mode, fs_obs in zip(modes, fs_obs_per_mode):
     median_layered_dc = forward_model_disba(median_layered_gm[:,0], median_layered_gm[:,2], mode, fs_obs)
     with open(f"{output_dir}/xmid{x_mid}_median_layered_M{mode}.pvc", "w") as f:
         np.savetxt(f, np.column_stack((fs_obs, median_layered_dc)), fmt="%.4f")
 
-# Save median smooth model
-with open(f"{output_dir}/xmid{x_mid}_median_smooth_model.gm", "w") as f:
-    f.write(f"{len(median_smooth_gm)}\n")
-    np.savetxt(f, median_smooth_gm, fmt="%.4f")
-
-# Save median smooth std
-with open(f"{output_dir}/xmid{x_mid}_median_smooth_std.gm", "w") as f:
-    f.write(f"{len(median_smooth_std)}\n")
-    np.savetxt(f, median_smooth_std, fmt="%.4f")
-    
-# Save median smooth dispersion
+# Save smooth median layered model
+with open(f"{output_dir}/xmid{x_mid}_smooth_median_layered_model.gm", "w") as f:
+    f.write(f"{len(smooth_median_layered_gm)}\n")
+    np.savetxt(f, smooth_median_layered_gm, fmt="%.4f")
+# Save smooth median layered std
+with open(f"{output_dir}/xmid{x_mid}_smooth_median_layered_std.gm", "w") as f:
+    f.write(f"{len(smooth_median_layered_std)}\n")
+    np.savetxt(f, smooth_median_layered_std, fmt="%.4f")
+# Save smooth median layered dispersion
 for mode, fs_obs in zip(modes, fs_obs_per_mode):
-    median_smooth_dc = forward_model_disba(median_smooth_gm[:,0], median_smooth_gm[:,2], mode, fs_obs)
-    with open(f"{output_dir}/xmid{x_mid}_median_smooth_M{mode}.pvc", "w") as f:
-        np.savetxt(f, np.column_stack((fs_obs, median_smooth_dc)), fmt="%.4f")
+    smooth_median_layered_dc = forward_model_disba(smooth_median_layered_gm[:,0], smooth_median_layered_gm[:,2], mode, fs_obs)
+    with open(f"{output_dir}/xmid{x_mid}_smooth_median_layered_M{mode}.pvc", "w") as f:
+        np.savetxt(f, np.column_stack((fs_obs, smooth_median_layered_dc)), fmt="%.4f")
 
-# Save median ridge model
-with open(f"{output_dir}/xmid{x_mid}_median_ridge_model.gm", "w") as f:
-    f.write(f"{len(median_ridge_gm)}\n")
-    np.savetxt(f, median_ridge_gm, fmt="%.4f")
-    
-# Save median ridge std
-with open(f"{output_dir}/xmid{x_mid}_median_ridge_std.gm", "w") as f:
-    f.write(f"{len(median_ridge_std)}\n")
-    np.savetxt(f, median_ridge_std, fmt="%.4f")
-    
-# Save median ridge dispersion
+# Save median ensemble model
+with open(f"{output_dir}/xmid{x_mid}_median_ensemble_model.gm", "w") as f:
+    f.write(f"{len(median_ensemble_gm)}\n")
+    np.savetxt(f, median_ensemble_gm, fmt="%.4f")
+# Save median ensemble std
+with open(f"{output_dir}/xmid{x_mid}_median_ensemble_std.gm", "w") as f:
+    f.write(f"{len(median_ensemble_std)}\n")
+    np.savetxt(f, median_ensemble_std, fmt="%.4f")
+# Save median ensemble dispersion
 for mode, fs_obs in zip(modes, fs_obs_per_mode):
-    median_ridge_dc = forward_model_disba(median_ridge_gm[:,0], median_ridge_gm[:,2], mode, fs_obs)
-    with open(f"{output_dir}/xmid{x_mid}_median_ridge_M{mode}.pvc", "w") as f:
-        np.savetxt(f, np.column_stack((fs_obs, median_ridge_dc)), fmt="%.4f")
+    median_ensemble_dc = forward_model_disba(median_ensemble_gm[:,0], median_ensemble_gm[:,2], mode, fs_obs)
+    with open(f"{output_dir}/xmid{x_mid}_median_ensemble_M{mode}.pvc", "w") as f:
+        np.savetxt(f, np.column_stack((fs_obs, median_ensemble_dc)), fmt="%.4f")
     
     
     
@@ -494,12 +596,12 @@ for mode in modes:
     
 pred_modes = []
 for mode, fs_obs in zip(modes, fs_obs_per_mode):
-    pred_modes.append(np.column_stack((fs_obs, forward_model_disba(median_smooth_gm[:,0], median_smooth_gm[:,2], mode, fs_obs))))
+    pred_modes.append(np.column_stack((fs_obs, forward_model_disba(smooth_median_layered_gm[:,0], smooth_median_layered_gm[:,2], mode, fs_obs))))
 
 full_pred_modes = []
 inRange = True
 mode = 0
-velocity_model = median_smooth_gm/1000
+velocity_model = smooth_median_layered_gm/1000
 pd = PhaseDispersion(*velocity_model.T)
 periods = 1 / fs[fs>0]
 periods = periods[::-1]
@@ -533,17 +635,25 @@ for i, (fs_obs, vr_obs, err_obs, mode) in enumerate(zip(fs_obs_per_mode, vr_obs_
     label = 'Observed Data' if i == 0 else '_nolegend_'
     ax.errorbar(fs_obs, vr_obs, yerr=err_obs, fmt='o', color='tab:blue', label=label, markersize=1.5, capsize=0, elinewidth=0.3, zorder=3)
 
+    # Plot best layered model
+    label = 'Best layered model' if i == 0 else '_nolegend_'
+    ax.plot(fs_obs, forward_model_disba(best_layered_gm[:,0], best_layered_gm[:,2], mode, fs_obs), 'o', color='tab:green', label=label, markersize=1.5, zorder=4)
+
+    # Plot smooth best layered model
+    label = 'Smooth best layered model' if i == 0 else '_nolegend_'
+    ax.plot(fs_obs, forward_model_disba(smooth_best_layered_gm[:,0], smooth_best_layered_gm[:,2], mode, fs_obs), 'o', color='green', label=label, markersize=1.5, zorder=6)
+
     # Plot median layered model
     label = 'Median layered model' if i == 0 else '_nolegend_'
-    ax.plot(fs_obs, forward_model_disba(median_layered_gm[:,0], median_layered_gm[:,2], mode, fs_obs), 'o', color='tab:green',  label=label, markersize=1.5, zorder=4)
+    ax.plot(fs_obs, forward_model_disba(median_layered_gm[:,0], median_layered_gm[:,2], mode, fs_obs), 'o', color='orange', label=label, markersize=1.5, zorder=4)
 
-    # Plot median ridge model
-    label = 'Median ridge model' if i == 0 else '_nolegend_'
-    ax.plot(fs_obs, forward_model_disba(median_ridge_gm[:,0], median_ridge_gm[:,2], mode, fs_obs), 'o', color='tab:red', label=label, markersize=1.5, zorder=5)
+    # Plot smooth median layered model
+    label = 'Smooth median layered model' if i == 0 else '_nolegend_'
+    ax.plot(fs_obs, forward_model_disba(smooth_median_layered_gm[:,0], smooth_median_layered_gm[:,2], mode, fs_obs), 'o', color='tab:orange', label=label, markersize=1.5, zorder=6)
 
-    # Plot median smooth model
-    label = 'Median smooth model' if i == 0 else '_nolegend_'
-    ax.plot(fs_obs, forward_model_disba(median_smooth_gm[:,0], median_smooth_gm[:,2], mode, fs_obs), 'o', color='tab:orange', label=label, markersize=1.5, zorder=6)
+    # Plot median ensemble model
+    label = 'Median ensemble model' if i == 0 else '_nolegend_'
+    ax.plot(fs_obs, forward_model_disba(median_ensemble_gm[:,0], median_ensemble_gm[:,2], mode, fs_obs), 'o', color='tab:red', label=label, markersize=1.5, zorder=5)
 
 ax.set_xlabel('Frequency [Hz]')
 ax.set_ylabel('Phase velocity $v_{R}$ [m/s]')
@@ -552,14 +662,41 @@ ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
 ax = axs[1]
 
 # Plot all models
-for gm in all_sampled_gm:
+cmap = plt.get_cmap('Greys_r')
+def _forward(x):
+    return np.log(x)
+def _inverse(x):
+    return np.exp(x)
+norm = colors.FuncNorm((_forward, _inverse), vmin=np.min(misfits), vmax=np.max(misfits))
+sorted_idx = np.argsort(misfits)[::-1]
+all_sampled_gm = all_sampled_gm[sorted_idx]
+misfits = misfits[sorted_idx]
+for gm, misfit in zip(all_sampled_gm, misfits):
     thick_vals = np.copy(gm[:,0])
     vs_vals = np.copy(gm[:,2])
     thick_vals[-1] = depth_max - np.sum(thick_vals[:-2])
     depth_vals = np.cumsum(thick_vals)
     depth_vals = np.insert(depth_vals, 0, 0)
     vs_vals = np.append(vs_vals, vs_vals[-1])
-    ax.step(vs_vals, depth_vals, color='k', alpha=0.01, label='_nolegend_', linewidth=0.5)
+    ax.step(vs_vals, depth_vals, color=cmap(norm(misfit)), label='_nolegend_', linewidth=0.5)
+
+# Plot best layered model
+thick_vals = np.copy(best_layered_gm[:,0])
+vs_vals = np.copy(best_layered_gm[:,2])
+thick_vals[-1] = depth_max - np.sum(thick_vals[:-2])
+depth_vals = np.cumsum(thick_vals)
+depth_vals = np.insert(depth_vals, 0, 0)
+vs_vals = np.append(vs_vals, vs_vals[-1])
+ax.step(vs_vals, depth_vals, color='tab:green', label='Best layered model', linewidth=1)
+
+# Plot smooth best layered model
+thick_vals = np.copy(smooth_best_layered_gm[:,0])
+vs_vals = np.copy(smooth_best_layered_gm[:,2])
+thick_vals[-1] = depth_max - np.sum(thick_vals[:-2])
+depth_vals = np.cumsum(thick_vals)
+depth_vals = np.insert(depth_vals, 0, 0)
+vs_vals = np.append(vs_vals, vs_vals[-1])
+ax.step(vs_vals, depth_vals, color='green', label='Smooth best layered model', linewidth=1)
 
 # Plot median layered model
 thick_vals = np.copy(median_layered_gm[:,0])
@@ -568,31 +705,30 @@ thick_vals[-1] = depth_max - np.sum(thick_vals[:-2])
 depth_vals = np.cumsum(thick_vals)
 depth_vals = np.insert(depth_vals, 0, 0)
 vs_vals = np.append(vs_vals, vs_vals[-1])
-ax.step(vs_vals, depth_vals, color='tab:green', label='Median layered model', linewidth=1)
+ax.step(vs_vals, depth_vals, color='orange', label='Median layered model', linewidth=1)
 
-# Plot median ridge model
-thick_vals = np.copy(median_ridge_gm[:,0])
-vs_vals = np.copy(median_ridge_gm[:,2])
+# Plot smooth median layered model
+thick_vals = np.copy(smooth_median_layered_gm[:,0])
+vs_vals = np.copy(smooth_median_layered_gm[:,2])
 thick_vals[-1] = depth_max - np.sum(thick_vals[:-2])
 depth_vals = np.cumsum(thick_vals)
 depth_vals = np.insert(depth_vals, 0, 0)
 vs_vals = np.append(vs_vals, vs_vals[-1])
-ax.step(vs_vals, depth_vals, color='tab:red', label='Median ridge model', linewidth=1)
-
-# Plot median smooth model
-thick_vals = np.copy(median_smooth_gm[:,0])
-vs_vals = np.copy(median_smooth_gm[:,2])
-thick_vals[-1] = depth_max - np.sum(thick_vals[:-2])
-depth_vals = np.cumsum(thick_vals)
-depth_vals = np.insert(depth_vals, 0, 0)
-vs_vals = np.append(vs_vals, vs_vals[-1])
-ax.step(vs_vals, depth_vals, color='tab:orange', label='Median smooth model', linewidth=1)
-
+ax.step(vs_vals, depth_vals, color='tab:orange', label='Smooth median layered model', linewidth=1)
 # Plot std smooth model
-std_vs_vals = np.copy(median_smooth_std[:,2])
+std_vs_vals = np.copy(smooth_median_layered_std[:,2])
 std_vs_vals = np.append(std_vs_vals, std_vs_vals[-1])
-ax.step(vs_vals-std_vs_vals, depth_vals, color='tab:orange', label='Standard deviation', linewidth=1, linestyle='--')
-ax.step(vs_vals+std_vs_vals, depth_vals, color='tab:orange', label='_nolegend_', linewidth=1, linestyle='--')
+ax.step(vs_vals-std_vs_vals, depth_vals, color='tab:orange', label='Standard deviation', linewidth=1, linestyle='dotted')
+ax.step(vs_vals+std_vs_vals, depth_vals, color='tab:orange', label='_nolegend_', linewidth=1, linestyle='dotted')
+
+# Plot median ensemble model
+thick_vals = np.copy(median_ensemble_gm[:,0])
+vs_vals = np.copy(median_ensemble_gm[:,2])
+thick_vals[-1] = depth_max - np.sum(thick_vals[:-2])
+depth_vals = np.cumsum(thick_vals)
+depth_vals = np.insert(depth_vals, 0, 0)
+vs_vals = np.append(vs_vals, vs_vals[-1])
+ax.step(vs_vals, depth_vals, color='tab:red', label='Median ensemble model', linewidth=1)
 
 ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
 ax.invert_yaxis()

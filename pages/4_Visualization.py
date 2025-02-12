@@ -45,24 +45,45 @@ def initialize_session():
         st.session_state.VIZ_selected_folder = None
     if 'VIZ_folder_path' not in st.session_state:
         st.session_state.VIZ_folder_path = None
-    if 'VIZ_v_xd_layered_raw' not in st.session_state:
-        st.session_state.VIZ_v_xd_layered_raw = None
-    if 'VIZ_v_xd_layered_smooth' not in st.session_state:
-        st.session_state.VIZ_v_xd_layered_smooth = None
-    if 'VIZ_v_xd_ridge_raw' not in st.session_state:
-        st.session_state.VIZ_v_xd_ridge_raw = None
-    if 'VIZ_v_xd_ridge_smooth' not in st.session_state:
-        st.session_state.VIZ_v_xd_ridge_smooth = None
-    if 'VIZ_v_xd_smooth_raw' not in st.session_state:
-        st.session_state.VIZ_v_xd_smooth_raw = None
-    if 'VIZ_v_xd_smooth_smooth' not in st.session_state:
-        st.session_state.VIZ_v_xd_smooth_smooth = None
+
+    
+    if 'VIZ_v_xd_median_layered' not in st.session_state:
+        st.session_state.VIZ_v_xd_median_layered = None
+    if 'VIZ_v_xd_median_layered_lateralsmooth' not in st.session_state:
+        st.session_state.VIZ_v_xd_median_layered_lateralsmooth = None
+
+    if 'VIZ_v_xd_verticalsmooth_median_layered' not in st.session_state:
+        st.session_state.VIZ_v_xd_verticalsmooth_median_layered = None
+    if 'VIZ_v_xd_verticalsmooth_median_layered_lateralsmooth' not in st.session_state:
+        st.session_state.VIZ_v_xd_verticalsmooth_median_layered_lateralsmooth = None
+
+
+    if 'VIZ_v_xd_best_layered' not in st.session_state:
+        st.session_state.VIZ_v_xd_best_layered = None
+    if 'VIZ_v_xd_best_layered_lateralsmooth' not in st.session_state:
+        st.session_state.VIZ_v_xd_best_layered_lateralsmooth = None
+
+    if 'VIZ_v_xd_verticalsmooth_best_layered' not in st.session_state:
+        st.session_state.VIZ_v_xd_verticalsmooth_best_layered = None
+    if 'VIZ_v_xd_verticalsmooth_best_layered_lateralsmooth' not in st.session_state:
+        st.session_state.VIZ_v_xd_verticalsmooth_best_layered_lateralsmooth = None
+
+    
+    if 'VIZ_v_xd_median_ensemble' not in st.session_state:
+        st.session_state.VIZ_v_xd_median_ensemble = None
+    if 'VIZ_v_xd_median_ensemble_lateralsmooth' not in st.session_state:
+        st.session_state.VIZ_v_xd_median_ensemble_lateralsmooth = None
+
+
     if 'VIZ_cmap' not in st.session_state:
         st.session_state.VIZ_cmap = 'Terrain'
     if 'VIZ_model' not in st.session_state:
-        st.session_state.VIZ_model = 'Smooth'
-    if 'VIZ_smoothing' not in st.session_state:
-        st.session_state.VIZ_smoothing = 'Smooth'
+        st.session_state.VIZ_model = 'Median layered'
+    if 'VIZ_vertical_smoothing' not in st.session_state:
+        st.session_state.VIZ_smoothing = 'Yes'
+    if 'VIZ_lateral_smoothing' not in st.session_state:
+        st.session_state.VIZ_smoothing = 'Yes'
+
         
 def get_subplot_layout(n_subplots):
     rows = int(np.sqrt(n_subplots))
@@ -81,8 +102,8 @@ def mode_filter_median(values):
 ### HANDLERS ----------------------------------------------------------------------------------------------------------------------------------------
 def load_sections():
     
-    all_gm_layered = []
-    all_std_layered = []
+    all_gm_median_layered = []
+    all_std_median_layered = []
     for folder in st.session_state.VIZ_folders:
         try:
             gm = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_median_layered_model.gm", skiprows=1)
@@ -90,171 +111,260 @@ def load_sections():
         except:
             gm = None
             std = None
-        all_gm_layered.append(gm)
-        all_std_layered.append(std)
-    
-    all_gm_ridge = []
-    all_std_ridge = []
-    for folder in st.session_state.VIZ_folders:
-        try:
-            gm = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_median_ridge_model.gm", skiprows=1)
-            std = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_median_ridge_std.gm", skiprows=1)
-        except:
-            gm = None
-            std = None
-        all_gm_ridge.append(gm)
-        all_std_ridge.append(std)
+        all_gm_median_layered.append(gm)
+        all_std_median_layered.append(std)
 
-    all_gm_smooth = []
-    all_std_smooth = []
+    all_gm_verticalsmooth_median_layered = []
+    all_std_verticalsmooth_median_layered = []
     for folder in st.session_state.VIZ_folders:
         try:
-            gm = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_median_smooth_model.gm", skiprows=1)
-            std = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_median_smooth_std.gm", skiprows=1)
+            gm = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_smooth_median_layered_model.gm", skiprows=1)
+            std = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_smooth_median_layered_std.gm", skiprows=1)
         except:
             gm = None
             std = None
-        all_gm_smooth.append(gm)
-        all_std_smooth.append(std)        
+        all_gm_verticalsmooth_median_layered.append(gm)
+        all_std_verticalsmooth_median_layered.append(std)
+
+
+    all_gm_best_layered = []
+    for folder in st.session_state.VIZ_folders:
+        try:
+            gm = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_best_layered_model.gm", skiprows=1)
+        except:
+            gm = None
+            std = None
+        all_gm_best_layered.append(gm)
+
+    all_gm_verticalsmooth_best_layered = []
+    for folder in st.session_state.VIZ_folders:
+        try:
+            gm = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_smooth_best_layered_model.gm", skiprows=1)
+        except:
+            gm = None
+            std = None
+        all_gm_verticalsmooth_best_layered.append(gm)
+
     
-    if not all(gm is None for gm in all_gm_layered):
-        max_depth_layered = np.nanmax([np.sum(gm[:,0]) for gm in all_gm_layered if gm is not None])
-    else:
-        max_depth_layered = np.nan
-    if not all(gm is None for gm in all_gm_ridge):
-        max_depth_ridge = np.nanmax([np.sum(gm[:,0]) for gm in all_gm_ridge if gm is not None])
-    else:
-        max_depth_ridge = np.nan
-    if not all(gm is None for gm in all_gm_smooth):
-        max_depth_smooth = np.nanmax([np.sum(gm[:,0]) for gm in all_gm_smooth if gm is not None])
-    else:
-        max_depth_smooth = np.nan
-    depth_max = np.nanmax([max_depth_layered, max_depth_ridge, max_depth_smooth])
+    all_gm_median_ensemble = []
+    all_std_median_ensemble = []
+    for folder in st.session_state.VIZ_folders:
+        try:
+            gm = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_median_ensemble_model.gm", skiprows=1)
+            std = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_median_ensemble_std.gm", skiprows=1)
+        except:
+            gm = None
+            std = None
+        all_gm_median_ensemble.append(gm)
+        all_std_median_ensemble.append(std)       
     
-    dz = 0.1
+
+    if not all(gm is None for gm in all_gm_median_layered):
+        max_depth_median_layered = np.nanmax([np.sum(gm[:,0]) for gm in all_gm_median_layered if gm is not None])
+    else:
+        max_depth_median_layered = np.nan
+    if not all(gm is None for gm in all_gm_verticalsmooth_median_layered):
+        max_depth_vertical_smooth_median_layered = np.nanmax([np.sum(gm[:,0]) for gm in all_gm_verticalsmooth_median_layered if gm is not None])
+    else:
+        max_depth_vertical_smooth_median_layered = np.nan
+    if not all(gm is None for gm in all_gm_best_layered):
+        max_depth_best_layered = np.nanmax([np.sum(gm[:,0]) for gm in all_gm_best_layered if gm is not None])
+    else:
+        max_depth_best_layered = np.nan
+    if not all(gm is None for gm in all_gm_verticalsmooth_best_layered):
+        max_depth_vertical_smooth_best_layered = np.nanmax([np.sum(gm[:,0]) for gm in all_gm_verticalsmooth_best_layered if gm is not None])
+    else:
+        max_depth_vertical_smooth_best_layered = np.nan
+    if not all(gm is None for gm in all_gm_median_ensemble):
+        max_depth_median_ensemble = np.nanmax([np.sum(gm[:,0]) for gm in all_gm_median_ensemble if gm is not None])
+    else:
+        max_depth_median_ensemble = np.nan
+    depth_max = np.nanmax([max_depth_median_layered, max_depth_vertical_smooth_median_layered, max_depth_best_layered, max_depth_vertical_smooth_best_layered, max_depth_median_ensemble])
+    dz = 0.01
     
-    if not all(gm is None for gm in all_gm_layered) and not all(gm is None for gm in all_std_layered):
-        st.session_state.VIZ_depths_layered = arange(0, depth_max, dz)
+
+    if not all(gm is None for gm in all_gm_median_layered) and not all(gm is None for gm in all_std_median_layered):
+        st.session_state.VIZ_depths_median_layered = arange(0, depth_max, dz)
         
-        st.session_state.VIZ_v_xd_layered_raw = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_layered)), np.nan)
-        st.session_state.VIZ_std_xd_layered_raw = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_layered)), np.nan)
+        st.session_state.VIZ_v_xd_median_layered = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_median_layered)), np.nan)
+        st.session_state.VIZ_std_xd_median_layered = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_median_layered)), np.nan)
                         
-        for j, (gm, gm_std) in enumerate(zip(all_gm_layered, all_std_layered)):
+        for j, (gm, gm_std) in enumerate(zip(all_gm_median_layered, all_std_median_layered)):
             if gm is not None and gm_std is not None:
                 col = []
                 col_std = []
                 for (thick, vp, vs, rho), (thick_std, vp_std, vs_std, rho_std) in zip(gm, gm_std):
                     col += [vs] * int(thick/dz)
                     col_std += [vs_std] * int(thick/dz)
-                if len(col) < len(st.session_state.VIZ_depths_layered):
-                    col += [gm[-1,2]] * (len(st.session_state.VIZ_depths_layered)-len(col))
-                    col_std += [gm_std[-1,2]] * (len(st.session_state.VIZ_depths_layered)-len(col_std))
-                st.session_state.VIZ_v_xd_layered_raw[j, :] = col
-                st.session_state.VIZ_std_xd_layered_raw[j, :] = col_std
+                if len(col) < len(st.session_state.VIZ_depths_median_layered):
+                    col += [gm[-1,2]] * (len(st.session_state.VIZ_depths_median_layered)-len(col))
+                    col_std += [gm_std[-1,2]] * (len(st.session_state.VIZ_depths_median_layered)-len(col_std))
+                st.session_state.VIZ_v_xd_median_layered[j, :] = col
+                st.session_state.VIZ_std_xd_median_layered[j, :] = col_std
                 
-        st.session_state.VIZ_vs_min_layered = np.floor(np.nanmin(st.session_state.VIZ_v_xd_layered_raw))
-        st.session_state.VIZ_vs_max_layered = np.ceil(np.nanmax(st.session_state.VIZ_v_xd_layered_raw))
+        st.session_state.VIZ_vs_min_median_layered = np.floor(np.nanmin(st.session_state.VIZ_v_xd_median_layered))
+        st.session_state.VIZ_vs_max_median_layered = np.ceil(np.nanmax(st.session_state.VIZ_v_xd_median_layered))
         
-        st.session_state.VIZ_v_xd_layered_smooth = generic_filter(st.session_state.VIZ_v_xd_layered_raw, mode_filter_median, size=(4,1))
-        st.session_state.VIZ_v_xd_layered_smooth = generic_filter(st.session_state.VIZ_v_xd_layered_smooth, mode_filter_median, size=(3,1))
-        st.session_state.VIZ_v_xd_layered_smooth = generic_filter(st.session_state.VIZ_v_xd_layered_smooth, mode_filter_median, size=(2,1))
+        st.session_state.VIZ_v_xd_median_layered_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_median_layered, mode_filter_median, size=(4,1))
+        st.session_state.VIZ_v_xd_median_layered_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_median_layered_lateralsmooth, mode_filter_median, size=(3,1))
+        st.session_state.VIZ_v_xd_median_layered_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_median_layered_lateralsmooth, mode_filter_median, size=(2,1))
         
-        st.session_state.VIZ_std_xd_layered_smooth = generic_filter(st.session_state.VIZ_std_xd_layered_raw, mode_filter_median, size=(4,1))
-        st.session_state.VIZ_std_xd_layered_smooth = generic_filter(st.session_state.VIZ_std_xd_layered_smooth, mode_filter_median, size=(3,1))
-        st.session_state.VIZ_std_xd_layered_smooth = generic_filter(st.session_state.VIZ_std_xd_layered_smooth, mode_filter_median, size=(2,1))
+        st.session_state.VIZ_std_xd_median_layered_lateralsmooth = generic_filter(st.session_state.VIZ_std_xd_median_layered, mode_filter_median, size=(4,1))
+        st.session_state.VIZ_std_xd_median_layered_lateralsmooth = generic_filter(st.session_state.VIZ_std_xd_median_layered_lateralsmooth, mode_filter_median, size=(3,1))
+        st.session_state.VIZ_std_xd_median_layered_lateralsmooth = generic_filter(st.session_state.VIZ_std_xd_median_layered_lateralsmooth, mode_filter_median, size=(2,1))
     else:
-        st.session_state.VIZ_v_xd_layered_raw = None
-        st.session_state.VIZ_v_xd_layered_smooth = None
-        st.session_state.VIZ_std_xd_layered_raw = None
-        st.session_state.VIZ_std_xd_layered_smooth = None
-        st.session_state.VIZ_depths_layered = None
-        st.session_state.VIZ_vs_min_layered = None
-        st.session_state.VIZ_vs_max_layered = None
-        
+        st.session_state.VIZ_v_xd_median_layered = None
+        st.session_state.VIZ_v_xd_median_layered_lateralsmooth = None
+        st.session_state.VIZ_std_xd_median_layered = None
+        st.session_state.VIZ_std_xd_median_layered_lateralsmooth = None
+        st.session_state.VIZ_depths_median_layered = None
+        st.session_state.VIZ_vs_min_median_layered = None
+        st.session_state.VIZ_vs_max_median_layered = None
 
-    if not all(gm is None for gm in all_gm_ridge) and not all(gm is None for gm in all_std_ridge):    
-        st.session_state.VIZ_depths_ridge = arange(0, depth_max, dz)
+    if not all(gm is None for gm in all_gm_verticalsmooth_median_layered) and not all(gm is None for gm in all_std_verticalsmooth_median_layered):
+        st.session_state.VIZ_depths_verticalsmooth_median_layered = arange(0, depth_max, dz)
         
-        st.session_state.VIZ_v_xd_ridge_raw = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_ridge)), np.nan)
-        st.session_state.VIZ_std_xd_ridge_raw = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_ridge)), np.nan)
+        st.session_state.VIZ_v_xd_verticalsmooth_median_layered = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_verticalsmooth_median_layered)), np.nan)
+        st.session_state.VIZ_std_xd_verticalsmooth_median_layered = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_verticalsmooth_median_layered)), np.nan)
                         
-        for j, (gm, gm_std) in enumerate(zip(all_gm_ridge, all_std_ridge)):
+        for j, (gm, gm_std) in enumerate(zip(all_gm_verticalsmooth_median_layered, all_std_verticalsmooth_median_layered)):
             if gm is not None and gm_std is not None:
                 col = []
                 col_std = []
                 for (thick, vp, vs, rho), (thick_std, vp_std, vs_std, rho_std) in zip(gm, gm_std):
                     col += [vs] * int(thick/dz)
                     col_std += [vs_std] * int(thick/dz)
-                if len(col) < len(st.session_state.VIZ_depths_ridge):
-                    col += [gm[-1,2]] * (len(st.session_state.VIZ_depths_ridge)-len(col))
-                    col_std += [gm_std[-1,2]] * (len(st.session_state.VIZ_depths_ridge)-len(col_std))
-                st.session_state.VIZ_v_xd_ridge_raw[j, :] = col
-                st.session_state.VIZ_std_xd_ridge_raw[j, :] = col_std
+                if len(col) < len(st.session_state.VIZ_depths_verticalsmooth_median_layered):
+                    col += [gm[-1,2]] * (len(st.session_state.VIZ_depths_verticalsmooth_median_layered)-len(col))
+                    col_std += [gm_std[-1,2]] * (len(st.session_state.VIZ_depths_verticalsmooth_median_layered)-len(col_std))
+                st.session_state.VIZ_v_xd_verticalsmooth_median_layered[j, :] = col
+                st.session_state.VIZ_std_xd_verticalsmooth_median_layered[j, :] = col_std
+                
+        st.session_state.VIZ_vs_min_verticalsmooth_median_layered = np.floor(np.nanmin(st.session_state.VIZ_v_xd_verticalsmooth_median_layered))
+        st.session_state.VIZ_vs_max_verticalsmooth_median_layered = np.ceil(np.nanmax(st.session_state.VIZ_v_xd_verticalsmooth_median_layered))
         
-        st.session_state.VIZ_vs_min_ridge = np.floor(np.nanmin(st.session_state.VIZ_v_xd_ridge_raw))
-        st.session_state.VIZ_vs_max_ridge = np.ceil(np.nanmax(st.session_state.VIZ_v_xd_ridge_raw))
+        st.session_state.VIZ_v_xd_verticalsmooth_median_layered_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_verticalsmooth_median_layered, mode_filter_median, size=(4,1))
+        st.session_state.VIZ_v_xd_verticalsmooth_median_layered_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_verticalsmooth_median_layered_lateralsmooth, mode_filter_median, size=(3,1))
+        st.session_state.VIZ_v_xd_verticalsmooth_median_layered_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_verticalsmooth_median_layered_lateralsmooth, mode_filter_median, size=(2,1))
         
-        st.session_state.VIZ_v_xd_ridge_smooth = generic_filter(st.session_state.VIZ_v_xd_ridge_raw, mode_filter_median, size=(4,1))
-        st.session_state.VIZ_v_xd_ridge_smooth = generic_filter(st.session_state.VIZ_v_xd_ridge_smooth, mode_filter_median, size=(3,1))
-        st.session_state.VIZ_v_xd_ridge_smooth = generic_filter(st.session_state.VIZ_v_xd_ridge_smooth, mode_filter_median, size=(2,1))
-        
-        st.session_state.VIZ_std_xd_ridge_smooth = generic_filter(st.session_state.VIZ_std_xd_ridge_raw, mode_filter_median, size=(4,1))
-        st.session_state.VIZ_std_xd_ridge_smooth = generic_filter(st.session_state.VIZ_std_xd_ridge_smooth, mode_filter_median, size=(3,1))
-        st.session_state.VIZ_std_xd_ridge_smooth = generic_filter(st.session_state.VIZ_std_xd_ridge_smooth, mode_filter_median, size=(2,1))
+        st.session_state.VIZ_std_xd_verticalsmooth_median_layered_lateralsmooth = generic_filter(st.session_state.VIZ_std_xd_verticalsmooth_median_layered, mode_filter_median, size=(4,1))
+        st.session_state.VIZ_std_xd_verticalsmooth_median_layered_lateralsmooth = generic_filter(st.session_state.VIZ_std_xd_verticalsmooth_median_layered_lateralsmooth, mode_filter_median, size=(3,1))
+        st.session_state.VIZ_std_xd_verticalsmooth_median_layered_lateralsmooth = generic_filter(st.session_state.VIZ_std_xd_verticalsmooth_median_layered_lateralsmooth, mode_filter_median, size=(2,1))
     else:
-        st.session_state.VIZ_v_xd_ridge_raw = None
-        st.session_state.VIZ_v_xd_ridge_smooth = None
-        st.session_state.VIZ_std_xd_ridge_raw = None
-        st.session_state.VIZ_std_xd_ridge_smooth = None
-        st.session_state.VIZ_depths_ridge = None
-        st.session_state.VIZ_vs_min_ridge = None
-        st.session_state.VIZ_vs_max_ridge = None
+        st.session_state.VIZ_v_xd_verticalsmooth_median_layered = None
+        st.session_state.VIZ_v_xd_verticalsmooth_median_layered_lateralsmooth = None
+        st.session_state.VIZ_std_xd_verticalsmooth_median_layered = None
+        st.session_state.VIZ_std_xd_verticalsmooth_median_layered_lateralsmooth = None
+        st.session_state.VIZ_depths_verticalsmooth_median_layered = None
+        st.session_state.VIZ_vs_min_verticalsmooth_median_layered = None
+        st.session_state.VIZ_vs_max_verticalsmooth_median_layered = None
 
-
-    if not all(gm is None for gm in all_gm_smooth) and not all(gm is None for gm in all_std_smooth): 
-        st.session_state.VIZ_depths_smooth = arange(0, depth_max, dz)
+    
+    if not all(gm is None for gm in all_gm_best_layered):
+        st.session_state.VIZ_depths_best_layered = arange(0, depth_max, dz)
         
-        st.session_state.VIZ_v_xd_smooth_raw = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_smooth)), np.nan)
-        st.session_state.VIZ_std_xd_smooth_raw = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_smooth)), np.nan)
+        st.session_state.VIZ_v_xd_best_layered = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_best_layered)), np.nan)
                         
-        for j, (gm, gm_std) in enumerate(zip(all_gm_smooth, all_std_smooth)):
+        for j, gm in enumerate(all_gm_best_layered):
+            if gm is not None:
+                col = []
+                for (thick, vp, vs, rho) in gm:
+                    col += [vs] * int(thick/dz)
+                if len(col) < len(st.session_state.VIZ_depths_best_layered):
+                    col += [gm[-1,2]] * (len(st.session_state.VIZ_depths_best_layered)-len(col))
+                st.session_state.VIZ_v_xd_best_layered[j, :] = col
+                
+        st.session_state.VIZ_vs_min_best_layered = np.floor(np.nanmin(st.session_state.VIZ_v_xd_best_layered))
+        st.session_state.VIZ_vs_max_best_layered = np.ceil(np.nanmax(st.session_state.VIZ_v_xd_best_layered))
+        
+        st.session_state.VIZ_v_xd_best_layered_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_best_layered, mode_filter_median, size=(4,1))
+        st.session_state.VIZ_v_xd_best_layered_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_best_layered_lateralsmooth, mode_filter_median, size=(3,1))
+        st.session_state.VIZ_v_xd_best_layered_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_best_layered_lateralsmooth, mode_filter_median, size=(2,1))
+        
+    else:
+        st.session_state.VIZ_v_xd_best_layered = None
+        st.session_state.VIZ_v_xd_best_layered_lateralsmooth = None
+        st.session_state.VIZ_depths_best_layered = None
+        st.session_state.VIZ_vs_min_best_layered = None
+        st.session_state.VIZ_vs_max_best_layered = None
+
+    if not all(gm is None for gm in all_gm_verticalsmooth_best_layered):
+        st.session_state.VIZ_depths_verticalsmooth_best_layered = arange(0, depth_max, dz)
+        
+        st.session_state.VIZ_v_xd_verticalsmooth_best_layered = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_verticalsmooth_best_layered)), np.nan)
+                        
+        for j, gm in enumerate(all_gm_verticalsmooth_best_layered):
+            if gm is not None:
+                col = []
+                for (thick, vp, vs, rho) in gm:
+                    col += [vs] * int(thick/dz)
+                if len(col) < len(st.session_state.VIZ_depths_verticalsmooth_best_layered):
+                    col += [gm[-1,2]] * (len(st.session_state.VIZ_depths_verticalsmooth_best_layered)-len(col))
+                st.session_state.VIZ_v_xd_verticalsmooth_best_layered[j, :] = col
+                
+        st.session_state.VIZ_vs_min_verticalsmooth_best_layered = np.floor(np.nanmin(st.session_state.VIZ_v_xd_verticalsmooth_best_layered))
+        st.session_state.VIZ_vs_max_verticalsmooth_best_layered = np.ceil(np.nanmax(st.session_state.VIZ_v_xd_verticalsmooth_best_layered))
+        
+        st.session_state.VIZ_v_xd_verticalsmooth_best_layered_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_verticalsmooth_best_layered, mode_filter_median, size=(4,1))
+        st.session_state.VIZ_v_xd_verticalsmooth_best_layered_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_verticalsmooth_best_layered_lateralsmooth, mode_filter_median, size=(3,1))
+        st.session_state.VIZ_v_xd_verticalsmooth_best_layered_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_verticalsmooth_best_layered_lateralsmooth, mode_filter_median, size=(2,1))
+        
+    else:
+        st.session_state.VIZ_v_xd_verticalsmooth_best_layered = None
+        st.session_state.VIZ_v_xd_verticalsmooth_best_layered_lateralsmooth = None
+        st.session_state.VIZ_depths_verticalsmooth_best_layered = None
+        st.session_state.VIZ_vs_min_verticalsmooth_best_layered = None
+        st.session_state.VIZ_vs_max_verticalsmooth_best_layered = None
+
+    
+    if not all(gm is None for gm in all_gm_median_ensemble) and not all(gm is None for gm in all_std_median_ensemble):
+        st.session_state.VIZ_depths_median_ensemble = arange(0, depth_max, dz)
+        
+        st.session_state.VIZ_v_xd_median_ensemble = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_median_ensemble)), np.nan)
+        st.session_state.VIZ_std_xd_median_ensemble = np.full((len(st.session_state.VIZ_xmids), len(st.session_state.VIZ_depths_median_ensemble)), np.nan)
+                        
+        for j, (gm, gm_std) in enumerate(zip(all_gm_median_ensemble, all_std_median_ensemble)):
             if gm is not None and gm_std is not None:
                 col = []
                 col_std = []
                 for (thick, vp, vs, rho), (thick_std, vp_std, vs_std, rho_std) in zip(gm, gm_std):
                     col += [vs] * int(thick/dz)
                     col_std += [vs_std] * int(thick/dz)
-                if len(col) < len(st.session_state.VIZ_depths_smooth):
-                    col += [gm[-1,2]] * (len(st.session_state.VIZ_depths_smooth)-len(col))
-                    col_std += [gm_std[-1,2]] * (len(st.session_state.VIZ_depths_smooth)-len(col_std))
-                st.session_state.VIZ_v_xd_smooth_raw[j, :] = col
-                st.session_state.VIZ_std_xd_smooth_raw[j, :] = col_std
+                if len(col) < len(st.session_state.VIZ_depths_median_ensemble):
+                    col += [gm[-1,2]] * (len(st.session_state.VIZ_depths_median_ensemble)-len(col))
+                    col_std += [gm_std[-1,2]] * (len(st.session_state.VIZ_depths_median_ensemble)-len(col_std))
+                st.session_state.VIZ_v_xd_median_ensemble[j, :] = col
+                st.session_state.VIZ_std_xd_median_ensemble[j, :] = col_std
+                
+        st.session_state.VIZ_vs_min_median_ensemble = np.floor(np.nanmin(st.session_state.VIZ_v_xd_median_ensemble))
+        st.session_state.VIZ_vs_max_median_ensemble = np.ceil(np.nanmax(st.session_state.VIZ_v_xd_median_ensemble))
         
-        st.session_state.VIZ_vs_min_smooth = np.floor(np.nanmin(st.session_state.VIZ_v_xd_smooth_raw))
-        st.session_state.VIZ_vs_max_smooth = np.ceil(np.nanmax(st.session_state.VIZ_v_xd_smooth_raw))
+        st.session_state.VIZ_v_xd_median_ensemble_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_median_ensemble, mode_filter_median, size=(4,1))
+        st.session_state.VIZ_v_xd_median_ensemble_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_median_ensemble_lateralsmooth, mode_filter_median, size=(3,1))
+        st.session_state.VIZ_v_xd_median_ensemble_lateralsmooth = generic_filter(st.session_state.VIZ_v_xd_median_ensemble_lateralsmooth, mode_filter_median, size=(2,1))
         
-        st.session_state.VIZ_v_xd_smooth_smooth = generic_filter(st.session_state.VIZ_v_xd_smooth_raw, mode_filter_median, size=(4,1))
-        st.session_state.VIZ_v_xd_smooth_smooth = generic_filter(st.session_state.VIZ_v_xd_smooth_smooth, mode_filter_median, size=(3,1))
-        st.session_state.VIZ_v_xd_smooth_smooth = generic_filter(st.session_state.VIZ_v_xd_smooth_smooth, mode_filter_median, size=(2,1))
-        
-        st.session_state.VIZ_std_xd_smooth_smooth = generic_filter(st.session_state.VIZ_std_xd_smooth_raw, mode_filter_median, size=(4,1))
-        st.session_state.VIZ_std_xd_smooth_smooth = generic_filter(st.session_state.VIZ_std_xd_smooth_smooth, mode_filter_median, size=(3,1))
-        st.session_state.VIZ_std_xd_smooth_smooth = generic_filter(st.session_state.VIZ_std_xd_smooth_smooth, mode_filter_median, size=(2,1))
+        st.session_state.VIZ_std_xd_median_ensemble_lateralsmooth = generic_filter(st.session_state.VIZ_std_xd_median_ensemble, mode_filter_median, size=(4,1))
+        st.session_state.VIZ_std_xd_median_ensemble_lateralsmooth = generic_filter(st.session_state.VIZ_std_xd_median_ensemble_lateralsmooth, mode_filter_median, size=(3,1))
+        st.session_state.VIZ_std_xd_median_ensemble_lateralsmooth = generic_filter(st.session_state.VIZ_std_xd_median_ensemble_lateralsmooth, mode_filter_median, size=(2,1))
     else:
-        st.session_state.VIZ_v_xd_smooth_raw = None
-        st.session_state.VIZ_v_xd_smooth_smooth = None
-        st.session_state.VIZ_std_xd_smooth_raw = None
-        st.session_state.VIZ_std_xd_smooth_smooth = None
-        st.session_state.VIZ_depths_smooth = None
-        st.session_state.VIZ_vs_min_smooth = None
-        st.session_state.VIZ_vs_max_smooth = None
-        
+        st.session_state.VIZ_v_xd_median_ensemble = None
+        st.session_state.VIZ_v_xd_median_ensemble_lateralsmooth = None
+        st.session_state.VIZ_std_xd_median_ensemble = None
+        st.session_state.VIZ_std_xd_median_ensemble_lateralsmooth = None
+        st.session_state.VIZ_depths_median_ensemble = None
+        st.session_state.VIZ_vs_min_median_ensemble = None
+        st.session_state.VIZ_vs_max_median_ensemble = None
+
+    
     if 'VIZ_cmap' in st.session_state:
         st.session_state.VIZ_cmap = 'Terrain'
     if 'VIZ_model' in st.session_state:
-        st.session_state.VIZ_model = 'Smooth'
-    if 'VIZ_smoothing' in st.session_state:
-        st.session_state.VIZ_smoothing = 'Smooth'
+        st.session_state.VIZ_model = 'Median layered'
+    if 'VIZ_vertical_smoothing' in st.session_state:
+        st.session_state.VIZ_vertical_smoothing = 'Yes'
+    if 'VIZ_lateral_smoothing' in st.session_state:
+        st.session_state.VIZ_lateral_smoothing = 'Yes'
+
         
 def save_images():
     # Read picked modes xmid folder
@@ -280,23 +390,240 @@ def save_images():
     distinct_modes = dict(sorted(distinct_modes.items()))
     
     path_name = f"{st.session_state.VIZ_folder_path}/vs_section.svg"
-    if st.session_state.VIZ_model == 'Layered':
-        if st.session_state.VIZ_smoothing == 'Raw':
-            if st.session_state.VIZ_v_xd_layered_raw is not None:
-                display_inverted_section(vs_section=st.session_state.VIZ_v_xd_layered_raw,
-                                        std_section=st.session_state.VIZ_std_xd_layered_raw,
+    
+            
+    if st.session_state.VIZ_model == 'Median layered':
+        if st.session_state.VIZ_vertical_smoothing == 'No':
+            if st.session_state.VIZ_lateral_smoothing == 'No':
+                if st.session_state.VIZ_v_xd_median_layered is not None:
+                    display_inverted_section(vs_section=st.session_state.VIZ_v_xd_median_layered,
+                                            std_section=st.session_state.VIZ_std_xd_median_layered,
+                                            positions=st.session_state.VIZ_xmids,
+                                            depths=st.session_state.VIZ_depths_median_layered,
+                                            path=path_name,
+                                            zmin=st.session_state.VIZ_vmin_vmax[0],
+                                            zmax=st.session_state.VIZ_vmin_vmax[1],
+                                            cmap=st.session_state.VIZ_cmap)
+            elif st.session_state.VIZ_lateral_smoothing == 'Yes':
+                if st.session_state.VIZ_v_xd_median_layered_lateralsmooth is not None:
+                    display_inverted_section(vs_section=st.session_state.VIZ_v_xd_median_layered_lateralsmooth,
+                                            std_section=st.session_state.VIZ_std_xd_median_layered_lateralsmooth,
+                                            positions=st.session_state.VIZ_xmids,
+                                            depths=st.session_state.VIZ_depths_median_layered,
+                                            path=path_name,
+                                            zmin=st.session_state.VIZ_vmin_vmax[0],
+                                            zmax=st.session_state.VIZ_vmin_vmax[1],
+                                            cmap=st.session_state.VIZ_cmap)
+        elif st.session_state.VIZ_vertical_smoothing == 'Yes':
+            if st.session_state.VIZ_lateral_smoothing == 'No':
+                if st.session_state.VIZ_v_xd_verticalsmooth_median_layered is not None:
+                    display_inverted_section(vs_section=st.session_state.VIZ_v_xd_verticalsmooth_median_layered,
+                                            std_section=st.session_state.VIZ_std_xd_verticalsmooth_median_layered,
+                                            positions=st.session_state.VIZ_xmids,
+                                            depths=st.session_state.VIZ_depths_verticalsmooth_median_layered,
+                                            path=path_name,
+                                            zmin=st.session_state.VIZ_vmin_vmax[0],
+                                            zmax=st.session_state.VIZ_vmin_vmax[1],
+                                            cmap=st.session_state.VIZ_cmap)
+            elif st.session_state.VIZ_lateral_smoothing == 'Yes':
+                if st.session_state.VIZ_v_xd_verticalsmooth_median_layered_lateralsmooth is not None:
+                    display_inverted_section(vs_section=st.session_state.VIZ_v_xd_verticalsmooth_median_layered_lateralsmooth,
+                                            std_section=st.session_state.VIZ_std_xd_verticalsmooth_median_layered_lateralsmooth,
+                                            positions=st.session_state.VIZ_xmids,
+                                            depths=st.session_state.VIZ_depths_verticalsmooth_median_layered,
+                                            path=path_name,
+                                            zmin=st.session_state.VIZ_vmin_vmax[0],
+                                            zmax=st.session_state.VIZ_vmin_vmax[1],
+                                            cmap=st.session_state.VIZ_cmap)
+        for mode in distinct_modes.keys():
+            # Observed
+            obs_fs_per_position = []
+            obs_vs_per_position = []
+            for j, folder in enumerate(st.session_state.VIZ_folders):
+                try :
+                    pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/pick/{folder}_obs_M{mode}.pvc")
+                    if len(pvc.shape) == 1:
+                            pvc = pvc.reshape(1,-1)
+                    pvc = np.round(pvc, 2)
+                    fs = pvc[:,0]
+                    vs = pvc[:,1]
+                    fs, vs = resamp_frequency(fs, vs)
+                    obs_fs_per_position.append(fs)
+                    obs_vs_per_position.append(vs)
+                except:
+                    obs_fs_per_position.append([])
+                    obs_vs_per_position.append([])
+            # Predicted
+            pred_fs_per_position = []
+            pred_vs_per_position = []
+            for j, folder in enumerate(st.session_state.VIZ_folders):
+                try :
+                    if st.session_state.VIZ_vertical_smoothing == 'No':
+                        pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_median_layered_M{mode}.pvc")
+                    elif st.session_state.VIZ_vertical_smoothing == 'Yes':
+                        pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_smooth_median_layered_M{mode}.pvc")
+                    if len(pvc.shape) == 1:
+                            pvc = pvc.reshape(1,-1)
+                    pvc = np.round(pvc, 2)
+                    fs = pvc[:,0]
+                    vs = pvc[:,1]
+                    fs, vs = resamp_frequency(fs, vs)
+                    pred_fs_per_position.append(fs)
+                    pred_vs_per_position.append(vs)
+                except:
+                    pred_fs_per_position.append([])
+                    pred_vs_per_position.append([])
+            # General
+            obs_f_min = np.min([np.min(fs) for fs in obs_fs_per_position if len(fs) > 0])
+            obs_f_max = np.max([np.max(fs) for fs in obs_fs_per_position if len(fs) > 0])
+            if not all(len(fs) == 0 for fs in pred_fs_per_position):
+                pred_f_min = np.min([np.min(fs) for fs in pred_fs_per_position if len(fs) > 0])
+                pred_f_max = np.max([np.max(fs) for fs in pred_fs_per_position if len(fs) > 0])
+            else:
+                pred_f_min = obs_f_max
+                pred_f_max = obs_f_max
+            f_min = np.min([obs_f_min, pred_f_min])
+            f_max = np.max([obs_f_max, pred_f_max])
+            fs = arange(f_min, f_max, 1)
+            pred_v_fx = np.full((len(st.session_state.VIZ_xmids), len(fs)), np.nan)
+            obs_v_fx = np.full((len(st.session_state.VIZ_xmids), len(fs)), np.nan)
+            for j, (obs_fs, obs_vs, pred_fs, pred_vs) in enumerate(zip(obs_fs_per_position, obs_vs_per_position, pred_fs_per_position, pred_vs_per_position)):
+                if len(obs_fs) > 0:
+                    fi_start = np.where(fs >= obs_fs[0])[0][0]
+                    fi_end = np.where(fs >= obs_fs[-1])[0][0]
+                    obs_v_fx[j, fi_start:fi_end+1] = obs_vs
+                if len(pred_fs) > 0:
+                    fi_start = np.where(fs >= pred_fs[0])[0][0]
+                    fi_end = np.where(fs >= pred_fs[-1])[0][0]
+                    pred_v_fx[j, fi_start:fi_end+1] = pred_vs
+            path_name = f"{st.session_state.VIZ_folder_path}/M{mode}_vr_pseudo-section.svg"
+            display_pseudo_sections(obs_v_fx, pred_v_fx, fs, st.session_state.VIZ_xmids, path_name)
+
+    if st.session_state.VIZ_model == 'Best layered':
+        if st.session_state.VIZ_vertical_smoothing == 'No':
+            if st.session_state.VIZ_lateral_smoothing == 'No':
+                if st.session_state.VIZ_v_xd_best_layered is not None:
+                    display_inverted_section(vs_section=st.session_state.VIZ_v_xd_best_layered,
+                                            std_section=np.full(st.session_state.VIZ_v_xd_best_layered.shape, np.nan),
+                                            positions=st.session_state.VIZ_xmids,
+                                            depths=st.session_state.VIZ_depths_best_layered,
+                                            path=path_name,
+                                            zmin=st.session_state.VIZ_vmin_vmax[0],
+                                            zmax=st.session_state.VIZ_vmin_vmax[1],
+                                            cmap=st.session_state.VIZ_cmap)
+            elif st.session_state.VIZ_lateral_smoothing == 'Yes':
+                if st.session_state.VIZ_v_xd_best_layered_lateralsmooth is not None:
+                    display_inverted_section(vs_section=st.session_state.VIZ_v_xd_best_layered_lateralsmooth,
+                                            std_section=np.full(st.session_state.VIZ_v_xd_best_layered_lateralsmooth.shape, np.nan),
+                                            positions=st.session_state.VIZ_xmids,
+                                            depths=st.session_state.VIZ_depths_best_layered,
+                                            path=path_name,
+                                            zmin=st.session_state.VIZ_vmin_vmax[0],
+                                            zmax=st.session_state.VIZ_vmin_vmax[1],
+                                            cmap=st.session_state.VIZ_cmap)
+        elif st.session_state.VIZ_vertical_smoothing == 'Yes':
+            if st.session_state.VIZ_lateral_smoothing == 'No':
+                if st.session_state.VIZ_v_xd_verticalsmooth_best_layered is not None:
+                    display_inverted_section(vs_section=st.session_state.VIZ_v_xd_verticalsmooth_best_layered,
+                                            std_section=np.full(st.session_state.VIZ_v_xd_verticalsmooth_best_layered.shape, np.nan),
+                                            positions=st.session_state.VIZ_xmids,
+                                            depths=st.session_state.VIZ_depths_verticalsmooth_best_layered,
+                                            path=path_name,
+                                            zmin=st.session_state.VIZ_vmin_vmax[0],
+                                            zmax=st.session_state.VIZ_vmin_vmax[1],
+                                            cmap=st.session_state.VIZ_cmap)
+            elif st.session_state.VIZ_lateral_smoothing == 'Yes':
+                if st.session_state.VIZ_v_xd_verticalsmooth_best_layered_lateralsmooth is not None:
+                    display_inverted_section(vs_section=st.session_state.VIZ_v_xd_verticalsmooth_best_layered_lateralsmooth,
+                                            std_section=np.full(st.session_state.VIZ_v_xd_verticalsmooth_best_layered_lateralsmooth.shape, np.nan),
+                                            positions=st.session_state.VIZ_xmids,
+                                            depths=st.session_state.VIZ_depths_verticalsmooth_best_layered,
+                                            path=path_name,
+                                            zmin=st.session_state.VIZ_vmin_vmax[0],
+                                            zmax=st.session_state.VIZ_vmin_vmax[1],
+                                            cmap=st.session_state.VIZ_cmap)
+        for mode in distinct_modes.keys():
+            # Observed
+            obs_fs_per_position = []
+            obs_vs_per_position = []
+            for j, folder in enumerate(st.session_state.VIZ_folders):
+                try :
+                    pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/pick/{folder}_obs_M{mode}.pvc")
+                    if len(pvc.shape) == 1:
+                            pvc = pvc.reshape(1,-1)
+                    pvc = np.round(pvc, 2)
+                    fs = pvc[:,0]
+                    vs = pvc[:,1]
+                    fs, vs = resamp_frequency(fs, vs)
+                    obs_fs_per_position.append(fs)
+                    obs_vs_per_position.append(vs)
+                except:
+                    obs_fs_per_position.append([])
+                    obs_vs_per_position.append([])
+            # Predicted
+            pred_fs_per_position = []
+            pred_vs_per_position = []
+            for j, folder in enumerate(st.session_state.VIZ_folders):
+                try :
+                    if st.session_state.VIZ_vertical_smoothing == 'No':
+                        pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_best_layered_M{mode}.pvc")
+                    elif st.session_state.VIZ_vertical_smoothing == 'Yes':
+                        pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_smooth_best_layered_M{mode}.pvc")
+                    if len(pvc.shape) == 1:
+                            pvc = pvc.reshape(1,-1)
+                    pvc = np.round(pvc, 2)
+                    fs = pvc[:,0]
+                    vs = pvc[:,1]
+                    fs, vs = resamp_frequency(fs, vs)
+                    pred_fs_per_position.append(fs)
+                    pred_vs_per_position.append(vs)
+                except:
+                    pred_fs_per_position.append([])
+                    pred_vs_per_position.append([])
+            # General
+            obs_f_min = np.min([np.min(fs) for fs in obs_fs_per_position if len(fs) > 0])
+            obs_f_max = np.max([np.max(fs) for fs in obs_fs_per_position if len(fs) > 0])
+            if not all(len(fs) == 0 for fs in pred_fs_per_position):
+                pred_f_min = np.min([np.min(fs) for fs in pred_fs_per_position if len(fs) > 0])
+                pred_f_max = np.max([np.max(fs) for fs in pred_fs_per_position if len(fs) > 0])
+            else:
+                pred_f_min = obs_f_max
+                pred_f_max = obs_f_max
+            f_min = np.min([obs_f_min, pred_f_min])
+            f_max = np.max([obs_f_max, pred_f_max])
+            fs = arange(f_min, f_max, 1)
+            pred_v_fx = np.full((len(st.session_state.VIZ_xmids), len(fs)), np.nan)
+            obs_v_fx = np.full((len(st.session_state.VIZ_xmids), len(fs)), np.nan)
+            for j, (obs_fs, obs_vs, pred_fs, pred_vs) in enumerate(zip(obs_fs_per_position, obs_vs_per_position, pred_fs_per_position, pred_vs_per_position)):
+                if len(obs_fs) > 0:
+                    fi_start = np.where(fs >= obs_fs[0])[0][0]
+                    fi_end = np.where(fs >= obs_fs[-1])[0][0]
+                    obs_v_fx[j, fi_start:fi_end+1] = obs_vs
+                if len(pred_fs) > 0:
+                    fi_start = np.where(fs >= pred_fs[0])[0][0]
+                    fi_end = np.where(fs >= pred_fs[-1])[0][0]
+                    pred_v_fx[j, fi_start:fi_end+1] = pred_vs
+            path_name = f"{st.session_state.VIZ_folder_path}/M{mode}_vr_pseudo-section.svg"
+            display_pseudo_sections(obs_v_fx, pred_v_fx, fs, st.session_state.VIZ_xmids, path_name)
+
+    
+    if st.session_state.VIZ_model == 'Median ensemble':
+        if st.session_state.VIZ_lateral_smoothing == 'No':
+            if st.session_state.VIZ_v_xd_median_ensemble is not None:
+                display_inverted_section(vs_section=st.session_state.VIZ_v_xd_median_ensemble,
+                                        std_section=st.session_state.VIZ_std_xd_median_ensemble,
                                         positions=st.session_state.VIZ_xmids,
-                                        depths=st.session_state.VIZ_depths_layered,
+                                        depths=st.session_state.VIZ_depths_median_ensemble,
                                         path=path_name,
                                         zmin=st.session_state.VIZ_vmin_vmax[0],
                                         zmax=st.session_state.VIZ_vmin_vmax[1],
                                         cmap=st.session_state.VIZ_cmap)
-        if st.session_state.VIZ_smoothing == 'Smooth':
-            if st.session_state.VIZ_v_xd_layered_smooth is not None:
-                display_inverted_section(vs_section=st.session_state.VIZ_v_xd_layered_smooth,
-                                        std_section=st.session_state.VIZ_std_xd_layered_smooth,
+        elif st.session_state.VIZ_lateral_smoothing == 'Yes':
+            if st.session_state.VIZ_v_xd_median_ensemble_lateralsmooth is not None:
+                display_inverted_section(vs_section=st.session_state.VIZ_v_xd_median_ensemble_lateralsmooth,
+                                        std_section=st.session_state.VIZ_std_xd_median_ensemble_lateralsmooth,
                                         positions=st.session_state.VIZ_xmids,
-                                        depths=st.session_state.VIZ_depths_layered,
+                                        depths=st.session_state.VIZ_depths_median_ensemble,
                                         path=path_name,
                                         zmin=st.session_state.VIZ_vmin_vmax[0],
                                         zmax=st.session_state.VIZ_vmin_vmax[1],
@@ -324,7 +651,7 @@ def save_images():
             pred_vs_per_position = []
             for j, folder in enumerate(st.session_state.VIZ_folders):
                 try :
-                    pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_median_layered_M{mode}.pvc")
+                    pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_median_ensemble_M{mode}.pvc")
                     if len(pvc.shape) == 1:
                             pvc = pvc.reshape(1,-1)
                     pvc = np.round(pvc, 2)
@@ -362,169 +689,7 @@ def save_images():
             path_name = f"{st.session_state.VIZ_folder_path}/M{mode}_vr_pseudo-section.svg"
             display_pseudo_sections(obs_v_fx, pred_v_fx, fs, st.session_state.VIZ_xmids, path_name)
             
-    if st.session_state.VIZ_model == 'Ridge':
-        if st.session_state.VIZ_smoothing == 'Raw':
-            if st.session_state.VIZ_v_xd_ridge_raw is not None:
-                display_inverted_section(vs_section=st.session_state.VIZ_v_xd_ridge_raw,
-                                        std_section=st.session_state.VIZ_std_xd_ridge_raw,
-                                        positions=st.session_state.VIZ_xmids,
-                                        depths=st.session_state.VIZ_depths_ridge,
-                                        path=path_name,
-                                        zmin=st.session_state.VIZ_vmin_vmax[0],
-                                        zmax=st.session_state.VIZ_vmin_vmax[1],
-                                        cmap=st.session_state.VIZ_cmap)
-        if st.session_state.VIZ_smoothing == 'Smooth':
-            if st.session_state.VIZ_v_xd_ridge_smooth is not None:
-                display_inverted_section(vs_section=st.session_state.VIZ_v_xd_ridge_smooth,
-                                        std_section=st.session_state.VIZ_std_xd_ridge_smooth,
-                                        positions=st.session_state.VIZ_xmids,
-                                        depths=st.session_state.VIZ_depths_ridge,
-                                        path=path_name,
-                                        zmin=st.session_state.VIZ_vmin_vmax[0],
-                                        zmax=st.session_state.VIZ_vmin_vmax[1],
-                                        cmap=st.session_state.VIZ_cmap)
-        for mode in distinct_modes.keys():
-            # Observed
-            obs_fs_per_position = []
-            obs_vs_per_position = []
-            for j, folder in enumerate(st.session_state.VIZ_folders):
-                try :
-                    pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/pick/{folder}_obs_M{mode}.pvc")
-                    if len(pvc.shape) == 1:
-                            pvc = pvc.reshape(1,-1)
-                    pvc = np.round(pvc, 2)
-                    fs = pvc[:,0]
-                    vs = pvc[:,1]
-                    fs, vs = resamp_frequency(fs, vs)
-                    obs_fs_per_position.append(fs)
-                    obs_vs_per_position.append(vs)
-                except:
-                    obs_fs_per_position.append([])
-                    obs_vs_per_position.append([])
-            # Predicted
-            pred_fs_per_position = []
-            pred_vs_per_position = []
-            for j, folder in enumerate(st.session_state.VIZ_folders):
-                try :
-                    pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_median_ridge_M{mode}.pvc")
-                    if len(pvc.shape) == 1:
-                            pvc = pvc.reshape(1,-1)
-                    pvc = np.round(pvc, 2)
-                    fs = pvc[:,0]
-                    vs = pvc[:,1]
-                    fs, vs = resamp_frequency(fs, vs)
-                    pred_fs_per_position.append(fs)
-                    pred_vs_per_position.append(vs)
-                except:
-                    pred_fs_per_position.append([])
-                    pred_vs_per_position.append([])
-            # General
-            obs_f_min = np.min([np.min(fs) for fs in obs_fs_per_position if len(fs) > 0])
-            obs_f_max = np.max([np.max(fs) for fs in obs_fs_per_position if len(fs) > 0])
-            if not all(len(fs) == 0 for fs in pred_fs_per_position):
-                pred_f_min = np.min([np.min(fs) for fs in pred_fs_per_position if len(fs) > 0])
-                pred_f_max = np.max([np.max(fs) for fs in pred_fs_per_position if len(fs) > 0])
-            else:
-                pred_f_min = obs_f_max
-                pred_f_max = obs_f_max
-            f_min = np.min([obs_f_min, pred_f_min])
-            f_max = np.max([obs_f_max, pred_f_max])
-            fs = arange(f_min, f_max, 1)
-            pred_v_fx = np.full((len(st.session_state.VIZ_xmids), len(fs)), np.nan)
-            obs_v_fx = np.full((len(st.session_state.VIZ_xmids), len(fs)), np.nan)
-            for j, (obs_fs, obs_vs, pred_fs, pred_vs) in enumerate(zip(obs_fs_per_position, obs_vs_per_position, pred_fs_per_position, pred_vs_per_position)):
-                if len(obs_fs) > 0:
-                    fi_start = np.where(fs >= obs_fs[0])[0][0]
-                    fi_end = np.where(fs >= obs_fs[-1])[0][0]
-                    obs_v_fx[j, fi_start:fi_end+1] = obs_vs
-                if len(pred_fs) > 0:
-                    fi_start = np.where(fs >= pred_fs[0])[0][0]
-                    fi_end = np.where(fs >= pred_fs[-1])[0][0]
-                    pred_v_fx[j, fi_start:fi_end+1] = pred_vs
-            path_name = f"{st.session_state.VIZ_folder_path}/M{mode}_vr_pseudo-section.svg"
-            display_pseudo_sections(obs_v_fx, pred_v_fx, fs, st.session_state.VIZ_xmids, path_name)
-            
-    if st.session_state.VIZ_model == 'Smooth':
-        if st.session_state.VIZ_smoothing == 'Raw':
-            if st.session_state.VIZ_v_xd_smooth_raw is not None:
-                display_inverted_section(vs_section=st.session_state.VIZ_v_xd_smooth_raw,
-                                        std_section=st.session_state.VIZ_std_xd_smooth_raw,
-                                        positions=st.session_state.VIZ_xmids,
-                                        depths=st.session_state.VIZ_depths_smooth,
-                                        path=path_name,
-                                        zmin=st.session_state.VIZ_vmin_vmax[0],
-                                        zmax=st.session_state.VIZ_vmin_vmax[1],
-                                        cmap=st.session_state.VIZ_cmap)
-        if st.session_state.VIZ_smoothing == 'Smooth':
-            if st.session_state.VIZ_v_xd_smooth_smooth is not None:
-                display_inverted_section(vs_section=st.session_state.VIZ_v_xd_smooth_smooth,
-                                        std_section=st.session_state.VIZ_std_xd_smooth_smooth,
-                                        positions=st.session_state.VIZ_xmids,
-                                        depths=st.session_state.VIZ_depths_smooth,
-                                        path=path_name,
-                                        zmin=st.session_state.VIZ_vmin_vmax[0],
-                                        zmax=st.session_state.VIZ_vmin_vmax[1],
-                                        cmap=st.session_state.VIZ_cmap)
-        for mode in distinct_modes.keys():
-            # Observed
-            obs_fs_per_position = []
-            obs_vs_per_position = []
-            for j, folder in enumerate(st.session_state.VIZ_folders):
-                try :
-                    pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/pick/{folder}_obs_M{mode}.pvc")
-                    if len(pvc.shape) == 1:
-                            pvc = pvc.reshape(1,-1)
-                    pvc = np.round(pvc, 2)
-                    fs = pvc[:,0]
-                    vs = pvc[:,1]
-                    fs, vs = resamp_frequency(fs, vs)
-                    obs_fs_per_position.append(fs)
-                    obs_vs_per_position.append(vs)
-                except:
-                    obs_fs_per_position.append([])
-                    obs_vs_per_position.append([])
-            # Predicted
-            pred_fs_per_position = []
-            pred_vs_per_position = []
-            for j, folder in enumerate(st.session_state.VIZ_folders):
-                try :
-                    pvc = np.loadtxt(f"{st.session_state.VIZ_folder_path}/{folder}/inv/{folder}_median_smooth_M{mode}.pvc")
-                    if len(pvc.shape) == 1:
-                            pvc = pvc.reshape(1,-1)
-                    pvc = np.round(pvc, 2)
-                    fs = pvc[:,0]
-                    vs = pvc[:,1]
-                    fs, vs = resamp_frequency(fs, vs)
-                    pred_fs_per_position.append(fs)
-                    pred_vs_per_position.append(vs)
-                except:
-                    pred_fs_per_position.append([])
-                    pred_vs_per_position.append([])
-            # General
-            obs_f_min = np.min([np.min(fs) for fs in obs_fs_per_position if len(fs) > 0])
-            obs_f_max = np.max([np.max(fs) for fs in obs_fs_per_position if len(fs) > 0])
-            if not all(len(fs) == 0 for fs in pred_fs_per_position):
-                pred_f_min = np.min([np.min(fs) for fs in pred_fs_per_position if len(fs) > 0])
-                pred_f_max = np.max([np.max(fs) for fs in pred_fs_per_position if len(fs) > 0])
-            else:
-                pred_f_min = obs_f_max
-                pred_f_max = obs_f_max
-            f_min = np.min([obs_f_min, pred_f_min])
-            f_max = np.max([obs_f_max, pred_f_max])
-            fs = arange(f_min, f_max, 1)
-            pred_v_fx = np.full((len(st.session_state.VIZ_xmids), len(fs)), np.nan)
-            obs_v_fx = np.full((len(st.session_state.VIZ_xmids), len(fs)), np.nan)
-            for j, (obs_fs, obs_vs, pred_fs, pred_vs) in enumerate(zip(obs_fs_per_position, obs_vs_per_position, pred_fs_per_position, pred_vs_per_position)):
-                if len(obs_fs) > 0:
-                    fi_start = np.where(fs >= obs_fs[0])[0][0]
-                    fi_end = np.where(fs >= obs_fs[-1])[0][0]
-                    obs_v_fx[j, fi_start:fi_end+1] = obs_vs
-                if len(pred_fs) > 0:
-                    fi_start = np.where(fs >= pred_fs[0])[0][0]
-                    fi_end = np.where(fs >= pred_fs[-1])[0][0]
-                    pred_v_fx[j, fi_start:fi_end+1] = pred_vs
-            path_name = f"{st.session_state.VIZ_folder_path}/M{mode}_vr_pseudo-section.svg"
-            display_pseudo_sections(obs_v_fx, pred_v_fx, fs, st.session_state.VIZ_xmids, path_name)
+    
                         
 def handle_select_folder():
     mode_tmp = st.session_state.VIZ_mode
@@ -869,10 +1034,10 @@ elif st.session_state.VIZ_mode == 'Inversion':
     st.text('')
     st.text('')
     
-    if st.session_state.VIZ_v_xd_ridge_raw is None and st.session_state.VIZ_v_xd_layered_raw is None and st.session_state.VIZ_v_xd_smooth_raw is None:
+    if st.session_state.VIZ_v_xd_median_ensemble is None and st.session_state.VIZ_v_xd_median_layered is None and st.session_state.VIZ_v_xd_best_layered is None:
         load_sections()
     
-    if st.session_state.VIZ_v_xd_ridge_raw is None and st.session_state.VIZ_v_xd_layered_raw is None and st.session_state.VIZ_v_xd_smooth_raw is None:
+    if st.session_state.VIZ_v_xd_median_ensemble is None and st.session_state.VIZ_v_xd_median_layered is None and st.session_state.VIZ_v_xd_best_layered is None:
         st.text('')
         st.text('')
         st.error(f"📁 Inversion data missing.")
@@ -885,26 +1050,39 @@ elif st.session_state.VIZ_mode == 'Inversion':
     st.write('')
     st.markdown(f"🔧 **Display settings**")
     with st.container(border=True):
-        columns = st.columns(3)
+        columns = st.columns(4)
         with columns[0]:
             st.radio("**Colormap**", ['Terrain', 'Viridis', 'Jet', 'Gray'],
                 key='VIZ_cmap')
         with columns[1]:
-            st.radio("**Model**", ['Smooth', 'Layered', 'Ridge'],
+            st.radio("**Model**", ['Median layered', 'Best layered', 'Median ensemble'],
                 key='VIZ_model')
         with columns[2]:
-            st.radio("**Lateral smoothing**", ['Smooth', 'Raw'],
-                key='VIZ_smoothing')
+            st.radio("**Vertical smoothing**", ['Yes', 'No'],
+                key='VIZ_vertical_smoothing')
+        with columns[3]:
+            st.radio("**Lateral smoothing**", ['Yes', 'No'],
+                key='VIZ_lateral_smoothing')
             
     st.text('')
     st.text('')
         
-    if st.session_state.VIZ_model == 'Ridge':
+
+
+
+
+
+
+
+
+
+
+    if st.session_state.VIZ_model == 'Median ensemble':
         
-        if st.session_state.VIZ_v_xd_ridge_raw is not None:
+        if st.session_state.VIZ_v_xd_median_ensemble is not None:
             
-            vs_min = st.session_state.VIZ_vs_min_ridge
-            vs_max = st.session_state.VIZ_vs_max_ridge
+            vs_min = st.session_state.VIZ_vs_min_median_ensemble
+            vs_max = st.session_state.VIZ_vs_max_median_ensemble
             
             with st.container(border=True):
                 st.select_slider(
@@ -920,10 +1098,10 @@ elif st.session_state.VIZ_mode == 'Inversion':
             else:
                 vmin = st.session_state.VIZ_vmin_vmax[0]
                 vmax = st.session_state.VIZ_vmin_vmax[1]
-            if st.session_state.VIZ_smoothing == 'Smooth':
-                fig = plot_inverted_section(st.session_state.VIZ_v_xd_ridge_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_ridge, zmin=vmin, zmax=vmax)
-            elif st.session_state.VIZ_smoothing == 'Raw':
-                fig = plot_inverted_section(st.session_state.VIZ_v_xd_ridge_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_ridge, zmin=vmin, zmax=vmax)
+            if st.session_state.VIZ_lateral_smoothing == 'Yes':
+                fig = plot_inverted_section(st.session_state.VIZ_v_xd_median_ensemble_lateralsmooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_median_ensemble, zmin=vmin, zmax=vmax)
+            elif st.session_state.VIZ_lateral_smoothing == 'No':
+                fig = plot_inverted_section(st.session_state.VIZ_v_xd_median_ensemble, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_median_ensemble, zmin=vmin, zmax=vmax)
                 
             fig.update_layout(height=400)
             if st.session_state.VIZ_cmap is not None:
@@ -935,10 +1113,10 @@ elif st.session_state.VIZ_mode == 'Inversion':
                     fig.update_coloraxes(colorscale=st.session_state.VIZ_cmap)
             st.plotly_chart(fig)
             
-            if st.session_state.VIZ_smoothing == 'Smooth':
-                fig = plot_std_section(st.session_state.VIZ_std_xd_ridge_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_ridge)
-            elif st.session_state.VIZ_smoothing == 'Raw':
-                fig = plot_std_section(st.session_state.VIZ_std_xd_ridge_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_ridge)
+            if st.session_state.VIZ_lateral_smoothing == 'Yes':
+                fig = plot_std_section(st.session_state.VIZ_std_xd_median_ensemble_lateralsmooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_median_ensemble)
+            elif st.session_state.VIZ_lateral_smoothing == 'No':
+                fig = plot_std_section(st.session_state.VIZ_std_xd_median_ensemble, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_median_ensemble)
             fig.update_layout(height=400)
             st.plotly_chart(fig)
             
@@ -954,123 +1132,246 @@ elif st.session_state.VIZ_mode == 'Inversion':
             vs_max = 1
             st.text('')
             st.text('')
-            st.error(f"📁 Inversion data missing for ridge model.")
-            
-    if st.session_state.VIZ_model == 'Layered':
-        
-        if st.session_state.VIZ_v_xd_layered_raw is not None:
-            
-            vs_min = st.session_state.VIZ_vs_min_layered
-            vs_max = st.session_state.VIZ_vs_max_layered
-            
-            with st.container(border=True):
-                st.select_slider(
-                    "**$v_{S}$ range**",
-                    options=arange(np.floor(vs_min), np.ceil(vs_max), 1),
-                    value=(np.floor(vs_min), np.ceil(vs_max)),
-                    key='VIZ_vmin_vmax'
-                )
+            st.error(f"📁 Inversion data missing for median ensemble model.")
 
-            if st.session_state.VIZ_vmin_vmax is None:
-                vmin = vs_min
-                vmax = vs_max
-            else:
-                vmin = st.session_state.VIZ_vmin_vmax[0]
-                vmax = st.session_state.VIZ_vmin_vmax[1]
-            if st.session_state.VIZ_smoothing == 'Smooth':
-                fig = plot_inverted_section(st.session_state.VIZ_v_xd_layered_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_layered, zmin=vmin, zmax=vmax)
-            elif st.session_state.VIZ_smoothing == 'Raw':
-                fig = plot_inverted_section(st.session_state.VIZ_v_xd_layered_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_layered, zmin=vmin, zmax=vmax)
-                
-            fig.update_layout(height=400)
-            if st.session_state.VIZ_cmap is not None:
-                if st.session_state.VIZ_cmap == 'Terrain':
-                        cmap = plt.get_cmap('terrain')
-                        colorscale = [(i / 255.0, mcolors.rgb2hex(cmap(i / 255.0))) for i in range(256)]
-                        fig.update_coloraxes(colorscale=colorscale)
-                else:
-                    fig.update_coloraxes(colorscale=st.session_state.VIZ_cmap)
-            st.plotly_chart(fig)
+
+
+
+
+
+
+
+
+
+
             
-            if st.session_state.VIZ_smoothing == 'Smooth':
-                fig = plot_std_section(st.session_state.VIZ_std_xd_layered_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_layered)
-            elif st.session_state.VIZ_smoothing == 'Raw':
-                fig = plot_std_section(st.session_state.VIZ_std_xd_layered_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_layered)
-            fig.update_layout(height=400)
-            st.plotly_chart(fig)
-            
-            st.text("")
-            st.text("")
-            st.text("")
-            st.text("")
-            st.button("Save images", type="primary", use_container_width=True, on_click=save_images)
-            st.markdown(r"🛈 *Will save the above $v_{S}$ and standard deviation sections, and the corresponding $v_{R}$ pseudo-sections.*")
-                
-        else:
-            vs_min = 0
-            vs_max = 1
-            st.text('')
-            st.text('')
-            st.error(f"📁 Inversion data missing for layered model.")
-    
-    if st.session_state.VIZ_model == 'Smooth':
+    if st.session_state.VIZ_model == 'Median layered':
+        if st.session_state.VIZ_vertical_smoothing == 'No':
         
-        if st.session_state.VIZ_v_xd_smooth_raw is not None:
-            
-            vs_min = st.session_state.VIZ_vs_min_smooth
-            vs_max = st.session_state.VIZ_vs_max_smooth
-            
-            with st.container(border=True):
-                st.select_slider(
-                    "**$v_{S}$ range**",
-                    options=arange(np.floor(vs_min), np.ceil(vs_max), 1),
-                    value=(np.floor(vs_min), np.ceil(vs_max)),
-                    key='VIZ_vmin_vmax'
-                )
-        
-            if st.session_state.VIZ_vmin_vmax is None:
-                vmin = vs_min
-                vmax = vs_max
-            else:
-                vmin = st.session_state.VIZ_vmin_vmax[0]
-                vmax = st.session_state.VIZ_vmin_vmax[1]
-            if st.session_state.VIZ_smoothing == 'Smooth':
-                fig = plot_inverted_section(st.session_state.VIZ_v_xd_smooth_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_smooth, zmin=vmin, zmax=vmax)
-            elif st.session_state.VIZ_smoothing == 'Raw':
-                fig = plot_inverted_section(st.session_state.VIZ_v_xd_smooth_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_smooth, zmin=vmin, zmax=vmax)
+            if st.session_state.VIZ_v_xd_median_layered is not None:
                 
-            fig.update_layout(height=400)
-            if st.session_state.VIZ_cmap is not None:
-                if st.session_state.VIZ_cmap == 'Terrain':
-                        cmap = plt.get_cmap('terrain')
-                        colorscale = [(i / 255.0, mcolors.rgb2hex(cmap(i / 255.0))) for i in range(256)]
-                        fig.update_coloraxes(colorscale=colorscale)
+                vs_min = st.session_state.VIZ_vs_min_median_layered
+                vs_max = st.session_state.VIZ_vs_max_median_layered
+                
+                with st.container(border=True):
+                    st.select_slider(
+                        "**$v_{S}$ range**",
+                        options=arange(np.floor(vs_min), np.ceil(vs_max), 1),
+                        value=(np.floor(vs_min), np.ceil(vs_max)),
+                        key='VIZ_vmin_vmax'
+                    )
+
+                if st.session_state.VIZ_vmin_vmax is None:
+                    vmin = vs_min
+                    vmax = vs_max
                 else:
-                    fig.update_coloraxes(colorscale=st.session_state.VIZ_cmap)
-            st.plotly_chart(fig)
-            
-            if st.session_state.VIZ_smoothing == 'Smooth':
-                fig = plot_std_section(st.session_state.VIZ_std_xd_smooth_smooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_smooth)
-            elif st.session_state.VIZ_smoothing == 'Raw':
-                fig = plot_std_section(st.session_state.VIZ_std_xd_smooth_raw, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_smooth)
-            fig.update_layout(height=400)
-            st.plotly_chart(fig)
-            
-            st.text("")
-            st.text("")
-            st.text("")
-            st.text("")
-            st.button("Save images", type="primary", use_container_width=True, on_click=save_images)
-            st.markdown(r"🛈 *Will save the above $v_{S}$ and standard deviation sections, and the corresponding $v_{R}$ pseudo-sections.*")
-            
-                
-        else:
-            vs_min = 0
-            vs_max = 1
-            st.text('')
-            st.text('')
-            st.error(f"📁 Inversion data missing for smooth model.")
+                    vmin = st.session_state.VIZ_vmin_vmax[0]
+                    vmax = st.session_state.VIZ_vmin_vmax[1]
+                if st.session_state.VIZ_lateral_smoothing == 'Yes':
+                    fig = plot_inverted_section(st.session_state.VIZ_v_xd_median_layered_lateralsmooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_median_layered, zmin=vmin, zmax=vmax)
+                elif st.session_state.VIZ_lateral_smoothing == 'No':
+                    fig = plot_inverted_section(st.session_state.VIZ_v_xd_median_layered, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_median_layered, zmin=vmin, zmax=vmax)
                     
+                fig.update_layout(height=400)
+                if st.session_state.VIZ_cmap is not None:
+                    if st.session_state.VIZ_cmap == 'Terrain':
+                            cmap = plt.get_cmap('terrain')
+                            colorscale = [(i / 255.0, mcolors.rgb2hex(cmap(i / 255.0))) for i in range(256)]
+                            fig.update_coloraxes(colorscale=colorscale)
+                    else:
+                        fig.update_coloraxes(colorscale=st.session_state.VIZ_cmap)
+                st.plotly_chart(fig)
+                
+                if st.session_state.VIZ_lateral_smoothing == 'Yes':
+                    fig = plot_std_section(st.session_state.VIZ_std_xd_median_layered_lateralsmooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_median_layered)
+                elif st.session_state.VIZ_lateral_smoothing == 'No':
+                    fig = plot_std_section(st.session_state.VIZ_std_xd_median_layered, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_median_layered)
+                fig.update_layout(height=400)
+                st.plotly_chart(fig)
+                
+                st.text("")
+                st.text("")
+                st.text("")
+                st.text("")
+                st.button("Save images", type="primary", use_container_width=True, on_click=save_images)
+                st.markdown(r"🛈 *Will save the above $v_{S}$ and standard deviation sections, and the corresponding $v_{R}$ pseudo-sections.*")
+                    
+            else:
+                vs_min = 0
+                vs_max = 1
+                st.text('')
+                st.text('')
+                st.error(f"📁 Inversion data missing for median layered model.")
+        
+        elif st.session_state.VIZ_vertical_smoothing == 'Yes':
+        
+            if st.session_state.VIZ_v_xd_verticalsmooth_median_layered is not None:
+                
+                vs_min = st.session_state.VIZ_vs_min_verticalsmooth_median_layered
+                vs_max = st.session_state.VIZ_vs_max_verticalsmooth_median_layered
+                
+                with st.container(border=True):
+                    st.select_slider(
+                        "**$v_{S}$ range**",
+                        options=arange(np.floor(vs_min), np.ceil(vs_max), 1),
+                        value=(np.floor(vs_min), np.ceil(vs_max)),
+                        key='VIZ_vmin_vmax'
+                    )
+
+                if st.session_state.VIZ_vmin_vmax is None:
+                    vmin = vs_min
+                    vmax = vs_max
+                else:
+                    vmin = st.session_state.VIZ_vmin_vmax[0]
+                    vmax = st.session_state.VIZ_vmin_vmax[1]
+                if st.session_state.VIZ_lateral_smoothing == 'Yes':
+                    fig = plot_inverted_section(st.session_state.VIZ_v_xd_verticalsmooth_median_layered_lateralsmooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_verticalsmooth_median_layered, zmin=vmin, zmax=vmax)
+                elif st.session_state.VIZ_lateral_smoothing == 'No':
+                    fig = plot_inverted_section(st.session_state.VIZ_v_xd_verticalsmooth_median_layered, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_verticalsmooth_median_layered, zmin=vmin, zmax=vmax)
+                    
+                fig.update_layout(height=400)
+                if st.session_state.VIZ_cmap is not None:
+                    if st.session_state.VIZ_cmap == 'Terrain':
+                            cmap = plt.get_cmap('terrain')
+                            colorscale = [(i / 255.0, mcolors.rgb2hex(cmap(i / 255.0))) for i in range(256)]
+                            fig.update_coloraxes(colorscale=colorscale)
+                    else:
+                        fig.update_coloraxes(colorscale=st.session_state.VIZ_cmap)
+                st.plotly_chart(fig)
+                
+                if st.session_state.VIZ_lateral_smoothing == 'Yes':
+                    fig = plot_std_section(st.session_state.VIZ_std_xd_verticalsmooth_median_layered_lateralsmooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_verticalsmooth_median_layered)
+                elif st.session_state.VIZ_lateral_smoothing == 'No':
+                    fig = plot_std_section(st.session_state.VIZ_std_xd_verticalsmooth_median_layered, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_verticalsmooth_median_layered)
+                fig.update_layout(height=400)
+                st.plotly_chart(fig)
+                
+                st.text("")
+                st.text("")
+                st.text("")
+                st.text("")
+                st.button("Save images", type="primary", use_container_width=True, on_click=save_images)
+                st.markdown(r"🛈 *Will save the above $v_{S}$ and standard deviation sections, and the corresponding $v_{R}$ pseudo-sections.*")
+                    
+            else:
+                vs_min = 0
+                vs_max = 1
+                st.text('')
+                st.text('')
+                st.error(f"📁 Inversion data missing for median layered model.")
+
+
+
+
+
+
+
+
+    if st.session_state.VIZ_model == 'Best layered':
+        if st.session_state.VIZ_vertical_smoothing == 'No':
+        
+            if st.session_state.VIZ_v_xd_best_layered is not None:
+                
+                vs_min = st.session_state.VIZ_vs_min_best_layered
+                vs_max = st.session_state.VIZ_vs_max_best_layered
+                
+                with st.container(border=True):
+                    st.select_slider(
+                        "**$v_{S}$ range**",
+                        options=arange(np.floor(vs_min), np.ceil(vs_max), 1),
+                        value=(np.floor(vs_min), np.ceil(vs_max)),
+                        key='VIZ_vmin_vmax'
+                    )
+
+                if st.session_state.VIZ_vmin_vmax is None:
+                    vmin = vs_min
+                    vmax = vs_max
+                else:
+                    vmin = st.session_state.VIZ_vmin_vmax[0]
+                    vmax = st.session_state.VIZ_vmin_vmax[1]
+                if st.session_state.VIZ_lateral_smoothing == 'Yes':
+                    fig = plot_inverted_section(st.session_state.VIZ_v_xd_best_layered_lateralsmooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_best_layered, zmin=vmin, zmax=vmax)
+                elif st.session_state.VIZ_lateral_smoothing == 'No':
+                    fig = plot_inverted_section(st.session_state.VIZ_v_xd_best_layered, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_best_layered, zmin=vmin, zmax=vmax)
+                    
+                fig.update_layout(height=400)
+                if st.session_state.VIZ_cmap is not None:
+                    if st.session_state.VIZ_cmap == 'Terrain':
+                            cmap = plt.get_cmap('terrain')
+                            colorscale = [(i / 255.0, mcolors.rgb2hex(cmap(i / 255.0))) for i in range(256)]
+                            fig.update_coloraxes(colorscale=colorscale)
+                    else:
+                        fig.update_coloraxes(colorscale=st.session_state.VIZ_cmap)
+                st.plotly_chart(fig)
+                
+                st.text("")
+                st.text("")
+                st.text("")
+                st.text("")
+                st.button("Save images", type="primary", use_container_width=True, on_click=save_images)
+                st.markdown(r"🛈 *Will save the above $v_{S}$ and standard deviation sections, and the corresponding $v_{R}$ pseudo-sections.*")
+                    
+            else:
+                vs_min = 0
+                vs_max = 1
+                st.text('')
+                st.text('')
+                st.error(f"📁 Inversion data missing for best layered model.")
+        
+        elif st.session_state.VIZ_vertical_smoothing == 'Yes':
+        
+            if st.session_state.VIZ_v_xd_verticalsmooth_best_layered is not None:
+                
+                vs_min = st.session_state.VIZ_vs_min_verticalsmooth_best_layered
+                vs_max = st.session_state.VIZ_vs_max_verticalsmooth_best_layered
+                
+                with st.container(border=True):
+                    st.select_slider(
+                        "**$v_{S}$ range**",
+                        options=arange(np.floor(vs_min), np.ceil(vs_max), 1),
+                        value=(np.floor(vs_min), np.ceil(vs_max)),
+                        key='VIZ_vmin_vmax'
+                    )
+
+                if st.session_state.VIZ_vmin_vmax is None:
+                    vmin = vs_min
+                    vmax = vs_max
+                else:
+                    vmin = st.session_state.VIZ_vmin_vmax[0]
+                    vmax = st.session_state.VIZ_vmin_vmax[1]
+                if st.session_state.VIZ_lateral_smoothing == 'Yes':
+                    fig = plot_inverted_section(st.session_state.VIZ_v_xd_verticalsmooth_best_layered_lateralsmooth, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_verticalsmooth_best_layered, zmin=vmin, zmax=vmax)
+                elif st.session_state.VIZ_lateral_smoothing == 'No':
+                    fig = plot_inverted_section(st.session_state.VIZ_v_xd_verticalsmooth_best_layered, st.session_state.VIZ_xmids, st.session_state.VIZ_depths_verticalsmooth_best_layered, zmin=vmin, zmax=vmax)
+                    
+                fig.update_layout(height=400)
+                if st.session_state.VIZ_cmap is not None:
+                    if st.session_state.VIZ_cmap == 'Terrain':
+                            cmap = plt.get_cmap('terrain')
+                            colorscale = [(i / 255.0, mcolors.rgb2hex(cmap(i / 255.0))) for i in range(256)]
+                            fig.update_coloraxes(colorscale=colorscale)
+                    else:
+                        fig.update_coloraxes(colorscale=st.session_state.VIZ_cmap)
+                st.plotly_chart(fig)
+                
+                st.text("")
+                st.text("")
+                st.text("")
+                st.text("")
+                st.button("Save images", type="primary", use_container_width=True, on_click=save_images)
+                st.markdown(r"🛈 *Will save the above $v_{S}$ and standard deviation sections, and the corresponding $v_{R}$ pseudo-sections.*")
+                    
+            else:
+                vs_min = 0
+                vs_max = 1
+                st.text('')
+                st.text('')
+                st.error(f"📁 Inversion data missing for best layered model.")
+
+                    
+
+
+
     
 st.divider() # --------------------------------------------------------------------------------------------------------------------------------------
 ### END INTERFACE------------------------------------------------------------------------------------------------------------------------------------
