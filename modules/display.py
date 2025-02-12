@@ -479,7 +479,7 @@ def display_inverted_section(vs_section, std_section, positions, depths, path, z
     cbar0.set_label("$v_{S}$ [m/s]")
     cbar0.ax.minorticks_on()
     
-    vmax = np.max(std_section)
+    vmax = np.nanmax(std_section)
     im1 = axs[1].pcolormesh(positions, depths, std_section.T, cmap='afmhot_r', rasterized=True, vmin=0, vmax=vmax)
     axs[1].set_xlabel("Position [m]")
     axs[1].set_ylabel("Depth [m]")

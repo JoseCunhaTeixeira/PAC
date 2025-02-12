@@ -40,7 +40,7 @@ def run_script(script):
     python_cmd = sys.executable
     command = [python_cmd] + script.split()
     try:
-        subprocess.run(command, check=True)
+        subprocess.run(command, check=True, stderr=subprocess.PIPE)
         return 0
     except Exception as e:
         return 1
@@ -594,39 +594,41 @@ if st.button("Compute", type="primary", use_container_width=True):
     all_std = []
     for folder in st.session_state.INV_folders:
         try:
-            gm = np.loadtxt(f"{st.session_state.INV_folder_path}/{folder}/inv/{folder}_median_smooth_model.gm", skiprows=1)
-            std = np.loadtxt(f"{st.session_state.INV_folder_path}/{folder}/inv/{folder}_median_smooth_std.gm", skiprows=1)
+            gm = np.loadtxt(f"{st.session_state.INV_folder_path}/{folder}/inv/{folder}_smooth_median_layered_model.gm", skiprows=1)
+            std = np.loadtxt(f"{st.session_state.INV_folder_path}/{folder}/inv/{folder}_smooth_median_layered_std.gm", skiprows=1)
         except:
             gm = None
             std = None
         all_gm.append(gm)
         all_std.append(std)
-    dz = 0.1
-    depth_max = np.nanmax([np.sum(gm[:,0]) for gm in all_gm if gm is not None])
-    if not all(gm is None for gm in all_gm) and not all(gm is None for gm in all_std): 
-        depths = arange(0, depth_max, dz)
-        v_xd = np.full((len(st.session_state.INV_folders), len(depths)), np.nan)
-        std_xd = np.full((len(st.session_state.INV_folders), len(depths)), np.nan)
-        for j, (gm, gm_std) in enumerate(zip(all_gm, all_std)):
-            if gm is not None and gm_std is not None:
-                col = []
-                col_std = []
-                for (thick, vp, vs, rho), (thick_std, vp_std, vs_std, rho_std) in zip(gm, gm_std):
-                    col += [vs] * int(thick/dz)
-                    col_std += [vs_std] * int(thick/dz)
-                if len(col) < len(depths):
-                    col += [gm[-1,2]] * (len(depths)-len(col))
-                    col_std += [gm_std[-1,2]] * (len(depths)-len(col_std))
-                v_xd[j, :] = col
-                std_xd[j, :] = col_std
-        v_xd_smooth = generic_filter(v_xd, mode_filter_median, size=(4,1))
-        v_xd_smooth = generic_filter(v_xd_smooth, mode_filter_median, size=(3,1))
-        v_xd_smooth = generic_filter(v_xd_smooth, mode_filter_median, size=(2,1))
-        std_xd_smooth = generic_filter(std_xd, mode_filter_median, size=(4,1))
-        std_xd_smooth = generic_filter(std_xd_smooth, mode_filter_median, size=(3,1))
-        std_xd_smooth = generic_filter(std_xd_smooth, mode_filter_median, size=(2,1))
-        path_name = f"{st.session_state.INV_folder_path}/vs_section.svg"
-        display_inverted_section(v_xd_smooth, std_xd_smooth, st.session_state.INV_positions, depths, path_name)
+
+    if not all(gm is None for gm in all_gm) and not all(gm is None for gm in all_std):
+        dz = 0.01
+        depth_max = np.nanmax([np.sum(gm[:,0]) for gm in all_gm if gm is not None])
+        if not all(gm is None for gm in all_gm) and not all(gm is None for gm in all_std): 
+            depths = arange(0, depth_max, dz)
+            v_xd = np.full((len(st.session_state.INV_folders), len(depths)), np.nan)
+            std_xd = np.full((len(st.session_state.INV_folders), len(depths)), np.nan)
+            for j, (gm, gm_std) in enumerate(zip(all_gm, all_std)):
+                if gm is not None and gm_std is not None:
+                    col = []
+                    col_std = []
+                    for (thick, vp, vs, rho), (thick_std, vp_std, vs_std, rho_std) in zip(gm, gm_std):
+                        col += [vs] * int(thick/dz)
+                        col_std += [vs_std] * int(thick/dz)
+                    if len(col) < len(depths):
+                        col += [gm[-1,2]] * (len(depths)-len(col))
+                        col_std += [gm_std[-1,2]] * (len(depths)-len(col_std))
+                    v_xd[j, :] = col
+                    std_xd[j, :] = col_std
+            v_xd_smooth = generic_filter(v_xd, mode_filter_median, size=(4,1))
+            v_xd_smooth = generic_filter(v_xd_smooth, mode_filter_median, size=(3,1))
+            v_xd_smooth = generic_filter(v_xd_smooth, mode_filter_median, size=(2,1))
+            std_xd_smooth = generic_filter(std_xd, mode_filter_median, size=(4,1))
+            std_xd_smooth = generic_filter(std_xd_smooth, mode_filter_median, size=(3,1))
+            std_xd_smooth = generic_filter(std_xd_smooth, mode_filter_median, size=(2,1))
+            path_name = f"{st.session_state.INV_folder_path}/vs_section.svg"
+            display_inverted_section(v_xd_smooth, std_xd_smooth, st.session_state.INV_positions, depths, path_name)
         
     # Plot vr sections
     print("\033[1mPlotting pseudo-sections...\033[0m")
@@ -656,7 +658,7 @@ if st.button("Compute", type="primary", use_container_width=True):
         pred_vs_per_position = []
         for j, folder in enumerate(st.session_state.INV_folders):
             try :
-                pvc = np.loadtxt(f"{st.session_state.INV_folder_path}/{folder}/inv/{folder}_median_smooth_{mode}.pvc")
+                pvc = np.loadtxt(f"{st.session_state.INV_folder_path}/{folder}/inv/{folder}_smooth_median_layered_{mode}.pvc")
                 if len(pvc.shape) == 1:
                     pvc = pvc.reshape(1,-1)
                 pvc = np.round(pvc, 2)
@@ -668,31 +670,32 @@ if st.button("Compute", type="primary", use_container_width=True):
             except:
                 pred_fs_per_position.append([])
                 pred_vs_per_position.append([])
-        # General
-        obs_f_min = np.min([np.min(fs) for fs in obs_fs_per_position if len(fs) > 0])
-        obs_f_max = np.max([np.max(fs) for fs in obs_fs_per_position if len(fs) > 0])
-        if not all(len(fs) == 0 for fs in pred_fs_per_position):
-            pred_f_min = np.min([np.min(fs) for fs in pred_fs_per_position if len(fs) > 0])
-            pred_f_max = np.max([np.max(fs) for fs in pred_fs_per_position if len(fs) > 0])
-        else:
-            pred_f_min = obs_f_max
-            pred_f_max = obs_f_max
-        f_min = np.min([obs_f_min, pred_f_min])
-        f_max = np.max([obs_f_max, pred_f_max])
-        fs = arange(f_min, f_max, 1)
-        pred_v_fx = np.full((len(st.session_state.INV_positions), len(fs)), np.nan)
-        obs_v_fx = np.full((len(st.session_state.INV_positions), len(fs)), np.nan)
-        for j, (obs_fs, obs_vs, pred_fs, pred_vs) in enumerate(zip(obs_fs_per_position, obs_vs_per_position, pred_fs_per_position, pred_vs_per_position)):
-            if len(obs_fs) > 0:
-                fi_start = np.where(fs >= obs_fs[0])[0][0]
-                fi_end = np.where(fs >= obs_fs[-1])[0][0]
-                obs_v_fx[j, fi_start:fi_end+1] = obs_vs
-            if len(pred_fs) > 0:
-                fi_start = np.where(fs >= pred_fs[0])[0][0]
-                fi_end = np.where(fs >= pred_fs[-1])[0][0]
-                pred_v_fx[j, fi_start:fi_end+1] = pred_vs
-        path_name = f"{st.session_state.INV_folder_path}/{mode}_vr_pseudo-section.svg"
-        display_pseudo_sections(obs_v_fx, pred_v_fx, fs, st.session_state.INV_positions, path_name)
+        if len(obs_fs_per_position) > 0 and len(pred_fs_per_position) > 0:
+            # General
+            obs_f_min = np.min([np.min(fs) for fs in obs_fs_per_position if len(fs) > 0])
+            obs_f_max = np.max([np.max(fs) for fs in obs_fs_per_position if len(fs) > 0])
+            if not all(len(fs) == 0 for fs in pred_fs_per_position):
+                pred_f_min = np.min([np.min(fs) for fs in pred_fs_per_position if len(fs) > 0])
+                pred_f_max = np.max([np.max(fs) for fs in pred_fs_per_position if len(fs) > 0])
+            else:
+                pred_f_min = obs_f_max
+                pred_f_max = obs_f_max
+            f_min = np.min([obs_f_min, pred_f_min])
+            f_max = np.max([obs_f_max, pred_f_max])
+            fs = arange(f_min, f_max, 1)
+            pred_v_fx = np.full((len(st.session_state.INV_positions), len(fs)), np.nan)
+            obs_v_fx = np.full((len(st.session_state.INV_positions), len(fs)), np.nan)
+            for j, (obs_fs, obs_vs, pred_fs, pred_vs) in enumerate(zip(obs_fs_per_position, obs_vs_per_position, pred_fs_per_position, pred_vs_per_position)):
+                if len(obs_fs) > 0:
+                    fi_start = np.where(fs >= obs_fs[0])[0][0]
+                    fi_end = np.where(fs >= obs_fs[-1])[0][0]
+                    obs_v_fx[j, fi_start:fi_end+1] = obs_vs
+                if len(pred_fs) > 0:
+                    fi_start = np.where(fs >= pred_fs[0])[0][0]
+                    fi_end = np.where(fs >= pred_fs[-1])[0][0]
+                    pred_v_fx[j, fi_start:fi_end+1] = pred_vs
+            path_name = f"{st.session_state.INV_folder_path}/{mode}_vr_pseudo-section.svg"
+            display_pseudo_sections(obs_v_fx, pred_v_fx, fs, st.session_state.INV_positions, path_name)
     
     end = time.time()
     print(f"\033[1mInversion completed in {end - start:.2f} seconds.\033[0m")

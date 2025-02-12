@@ -108,8 +108,8 @@ def whiten(array, f_ech, freqmin, freqmax):
 
 ### -----------------------------------------------------------------------------------------------
 def cut(TX_raw, ts, t_cut_start, t_cut_end):
-    t_cut_start = np.round(t_cut_start, 6)
-    t_cut_end = np.round(t_cut_end, 6)
+    t_cut_start = np.round(t_cut_start, 3)
+    t_cut_end = np.round(t_cut_end, 3)
     ts = np.round(ts, 6)
     TX_raw = TX_raw.copy()
     i_cut_start = np.where(ts >= t_cut_start)[0][0]
