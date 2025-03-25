@@ -66,7 +66,7 @@ Please cite as:
 This work is part of the PhD thesis of José Cunha Teixeira and was funded by a cooperation between Sorbonne University, Mines Paris - PSL, SNCF Réseau, and the European Union’s Horizon Europe research and innovation program under Grant Agreement No 101101966.
 It was developed with contributions from the geophysics research community. Special thanks to open-source developers for their invaluable tools.
 
-## Illustration
+## Teaser
 https://github.com/user-attachments/assets/983d6761-53d0-4f0a-9dff-7742f1432696
 
 
