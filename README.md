@@ -68,6 +68,6 @@ It was developed with contributions from the geophysics research community. Spec
 
 ## Illustration
 <p align="center">
-<img src="https://github.com/user-attachments/assets/b2a27481-c929-4fe9-9bb8-ae4e366f8c08" />
+<vid src="https://github.com/user-attachments/assets/b2a27481-c929-4fe9-9bb8-ae4e366f8c08" />
 </p>
 
