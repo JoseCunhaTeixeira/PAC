@@ -67,4 +67,5 @@ This work is part of the PhD thesis of José Cunha Teixeira and was funded by a 
 It was developed with contributions from the geophysics research community. Special thanks to open-source developers for their invaluable tools.
 
 ## Illustration
-![Screenshot from 2025-02-05 17-18-36](https://github.com/user-attachments/assets/21b6df52-0a08-4fad-99af-78fe181f0bc3)
+https://github.com/user-attachments/assets/f90728be-da34-4c86-9452-02bfc406f51f
+
