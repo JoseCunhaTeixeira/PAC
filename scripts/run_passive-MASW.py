@@ -78,8 +78,7 @@ positions = np.round(np.array(params["positions"][start:end+1]), 6)
 
 
 ### READ FILES ------------------------------------------------------------------------------------
-files = [file for file in os.listdir(folder_path)]
-files = sorted(files)
+files = [file for file in os.listdir(folder_path) if not file.startswith(".")]
 
 streams = [read(folder_path + file) for file in files]
 streams = [stream[start:end+1] for stream in streams]
@@ -94,7 +93,6 @@ dt = streams[0][0].stats.delta
 
 ### INITIALISATION --------------------------------------------------------------------------------
 virtual_sources = [1, N_sensors]
-
 N_segments = 0
 for file, duration in zip(files, durations) :
     if segment_length < duration:
@@ -193,10 +191,8 @@ for file, stream, duration in zip(files, streams, durations):
     ### LOOP ON SEGMENTS --------------------------------------------------------------------------
     cut_start = 0
     while cut_start < duration - segment_length or isclose(cut_start, duration - segment_length, rel_tol=1e-6):
-
         ### CUT SEGMENT ---------------------------------------------------------------------------
-        TX, _ = cut(TX_raw, ts_raw, cut_start, cut_start+segment_length)
-        
+        TX, _ = cut(TX_raw, ts_raw, cut_start, cut_start+segment_length)        
         
         ### FK SELECTION --------------------------------------------------------------------------
         # Zero padding for better resolution if length is less than 2000 samples [can improve results but takes more time to compute]
@@ -271,13 +267,13 @@ for file, stream, duration in zip(files, streams, durations):
         if np.sum(K_pos) > np.sum(K_neg):
             FK_ratio = np.sum(K_pos)/np.sum(K_neg) - 1
             if FK_ratio > FK_ratio_threshold :
-                source_position = "L"
+                source_position = "R"
                 FK_ratios.append([i_segment, abs(FK_ratio)])
 
         elif np.sum(K_neg) > np.sum(K_pos):
             FK_ratio = - np.sum(K_neg)/np.sum(K_pos) + 1
             if FK_ratio < -FK_ratio_threshold :
-                source_position = "R"
+                source_position = "L"
                 FK_ratios.append([i_segment, abs(FK_ratio)])
                 
         # Uncomment to plot FK diagrams
@@ -333,13 +329,13 @@ for file, stream, duration in zip(files, streams, durations):
                     acausal, causal = np.hsplit(tmp_del_tmp_0, 2)
                     acausal = np.flip(acausal)
 
-                    if source_position == "L" :
+                    if source_position == "R" :
                         if virtual_source == 1:
                             correl_sym = causal
                         elif virtual_source == N_sensors:
                             correl_sym = acausal
                     
-                    elif source_position == "R" :
+                    elif source_position == "L" :
                         if virtual_source == 1:
                             correl_sym = acausal
                         elif virtual_source == N_sensors:

@@ -698,7 +698,7 @@ if st.button("Compute", type="primary", use_container_width=True):
             display_pseudo_sections(obs_v_fx, pred_v_fx, fs, st.session_state.INV_positions, path_name)
     
     end = time.time()
-    print(f"\033[1mInversion completed in {end - start:.2f} seconds.\033[0m")
+    print(f"\033[1mInversion ended in {end - start:.2f} seconds.\033[0m")
         
     loading_message.empty()
     st.text('')

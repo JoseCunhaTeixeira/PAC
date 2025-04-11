@@ -324,7 +324,7 @@ def display_seismic_wiggle_fromStream(stream, x_sensors, path, scale=1.0, norm_m
     plt.xlabel("Position [m]")
     plt.ylabel("Time [s]")
 
-    plt.savefig(path, format='png', dpi='figure', bbox_inches='tight')
+    plt.savefig(path, format='svg', dpi='figure', bbox_inches='tight')
     plt.close()
 ### -----------------------------------------------------------------------------------------------
 
