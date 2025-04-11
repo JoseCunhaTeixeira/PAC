@@ -142,7 +142,7 @@ def handle_select_folder():
         st.session_state.COMP_folder_path = f"{input_dir}/{st.session_state.COMP_selected_folder}/"
 
         # List all files in the folder
-        files = [file for file in os.listdir(st.session_state.COMP_folder_path)]
+        files = [file for file in os.listdir(st.session_state.COMP_folder_path) if not file.startswith('.')]
         files = sorted(files)
         st.session_state.COMP_files = files
 
@@ -202,15 +202,15 @@ def set_v():
             
 def set_segment():
     if st.session_state.COMP_segment_length is not None:
-        st.session_state.COMP_segment_length = round(st.session_state.COMP_segment_length, 3)
+        st.session_state.COMP_segment_length = round(st.session_state.COMP_segment_length, 6)
         if st.session_state.COMP_segment_length <= 0:
-            st.session_state.COMP_segment_length = 0.001
+            st.session_state.COMP_segment_length = 0.0001
         if st.session_state.COMP_segment_length >= min(st.session_state.COMP_durations):
             st.session_state.COMP_segment_length = min(st.session_state.COMP_durations)
     if st.session_state.COMP_segment_step is not None:
-        st.session_state.COMP_segment_step = round(st.session_state.COMP_segment_step, 3)
+        st.session_state.COMP_segment_step = round(st.session_state.COMP_segment_step, 6)
         if st.session_state.COMP_segment_step <= 0:
-            st.session_state.COMP_segment_step = 0.001
+            st.session_state.COMP_segment_step = 0.0001
         if st.session_state.COMP_segment_step >= min(st.session_state.COMP_durations):
             st.session_state.COMP_segment_step = min(st.session_state.COMP_durations)
     if st.session_state.COMP_segment_length is not None and st.session_state.COMP_segment_step is not None:
@@ -431,8 +431,8 @@ st.header("🚨 Segment parameters")
 st.text('')
 st.text('')
 
-st.number_input('Segment window length [s]', key='COMP_segment_length', value=None, step=0.001, on_change=set_segment, placeholder='Enter a value', format="%0.3f")
-st.number_input('Segment window step [s]', key='COMP_segment_step', value=None, step=0.001, on_change=set_segment, placeholder='Enter a value', format="%0.3f")
+st.number_input('Segment window length [s]', key='COMP_segment_length', value=None, step=0.000001, on_change=set_segment, placeholder='Enter a value', format="%0.6f")
+st.number_input('Segment window step [s]', key='COMP_segment_step', value=None, step=0.000001, on_change=set_segment, placeholder='Enter a value', format="%0.6f")
 
 st.text('')
 
@@ -508,7 +508,7 @@ if st.button("Compute", type="primary", use_container_width=True):
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
         
-    output_dir = f"{output_dir}/" + f"Sl{st.session_state.COMP_segment_length:.3f}-Ss{st.session_state.COMP_segment_step:.3f}-FK{st.session_state.COMP_FK_ratio_threshold:.2f}-PWS{st.session_state.COMP_pws_nu:.1f}/"
+    output_dir = f"{output_dir}/" + f"Sl{st.session_state.COMP_segment_length:6f}-Ss{st.session_state.COMP_segment_step:.6f}-FK{st.session_state.COMP_FK_ratio_threshold:.2f}-PWS{st.session_state.COMP_pws_nu:.1f}/"
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
 
@@ -557,7 +557,7 @@ if st.button("Compute", type="primary", use_container_width=True):
     nb_success = results.count(0)
     
     end = time.time()
-    print(f"\033[1mComputation completed in {end - start:.2f} seconds.\033[0m")
+    print(f"\033[1mComputation ended in {end - start:.2f} seconds.\033[0m")
         
     loading_message.empty()
     st.text('')
