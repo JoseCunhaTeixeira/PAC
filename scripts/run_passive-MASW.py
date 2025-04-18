@@ -25,8 +25,6 @@ from display import display_dispersion_img, display_spectrum_img_fromArray, disp
 from obspy2numpy import array_to_stream, stream_to_array
 from dispersion import phase_shift
 
-import matplotlib.pyplot as plt
-
 # Do not display warnings
 import warnings
 warnings.filterwarnings("error")
