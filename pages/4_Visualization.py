@@ -790,7 +790,7 @@ if st.session_state.VIZ_mode == 'Signal':
     st.success(f"📁 Selected folder: **{st.session_state.VIZ_folder_path}**")
             
     # List all files in the folder
-    files = [file for file in os.listdir(st.session_state.VIZ_folder_path)]
+    files = [file for file in os.listdir(st.session_state.VIZ_folder_path) if not file.startswith('.')]
     files = sorted(files)
     folders = files
 
@@ -814,7 +814,7 @@ if st.session_state.VIZ_mode == 'Signal':
         norm = 'global'
     
     # Plot the records on a subplot
-    for i, stream in enumerate(st.session_state.VIZ_streams):
+    for i, (stream, file) in enumerate(zip(st.session_state.VIZ_streams, files)):
         TX = stream_to_array(stream, len(stream), len(stream[0].data))
         delta = stream[0].stats.delta
         total_points = TX.shape[0]
@@ -828,7 +828,7 @@ if st.session_state.VIZ_mode == 'Signal':
         st.text('')
         st.text('')
         st.text('')
-        st.markdown(f"**Record {i+1}**")
+        st.markdown(f"**Record {file}**")
         st.plotly_chart(fig, key=f"{i}")
                 
 elif st.session_state.VIZ_mode == 'Dispersion':

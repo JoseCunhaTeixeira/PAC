@@ -332,10 +332,16 @@ def display_seismic_wiggle_fromStream(stream, x_sensors, path, scale=1.0, norm_m
 
 
 ### -----------------------------------------------------------------------------------------------
-def display_spectrum_img_fromArray(array, dt, x_sensors, path1, path2, norm_method=None):
+def display_spectrum_img_fromArray(array, dt, x_sensors, path1, path2, norm_method=None, f_min=None, f_max=None):
     Nt, Nx = array.shape
     SP = np.fft.rfft(array, axis=0)
     fs = np.fft.rfftfreq(Nt, dt)
+    if f_max is not None:
+        fs = fs[fs <= f_max]
+        SP = SP[:len(fs), :]
+    if f_min is not None:
+        fs = fs[fs >= f_min]
+        SP = SP[:len(fs), :]
 
     if norm_method == "stream":
         SP = np.abs(SP)/np.max(np.abs(SP))

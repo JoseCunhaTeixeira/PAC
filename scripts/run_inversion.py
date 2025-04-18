@@ -778,8 +778,7 @@ plt.savefig(f"{output_dir}/xmid{x_mid}_marginals.png")
 
 toc = time()
 
+print(f'ID {ID} | x_mid {x_mid} | Inversion completed in {toc-tic:.1f} s')
 sys.stdout = sys.__stdout__
 print(f'\033[92mID {ID} | x_mid {x_mid} | Inversion completed in {toc-tic:.1f} s\033[0m')
 sys.stdout = log_file
-
-print(f'ID {ID} | x_mid {x_mid} | Inversion completed in {toc-tic:.1f} s')
