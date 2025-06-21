@@ -18,7 +18,7 @@ from misc import arange
 
 
 ### -----------------------------------------------------------------------------------------------
-def phase_shift(XT, si, offsets, vmin, vmax, dv, fmax):
+def phase_shift(XT, si, offsets, vmin, vmax, dv, f_min, fmax):
     """
     Constructs a FV dispersion diagram with the phase-shift method from Park et al. (1999)
     args :
@@ -37,12 +37,16 @@ def phase_shift(XT, si, offsets, vmin, vmax, dv, fmax):
     XF = rfft(XT, axis=(1), n=Nt)
 
     fs = rfftfreq(Nt, si)
+    try:
+        fimin = np.where(fs >= f_min)[0][0]
+    except:
+        fimin = 0
     try :
         fimax = np.where(fs >= fmax)[0][0]
     except :
         fimax = len(fs)-1
-    fs = fs[0:fimax+1]
-    XF = XF[: , 0:fimax+1]
+    fs = fs[fimin:fimax+1]
+    XF = XF[: , fimin:fimax+1]
 
     vs = arange(vmin, vmax, dv)
 

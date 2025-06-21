@@ -582,7 +582,8 @@ if st.button("Compute", type="primary", use_container_width=True):
     
     # Run inversion scripts
     scripts = [f"{work_dir}/scripts/run_inversion.py -ID {i} -r {st.session_state.INV_folder_path}" for i in range(st.session_state.INV_nb_scripts)]
-    Executor = concurrent.futures.ProcessPoolExecutor if sys.platform == "linux" else concurrent.futures.ThreadPoolExecutor
+    # Executor = concurrent.futures.ProcessPoolExecutor if sys.platform == "linux" else concurrent.futures.ThreadPoolExecutor
+    Executor = concurrent.futures.ThreadPoolExecutor
     with Executor(max_workers=1) as executor:
         results = list(executor.map(run_script, scripts))
         
