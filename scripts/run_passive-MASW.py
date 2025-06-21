@@ -41,14 +41,14 @@ parser = argparse.ArgumentParser(description="Process an ID argument.")
 parser.add_argument("-ID", type=int, required=True, help="ID of the script")
 parser.add_argument("-r", type=str, required=True, help="Path to the folder containing the data")
 args = parser.parse_args()
+output_dir = args.r
 ID = f"{int(args.ID)}"
-output_dir = f"{args.r}"
 ### -----------------------------------------------------------------------------------------------
 
 
 
 
-### READ JSON -------------------------------------------------------------------------------------
+### READ-----------------------------------------------------------------------------
 with open(f"{output_dir}/computing_params.json", "r") as file:
     params = json.load(file)
 
@@ -72,6 +72,8 @@ end = np.round(params["running_distribution"][ID]["end"], 6)
 N_sensors = int(params["MASW_length"])
 MASW_step = int(params["MASW_step"])
 positions = np.round(np.array(params["positions"][start:end+1]), 6)
+
+durations = np.round(np.array(params["durations"]), 6)
 ### -----------------------------------------------------------------------------------------------
 
 
@@ -81,12 +83,9 @@ positions = np.round(np.array(params["positions"][start:end+1]), 6)
 files = [file for file in os.listdir(folder_path) if not file.startswith(".")]
 files = sorted(files)
 
-streams = [read(folder_path + file) for file in files]
-streams = [stream[start:end+1] for stream in streams]
-
-durations = np.round([stream[0].stats.endtime - stream[0].stats.starttime for stream in streams], 6)
-
-dt = streams[0][0].stats.delta
+stream = read(folder_path + files[0])
+dt = stream[0].stats.delta
+del stream
 ### -----------------------------------------------------------------------------------------------
 
 
@@ -95,15 +94,24 @@ dt = streams[0][0].stats.delta
 ### INITIALISATION --------------------------------------------------------------------------------
 virtual_sources = [1, N_sensors]
 N_segments = 0
-for file, duration in zip(files, durations) :
+for duration in durations :
     if segment_length < duration:
         cuts = list(arange(0, duration-segment_length, segment_step))
     else:
         cuts = [0]
     N_segments += len(cuts)
 
-interf_db = np.zeros((len(virtual_sources), N_sensors, N_segments, int(segment_length/dt)+1))
-interf_db_stack = np.zeros((N_sensors, int(segment_length/dt)+1))
+try:
+    interf_db = np.zeros((len(virtual_sources), N_sensors, N_segments, int(segment_length/dt)+1))
+except MemoryError:
+    print(f"\033[91mID {ID} | x_mid {x_mid} | MemoryError: Unable to allocate memory for interferometry database.\033[0m")
+    raise SystemExit
+try:
+    interf_db_stack = np.zeros((N_sensors, int(segment_length/dt)+1))
+except MemoryError:
+    print(f"\033[91mID {ID} | x_mid {x_mid} | MemoryError: Unable to allocate memory for interferometry stack.\033[0m")
+    raise SystemExit
+
 FK_ratios = []
 ### -----------------------------------------------------------------------------------------------
 
@@ -140,7 +148,11 @@ sys.stdout = log_file
 
 i_segment = 0
 to_del = []
-for file, stream, duration in zip(files, streams, durations):
+for file in files:
+
+    stream = read(folder_path + file)
+    stream = stream[start:end+1]
+    duration = np.round(stream[0].stats.endtime - stream[0].stats.starttime, 6)
 
 
     ### DEMAEN AND DETREND ------------------------------------------------------------------------
@@ -347,14 +359,18 @@ for file, stream, duration in zip(files, streams, durations):
 
 
 
-
 ### STACK INTERFEROMETRY --------------------------------------------------------------------------
 FK_ratios = np.array(FK_ratios)
 if FK_ratios.size > 0:
     FK_ratios = FK_ratios[FK_ratios[:, 1].argsort()]
 else:
+    sys.stdout = sys.__stdout__
+    print(f"\033[91mID {ID} | x_mid {x_mid} | No segment with FK ratio above {FK_ratio_threshold}\033[0m")
+    sys.stdout = log_file
     print(f"\033[91mID {ID} | x_mid {x_mid} | No segment with FK ratio above {FK_ratio_threshold}\033[0m")
     raise Exception("No segment selected")
+
+del files, stream, duration, ts_raw, TX_tmp, ks, FX, FK, K_pos, K_neg, ks_pos, ks_neg, fs_min_lim_neg, fs_max_lim_neg, fs_min_lim_pos, fs_max_lim_pos, tmp, tmp_0, tmp_del_tmp_0, acausal, causal, t_s, t_r, correl_sym, tukey_val
 
 interf_db = np.delete(interf_db, to_del, 2)
 
@@ -377,9 +393,9 @@ for i_r in range(N_sensors) :
     arr = np.delete(arr, index, 0)
 
     # PWS
-    st = array_to_stream(arr.T, dt, range(arr.shape[0]))
-    st = st.stack(stack_type=("pw", pws_nu))
-    interf_db_stack[i_r, 0:int(segment_length/dt)+1] = st[0].data
+    stream = array_to_stream(arr.T, dt, range(arr.shape[0]))
+    stream = stream.stack(stack_type=("pw", pws_nu))
+    interf_db_stack[i_r, 0:int(segment_length/dt)+1] = stream[0].data
 
 # Stream format ---
 offsets = np.abs(positions - positions[0])
@@ -406,9 +422,9 @@ display_spectrum_img_fromArray(interf_db_stack.T, dt, positions, path1=name_path
 arr = np.copy(interf_db_stack)
 
 offsets = np.abs(positions - positions[0])
-(fs, vs, FV) = phase_shift(arr, dt, offsets, v_min, v_max, dv, f_max)
+(fs, vs, FV) = phase_shift(arr, dt, offsets, v_min, v_max, dv, f_min, f_max)
 # Uncomment to use the raw seismic data instead of the result of interferometry
-# (fs, vs, FV) = phase_shift(TX_raw.T, dt, offsets, v_min, v_max, dv, f_max)
+# (fs, vs, FV) = phase_shift(TX_raw.T, dt, offsets, v_min, v_max, dv, f_min, f_max)
 
 name_path = output_dir + f"xmid{x_mid}_dispersion.svg"
 display_dispersion_img(FV, fs, vs, path=name_path, normalization='Frequency', dx=positions[1]-positions[0])

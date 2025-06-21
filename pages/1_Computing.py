@@ -22,11 +22,6 @@ from Paths import output_dir, input_dir, work_dir
 import warnings
 warnings.filterwarnings("ignore")
 
-# if sys.platform != "win32":
-#     multiprocessing.set_start_method("fork", force=True)  # Use fork on Unix-based OS
-# else:
-#     multiprocessing.set_start_method("spawn", force=True)  # Use spawn on Windows
-
 
 
 ### FUNCTIONS ---------------------------------------------------------------------------------------------------------------------------------------
@@ -147,14 +142,12 @@ def handle_select_folder():
         st.session_state.COMP_files = files
 
         # Read all seismic records
-        streams = []
+        st.session_state.COMP_durations = []
         for file in st.session_state.COMP_files:
             stream = read(st.session_state.COMP_folder_path + file)
-            streams.append(stream)
-        st.session_state.COMP_streams = streams
-
-        # Compute the duration of each seismic record
-        st.session_state.COMP_durations = [stream[0].stats.endtime - stream[0].stats.starttime for stream in st.session_state.COMP_streams]
+            st.session_state.COMP_durations.append(stream[0].stats.endtime - stream[0].stats.starttime)
+        st.session_state.COMP_N_traces = len(stream)
+        del stream
     
 
 def handle_set():
@@ -261,8 +254,8 @@ def set_MASW():
         st.session_state.COMP_MASW_length = round(st.session_state.COMP_MASW_length, 0)
         if st.session_state.COMP_MASW_length < 2:
             st.session_state.COMP_MASW_length = 2
-        if st.session_state.COMP_MASW_length > len(st.session_state.COMP_streams[0]):
-            st.session_state.COMP_MASW_length = len(st.session_state.COMP_streams[0])
+        if st.session_state.COMP_MASW_length > st.session_state.COMP_N_traces:
+            st.session_state.COMP_MASW_length = st.session_state.COMP_N_traces
             
     if st.session_state.COMP_MASW_step is not None:
         st.session_state.COMP_MASW_step = round(st.session_state.COMP_MASW_step, 0)
@@ -272,8 +265,8 @@ def set_MASW():
             st.session_state.COMP_MASW_length = round(st.session_state.COMP_MASW_length, 0)
             if st.session_state.COMP_MASW_step > st.session_state.COMP_MASW_length:
                 st.session_state.COMP_MASW_step = st.session_state.COMP_MASW_length
-            if st.session_state.COMP_MASW_length + st.session_state.COMP_MASW_step > len(st.session_state.COMP_streams[0]):
-                st.session_state.COMP_MASW_step = len(st.session_state.COMP_streams[0]) - st.session_state.COMP_MASW_length
+            if st.session_state.COMP_MASW_length + st.session_state.COMP_MASW_step > st.session_state.COMP_N_traces:
+                st.session_state.COMP_MASW_step = st.session_state.COMP_N_traces - st.session_state.COMP_MASW_length
 ### -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -354,14 +347,14 @@ if st.session_state.COMP_x_start is None or st.session_state.COMP_x_step is None
     st.info("👆 Define all sensor positions.") 
     st.stop()
     
-st.session_state.COMP_positions = [round(st.session_state.COMP_x_start + i*st.session_state.COMP_x_step, 3) for i in range(len(st.session_state.COMP_streams[0]))]
-   
+st.session_state.COMP_positions = [round(st.session_state.COMP_x_start + i*st.session_state.COMP_x_step, 3) for i in range(st.session_state.COMP_N_traces)]
+
 st.text('')
 st.text('')
 st.success("👌 Sensor positions defined.")
 
 data = {
-    'Number of sensors [#]' : [len(st.session_state.COMP_streams[0])],
+    'Number of sensors [#]' : [st.session_state.COMP_N_traces],
     'Sensors positions [m]' : [st.session_state.COMP_positions],
 }
 df = pd.DataFrame(data)
@@ -550,7 +543,8 @@ if st.button("Compute", type="primary", use_container_width=True):
     start = time.time()
     
     scripts = [f"{work_dir}/scripts/run_passive-MASW.py -ID {i} -r {output_dir}" for i in range(st.session_state.COMP_nb_scripts)]
-    Executor = concurrent.futures.ProcessPoolExecutor if sys.platform == "linux" else concurrent.futures.ThreadPoolExecutor
+    # Executor = concurrent.futures.ProcessPoolExecutor if sys.platform == "linux" else concurrent.futures.ThreadPoolExecutor
+    Executor = concurrent.futures.ThreadPoolExecutor
     with Executor(max_workers=st.session_state.COMP_nb_max_subproc) as executor:
         results = list(executor.map(run_script, scripts))
         
