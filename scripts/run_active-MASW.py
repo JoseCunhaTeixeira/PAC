@@ -13,10 +13,8 @@ from os import mkdir, path
 from time import time
 from obspy import read
 from scipy.signal import filtfilt, iirnotch
-from math import isclose
 
 sys.path.append("./modules/")
-from misc import arange
 from display import display_dispersion_img
 from obspy2numpy import stream_to_array
 from dispersion import phase_shift
@@ -47,7 +45,6 @@ with open(f"{output_dir}/computing_params.json", "r") as file:
     params = json.load(file)
 
 folder_path = params["folder_path"]
-profile = params["folder_path"].split("/")[-2]
 files = params["files"]
 
 f_min = params["f_min"]
@@ -66,17 +63,6 @@ d_position = np.round(positions[1] - positions[0], 6)
 source_positions = np.round(params["source_positions"], 6)
 distance_min = np.round(params["distance_min"], 6)
 distance_max = np.round(params["distance_max"], 6)
-
-durations = np.round(np.array(params["durations"]), 6)
-### -----------------------------------------------------------------------------------------------
-
-
-
-
-### READ FILES ------------------------------------------------------------------------------------
-stream = read(folder_path + files[0])
-dt = stream[0].stats.delta
-del stream
 ### -----------------------------------------------------------------------------------------------
 
 
@@ -131,22 +117,14 @@ for file, source_position in zip(files, source_positions):
     ### READ FILE ---------------------------------------------------------------------------------
     stream = read(folder_path + file)
     stream = stream[start:end+1]
-    duration = np.round(stream[0].stats.endtime - stream[0].stats.starttime, 6)
+    Nt = stream[0].stats.npts
+    dt = stream[0].stats.delta
+    f_ech = stream[0].stats.sampling_rate
 
 
     ### DEMAEN AND DETREND -----------------------------------------------------------------------
     stream.detrend('demean')
     stream.detrend("linear")
-
-
-    ### DECIMATE ---------------------------------------------------------------------------------
-    if not isclose(stream[0].stats.delta, dt, rel_tol=1e-9):
-        ratio = int(dt/ stream[0].stats.delta)
-        stream.decimate(ratio)
-    Nt = stream[0].stats.npts
-    dt = stream[0].stats.delta
-    f_ech = stream[0].stats.sampling_rate
-    ts_raw = arange(0, Nt*dt-dt, dt)
 
 
     ### ARRAY FORMAT ------------------------------------------------------------------------------
@@ -175,7 +153,17 @@ for file, source_position in zip(files, source_positions):
     ### -------------------------------------------------------------------------------------------
 
 
+
+
 ### SAVE RESULTS ----------------------------------------------------------------------------------
+if 'FV_stacked' not in locals():
+    print(f"ID {ID} | x_mid {x_mid} | No valid data found for this x_mid")
+    sys.stdout = sys.__stdout__
+    print(f"\033[93mID {ID} | x_mid {x_mid} | No valid data found for this x_mid\033[0m")
+    sys.stdout = log_file
+    log_file.close()
+    sys.exit()
+
 name_path = output_dir + f"xmid{x_mid}_dispersion.svg"
 display_dispersion_img(FV_stacked, fs, vs, path=name_path, normalization='Frequency', dx=positions[1]-positions[0])
 

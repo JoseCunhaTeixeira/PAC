@@ -129,21 +129,20 @@ def extract_curve(FV, fs, vs, poly_coords, smooth):
             v_picked.append(v_picked[-1])
         else:
             v_picked.append(v_max)
-        f_picked.append(fs[i+f_start_i+1])
+        f_picked.append(fs[i+f_start_i])
 
     f_picked = np.array(f_picked)
     v_picked = np.array(v_picked)
 
-    if smooth == True:
-        if (len(v_picked)/2) % 2 == 0:
-            wl = len(v_picked)/2 + 1
-        else:
-            wl = len(v_picked)/2
-        v_picked_curve = savgol_filter(v_picked, window_length=wl, polyorder=4, mode="nearest")
-    else :
-        v_picked_curve = v_picked
-
-    return f_picked[1:], v_picked_curve[1:]
+    if not smooth:
+        return f_picked[1:], v_picked[1:]
+           
+    if (len(v_picked)/2) % 2 == 0:
+        wl = len(v_picked)//2 + 1
+    else:
+        wl = len(v_picked)//2
+    v_picked = savgol_filter(v_picked, window_length=wl, polyorder=5)
+    return f_picked[1:], v_picked[1:]
 ### -----------------------------------------------------------------------------------------------
 
 
