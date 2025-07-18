@@ -13,8 +13,14 @@ streamlit run Home.py --server.enableXsrfProtection false
 """
 
 import streamlit as st
-import Paths
+import os
+from Paths import input_dir, output_dir
 
+if not os.path.exists(f"{input_dir}"):
+    os.makedirs(f"{input_dir}")
+    
+if not os.path.exists(f"{output_dir}"):
+    os.makedirs(f"{output_dir}")
 
 
 # Clear cache and session state

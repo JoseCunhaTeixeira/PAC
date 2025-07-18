@@ -5,7 +5,6 @@ License : Creative Commons Attribution 4.0 International
 Date : Feb 4, 2025
 """
 
-import os
 import sys
 import argparse
 import json
@@ -14,7 +13,7 @@ from os import mkdir, path, system
 from time import time
 from obspy import read
 from scipy.fft import fft, fftfreq, rfft, rfftfreq
-from scipy.signal import butter, correlate, filtfilt, iirnotch
+from scipy.signal import correlate, filtfilt, iirnotch
 from scipy.signal.windows import tukey
 from math import isclose
 
@@ -54,6 +53,7 @@ with open(f"{output_dir}/computing_params.json", "r") as file:
 
 folder_path = params["folder_path"]
 profile = params["folder_path"].split("/")[-2]
+files = params["files"]
 
 f_min = params["f_min"]
 f_max = params["f_max"]
@@ -80,9 +80,6 @@ durations = np.round(np.array(params["durations"]), 6)
 
 
 ### READ FILES ------------------------------------------------------------------------------------
-files = [file for file in os.listdir(folder_path) if not file.startswith(".")]
-files = sorted(files)
-
 stream = read(folder_path + files[0])
 dt = stream[0].stats.delta
 del stream
