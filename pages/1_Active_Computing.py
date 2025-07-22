@@ -131,6 +131,8 @@ def initialize_session():
         st.session_state.ACT_x_step = None
     if 'ACT_nb_max_subproc' not in st.session_state:
         st.session_state.ACT_nb_max_subproc = None
+    if 'ACT_pws_nu' not in st.session_state:
+        st.session_state.ACT_pws_nu = None
 ### -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -278,6 +280,18 @@ def set_MASW():
                 st.session_state.ACT_MASW_step = st.session_state.ACT_MASW_length
             if st.session_state.ACT_MASW_length + st.session_state.ACT_MASW_step > st.session_state.ACT_N_traces:
                 st.session_state.ACT_MASW_step = st.session_state.ACT_N_traces - st.session_state.ACT_MASW_length
+
+def set_pws_nu():
+    if st.session_state.ACT_pws_nu is not None:
+        st.session_state.ACT_pws_nu = round(st.session_state.ACT_pws_nu, 0)
+        if st.session_state.ACT_pws_nu < 0:
+            st.session_state.ACT_pws_nu = 0
+
+def handle_set_interferometry_mode():
+    if st.session_state.ACT_interferometry_mode:
+        st.session_state.ACT_pws_nu = 2
+    else:
+        st.session_state.ACT_pws_nu = None
 ### -------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -437,7 +451,39 @@ st.text('')
 st.success("👌 Phase-shift parameters defined.")
 
 st.divider() # ----------------------------------------------------------------------------------------------------------------------------------
+st.header("🚨 Stacking parameters")
+st.text('')
+st.text('')
+
+st.toggle(
+    label="Activate interferometry mode",
+    key="ACT_interferometry_mode",
+    value=False,
+    help=(
+        "If activated, interferometry will be computed using the raw traces, "
+        "and a Phase-Weighted Stack (PWS) will be applied. "
+        "If deactivated, a simple linear stack will be performed directly on the dispersion images."
+    ),
+    on_change=handle_set_interferometry_mode,
+)
+
+if st.session_state.ACT_interferometry_mode:
+    st.number_input("Phase weighted stack order [-]", key='ACT_pws_nu', value=2, step=1, on_change=set_pws_nu, placeholder='Enter a value', format="%i")
+    st.markdown("🛈 *Order 0 corresponds to a linear stack.*")
+
+    if st.session_state.ACT_pws_nu is None:
+        st.text('')
+        st.text('')
+        st.info("👆 Define the stacking order. For reference, see the information provided in [Schimmel & Paulssen (1997)](https://doi.org/10.1111/j.1365-246X.1997.tb05664.x).")
+        st.stop()
     
+st.text('')
+st.text('')
+
+st.success("👌 Stacking parameters defined.")
+
+st.divider() # ----------------------------------------------------------------------------------------------------------------------------------
+
 st.header("🚨 Parallelization parameters")
 
 st.text('')
@@ -502,6 +548,7 @@ if st.button("Compute", type="primary", use_container_width=True):
         "v_min": st.session_state.ACT_v_min,
         "v_max": st.session_state.ACT_v_max,
         "dv": st.session_state.ACT_dv,
+        "pws_nu": st.session_state.ACT_pws_nu,
         "nb_cores": st.session_state.ACT_nb_max_subproc,
         "running_distribution": {}
     }
@@ -517,7 +564,11 @@ if st.button("Compute", type="primary", use_container_width=True):
     print(f"\033[1m\n\nRunning computation...\033[0m")
     start = time.time()
     
-    scripts = [f"{work_dir}/scripts/run_active-MASW.py -ID {i} -r {output_dir}" for i in range(st.session_state.ACT_nb_scripts)]
+    if st.session_state.ACT_interferometry_mode:
+        run = 'run_passive-active-MASW.py'
+    else:
+        run = 'run_active-MASW.py'
+    scripts = [f"{work_dir}/scripts/{run} -ID {i} -r {output_dir}" for i in range(st.session_state.ACT_nb_scripts)]
     Executor = concurrent.futures.ThreadPoolExecutor
     with Executor(max_workers=st.session_state.ACT_nb_max_subproc) as executor:
         results = list(executor.map(run_script, scripts))

@@ -596,12 +596,12 @@ for mode in modes:
     
 pred_modes = []
 for mode, fs_obs in zip(modes, fs_obs_per_mode):
-    pred_modes.append(np.column_stack((fs_obs, forward_model_disba(smooth_median_layered_gm[:,0], smooth_median_layered_gm[:,2], mode, fs_obs))))
+    pred_modes.append(np.column_stack((fs_obs, forward_model_disba(median_layered_gm[:,0], median_layered_gm[:,2], mode, fs_obs))))
 
 full_pred_modes = []
 inRange = True
 mode = 0
-velocity_model = smooth_median_layered_gm/1000
+velocity_model = median_layered_gm/1000
 pd = PhaseDispersion(*velocity_model.T)
 periods = 1 / fs[fs>0]
 periods = periods[::-1]

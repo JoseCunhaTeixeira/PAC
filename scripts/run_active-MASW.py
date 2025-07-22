@@ -91,6 +91,7 @@ sys.stdout = sys.__stdout__
 print(f'ID {ID} | x_mid {x_mid} | Running computation')
 sys.stdout = log_file
 
+FVs = []
 
 for file, source_position in zip(files, source_positions):
 
@@ -146,23 +147,34 @@ for file, source_position in zip(files, source_positions):
     ### SLANT STACK -------------------------------------------------------------------------------
     offsets = np.abs(positions - source_position)
     (fs, vs, FV) = phase_shift(TX_raw.T, dt, offsets, v_min, v_max, dv, f_min, f_max)
-    if 'FV_stacked' not in locals():
-        FV_stacked = FV
-    else:
-        FV_stacked += FV
+    FVs.append(FV)
+
+    # name_path = output_dir + f"xmid{x_mid}_dispersion_{file[:-4]}_{source_position}.svg"
+    # display_dispersion_img(FV, fs, vs, path=name_path, normalization='Frequency', dx=positions[1]-positions[0])
     ### -------------------------------------------------------------------------------------------
 
 
 
 
 ### SAVE RESULTS ----------------------------------------------------------------------------------
-if 'FV_stacked' not in locals():
+if not FVs:
     print(f"ID {ID} | x_mid {x_mid} | No valid data found for this x_mid")
     sys.stdout = sys.__stdout__
     print(f"\033[93mID {ID} | x_mid {x_mid} | No valid data found for this x_mid\033[0m")
     sys.stdout = log_file
     log_file.close()
     sys.exit()
+
+# FV_stacked = np.mean(FVs, axis=0)
+
+# FVs (n_images, f, v)
+print(len(fs), fs)
+print(len(vs), vs)
+
+FVs = np.stack(FVs, axis=0)
+print(FVs.shape)
+
+FV_stacked = np.mean(FVs, axis=0)
 
 name_path = output_dir + f"xmid{x_mid}_dispersion.svg"
 display_dispersion_img(FV_stacked, fs, vs, path=name_path, normalization='Frequency', dx=positions[1]-positions[0])
