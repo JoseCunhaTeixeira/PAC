@@ -12,7 +12,7 @@ Dispersion curves can be semi-automatically picked on an interactive interface a
 - **User-Friendly Interface:** Streamlined workflow with visualization capabilities.
 - **Python-Based:** Lightweight and extensible for custom modifications.
 
-## Teaser
+## Overview
 https://github.com/user-attachments/assets/983d6761-53d0-4f0a-9dff-7742f1432696
 
 ## Installation
