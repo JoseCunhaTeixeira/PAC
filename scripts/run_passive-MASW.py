@@ -5,46 +5,50 @@ License : Creative Commons Attribution 4.0 International
 Date : Feb 4, 2025
 """
 
-import sys
 import argparse
 import json
-import numpy as np
+import sys
+from math import isclose
 from os import mkdir, path, system
 from time import time
+
+import numpy as np
 from obspy import read
 from scipy.fft import fft, fftfreq, rfft, rfftfreq
-from scipy.signal import correlate, filtfilt, iirnotch
+from scipy.signal import correlate
 from scipy.signal.windows import tukey
-from math import isclose
 
 sys.path.append("./modules/")
-from misc import arange
-from signal_processing import normalize, whiten, cut
-from display import display_dispersion_img, display_spectrum_img_fromArray, display_seismic_wiggle_fromStream
-from obspy2numpy import array_to_stream, stream_to_array
-from dispersion import phase_shift
-
 # Do not display warnings
 import warnings
+
+from dispersion import phase_shift
+from display import (
+    display_dispersion_img,
+    display_seismic_wiggle_fromStream,
+    display_spectrum_img_fromArray,
+)
+from misc import arange
+from obspy2numpy import array_to_stream, stream_to_array
+from signal_processing import cut, whiten
+
 warnings.filterwarnings("error")
 warnings.filterwarnings("ignore")
-
 
 
 tic = time()
 
 
-
 ### ARGUMENTS -------------------------------------------------------------------------------------
 parser = argparse.ArgumentParser(description="Process an ID argument.")
 parser.add_argument("-ID", type=int, required=True, help="ID of the script")
-parser.add_argument("-r", type=str, required=True, help="Path to the folder containing the data")
+parser.add_argument(
+    "-r", type=str, required=True, help="Path to the folder containing the data"
+)
 args = parser.parse_args()
 output_dir = args.r
 ID = f"{int(args.ID)}"
 ### -----------------------------------------------------------------------------------------------
-
-
 
 
 ### READ-----------------------------------------------------------------------------
@@ -71,12 +75,10 @@ start = np.round(params["running_distribution"][ID]["start"], 6)
 end = np.round(params["running_distribution"][ID]["end"], 6)
 N_sensors = int(params["MASW_length"])
 MASW_step = int(params["MASW_step"])
-positions = np.round(np.array(params["positions"][start:end+1]), 6)
+positions = np.round(np.array(params["positions"][start : end + 1]), 6)
 
 durations = np.round(np.array(params["durations"]), 6)
 ### -----------------------------------------------------------------------------------------------
-
-
 
 
 ### READ FILES ------------------------------------------------------------------------------------
@@ -86,33 +88,35 @@ del stream
 ### -----------------------------------------------------------------------------------------------
 
 
-
-
 ### INITIALISATION --------------------------------------------------------------------------------
 virtual_sources = [1, N_sensors]
 N_segments = 0
-for duration in durations :
+for duration in durations:
     if segment_length < duration:
-        cuts = list(arange(0, duration-segment_length, segment_step))
+        cuts = list(arange(0, duration - segment_length, segment_step))
     else:
         cuts = [0]
     N_segments += len(cuts)
 
 try:
-    interf_db = np.zeros((len(virtual_sources), N_sensors, N_segments, int(segment_length/dt)+1))
+    interf_db = np.zeros(
+        (len(virtual_sources), N_sensors, N_segments, int(segment_length / dt) + 1)
+    )
 except MemoryError:
-    print(f"\033[91mID {ID} | x_mid {x_mid} | MemoryError: Unable to allocate memory for interferometry database.\033[0m")
+    print(
+        f"\033[91mID {ID} | x_mid {x_mid} | MemoryError: Unable to allocate memory for interferometry database.\033[0m"
+    )
     raise SystemExit
 try:
-    interf_db_stack = np.zeros((N_sensors, int(segment_length/dt)+1))
+    interf_db_stack = np.zeros((N_sensors, int(segment_length / dt) + 1))
 except MemoryError:
-    print(f"\033[91mID {ID} | x_mid {x_mid} | MemoryError: Unable to allocate memory for interferometry stack.\033[0m")
+    print(
+        f"\033[91mID {ID} | x_mid {x_mid} | MemoryError: Unable to allocate memory for interferometry stack.\033[0m"
+    )
     raise SystemExit
 
 FK_ratios = []
 ### -----------------------------------------------------------------------------------------------
-
-
 
 
 ### FK ratio results file -------------------------------------------------------------------------
@@ -135,41 +139,34 @@ sys.stderr = log_file
 ### -----------------------------------------------------------------------------------------------
 
 
-
-
 ### RUN -------------------------------------------------------------------------------------------
-print(f'ID {ID} | x_mid {x_mid} | Running computation')
+print(f"ID {ID} | x_mid {x_mid} | Running computation")
 sys.stdout = sys.__stdout__
-print(f'ID {ID} | x_mid {x_mid} | Running computation')
+print(f"ID {ID} | x_mid {x_mid} | Running computation")
 sys.stdout = log_file
 
 i_segment = 0
 to_del = []
 for file in files:
-
     stream = read(folder_path + file)
-    stream = stream[start:end+1]
+    stream = stream[start : end + 1]
     duration = np.round(stream[0].stats.endtime - stream[0].stats.starttime, 6)
 
-
     ### DEMAEN AND DETREND ------------------------------------------------------------------------
-    stream.detrend('demean')
+    stream.detrend("demean")
     stream.detrend("linear")
-
 
     ### DECIMATE ---------------------------------------------------------------------------------
     if not isclose(stream[0].stats.delta, dt, rel_tol=1e-9):
-        ratio = int(dt/ stream[0].stats.delta)
+        ratio = int(dt / stream[0].stats.delta)
         stream.decimate(ratio)
     Nt = stream[0].stats.npts
     dt = stream[0].stats.delta
     f_ech = stream[0].stats.sampling_rate
-    ts_raw = arange(0, Nt*dt-dt, dt)
-
+    ts_raw = arange(0, Nt * dt - dt, dt)
 
     ### ARRAY FORMAT ------------------------------------------------------------------------------
     TX_raw = stream_to_array(stream, len(stream), Nt)
-
 
     ### FILTERING (optional) ----------------------------------------------------------------------
     # Can help to remove some noise induced by the electrical frequency of the railway (50 Hz in France)
@@ -182,12 +179,13 @@ for file in files:
     #         TX_raw[:,i] = filtfilt(b, a, trace)
     #     f0 += 50
 
-
     ### LOOP ON SEGMENTS --------------------------------------------------------------------------
     cut_start = 0
-    while cut_start < duration - segment_length or isclose(cut_start, duration - segment_length, rel_tol=1e-6):
+    while cut_start < duration - segment_length or isclose(
+        cut_start, duration - segment_length, rel_tol=1e-6
+    ):
         ### CUT SEGMENT ---------------------------------------------------------------------------
-        TX, _ = cut(TX_raw, ts_raw, cut_start, cut_start+segment_length)
+        TX, _ = cut(TX_raw, ts_raw, cut_start, cut_start + segment_length)
 
         ### FK SELECTION --------------------------------------------------------------------------
         # Zero padding for better resolution if length is less than 2000 samples [can improve results but takes more time to compute]
@@ -200,20 +198,20 @@ for file in files:
 
         # Compute the FK diagram
         fs = rfftfreq(TX_tmp.shape[0], dt)
-        try :
+        try:
             fimax = np.where(fs >= f_max)[0][0]
-        except :
-            fimax = len(fs)-1
-        try :
+        except:
+            fimax = len(fs) - 1
+        try:
             fimin = np.where(fs >= f_min)[0][0]
-        except :
+        except:
             fimin = 0
-        fs = fs[fimin:fimax+1]
+        fs = fs[fimin : fimax + 1]
 
-        ks = fftfreq(TX_tmp.shape[1], positions[1]-positions[0])
+        ks = fftfreq(TX_tmp.shape[1], positions[1] - positions[0])
 
         FX = rfft(TX_tmp, axis=0)
-        FX = FX[fimin:fimax+1,:]
+        FX = FX[fimin : fimax + 1, :]
         n_k = FX.shape[1]
 
         FK = fft(FX, axis=1)
@@ -221,18 +219,18 @@ for file in files:
         FK = np.abs(FK)
 
         # Separate positive and negative wavenumbers
-        if n_k%2 == 0:
-            K_pos = FK[:, 1:int(n_k/2)]
-            ks_pos = ks[1:int(n_k/2)]
+        if n_k % 2 == 0:
+            K_pos = FK[:, 1 : int(n_k / 2)]
+            ks_pos = ks[1 : int(n_k / 2)]
 
-            K_neg = FK[:, int(n_k/2)+1:]
-            ks_neg = ks[int(n_k/2)+1:]
+            K_neg = FK[:, int(n_k / 2) + 1 :]
+            ks_neg = ks[int(n_k / 2) + 1 :]
         else:
-            K_pos = FK[:, 1:int(n_k/2)+1]
-            ks_pos = ks[1:int(n_k/2)+1]
+            K_pos = FK[:, 1 : int(n_k / 2) + 1]
+            ks_pos = ks[1 : int(n_k / 2) + 1]
 
-            K_neg = FK[:, int(n_k/2)+1:]
-            ks_neg = ks[int(n_k/2)+1:]
+            K_neg = FK[:, int(n_k / 2) + 1 :]
+            ks_neg = ks[int(n_k / 2) + 1 :]
 
         # Limit the FK diagrams to the velocity range as in Cheng et al. (2018) [Users should avoid wavenumber=frequency/velocity > 1/(2*dx) by limiting frequencies in accordance to the velocities to study]
         fs_min_lim_neg = v_min * abs(ks_neg)
@@ -243,7 +241,7 @@ for file in files:
                 K_neg[i_flim:, i_k] = 0
             if fs_min_lim_neg[i_k] >= fs[0] and fs_min_lim_neg[i_k] <= fs[-1]:
                 i_flim = np.where(fs >= fs_min_lim_neg[i_k])[0][0]
-                K_neg[:i_flim+1, i_k] = 0
+                K_neg[: i_flim + 1, i_k] = 0
 
         fs_min_lim_pos = v_min * abs(ks_pos)
         fs_max_lim_pos = v_max * abs(ks_pos)
@@ -253,21 +251,21 @@ for file in files:
                 K_pos[i_flim:, i_k] = 0
             if fs_min_lim_pos[i_k] >= fs[0] and fs_min_lim_pos[i_k] <= fs[-1]:
                 i_flim = np.where(fs >= fs_min_lim_pos[i_k])[0][0]
-                K_pos[:i_flim+1, i_k] = 0
+                K_pos[: i_flim + 1, i_k] = 0
 
         # Compute the FK ratio
         FK_ratio = 0
         source_position = None
 
         if np.sum(K_pos) > np.sum(K_neg):
-            FK_ratio = np.sum(K_pos)/np.sum(K_neg) - 1
-            if FK_ratio > FK_ratio_threshold :
+            FK_ratio = np.sum(K_pos) / np.sum(K_neg) - 1
+            if FK_ratio > FK_ratio_threshold:
                 source_position = "R"
                 FK_ratios.append([i_segment, abs(FK_ratio)])
 
         elif np.sum(K_neg) > np.sum(K_pos):
-            FK_ratio = - np.sum(K_neg)/np.sum(K_pos) + 1
-            if FK_ratio < -FK_ratio_threshold :
+            FK_ratio = -np.sum(K_neg) / np.sum(K_pos) + 1
+            if FK_ratio < -FK_ratio_threshold:
                 source_position = "L"
                 FK_ratios.append([i_segment, abs(FK_ratio)])
 
@@ -298,53 +296,55 @@ for file in files:
         # plt.tight_layout()
         # plt.close()
 
-        file_FK_ratios.write(f"{file} - {cut_start:.2f} - {source_position} - {FK_ratio}\n")
+        file_FK_ratios.write(
+            f"{file} - {cut_start:.2f} - {source_position} - {FK_ratio}\n"
+        )
 
-        if source_position == "L" or source_position == "R" :
-
+        if source_position == "L" or source_position == "R":
             ### TEMPORAL NORMALIZATION (optional) -----------------------------------------------------
             # Not useful when using trains as sources
             # TX = normalize(TX, dt, clip_factor=1.0, norm_method="clipping")
             # TX = normalize(TX, dt, norm_win=0.01, norm_method="ramn")
 
-
             ### WHITENING -----------------------------------------------------------------------------
             TX = whiten(TX, f_ech, 0, f_max)
 
             ### INTERFEROMETRY ------------------------------------------------------------------------
-            for i_s, virtual_source in enumerate(virtual_sources) :
-                t_s = TX.T[virtual_source-1]
+            for i_s, virtual_source in enumerate(virtual_sources):
+                t_s = TX.T[virtual_source - 1]
 
                 for i_r, t_r in enumerate(TX.T):
                     correl = correlate(t_s, t_r)
                     tmp = np.copy(correl)
-                    tmp_0 = tmp[int(len(correl)//2)]
-                    tmp_del_tmp_0 = np.delete(tmp, int(len(correl)//2))
+                    tmp_0 = tmp[int(len(correl) // 2)]
+                    tmp_del_tmp_0 = np.delete(tmp, int(len(correl) // 2))
                     acausal, causal = np.hsplit(tmp_del_tmp_0, 2)
                     acausal = np.flip(acausal)
 
-                    if source_position == "R" :
+                    if source_position == "R":
                         if virtual_source == 1:
                             correl_sym = causal
                         elif virtual_source == N_sensors:
                             correl_sym = acausal
 
-                    elif source_position == "L" :
+                    elif source_position == "L":
                         if virtual_source == 1:
                             correl_sym = acausal
                         elif virtual_source == N_sensors:
                             correl_sym = causal
 
                     correl_sym = np.insert(correl_sym, 0, tmp_0)
-                    correl_sym = correl_sym[0:int(segment_length/dt)+1]
+                    correl_sym = correl_sym[0 : int(segment_length / dt) + 1]
 
-                    for i, (correl_val, tukey_val)  in enumerate(zip(correl_sym, tukey(len(correl_sym)))):
-                        if i >= len(correl_sym)//2:
+                    for i, (correl_val, tukey_val) in enumerate(
+                        zip(correl_sym, tukey(len(correl_sym)))
+                    ):
+                        if i >= len(correl_sym) // 2:
                             correl_sym[i] = correl_val * tukey_val
 
                     interf_db[i_s, i_r, i_segment, :] = correl_sym
 
-        else :
+        else:
             to_del.append(i_segment)
 
         i_segment += 1
@@ -355,33 +355,62 @@ for file in files:
             break
 
 
-
 ### STACK INTERFEROMETRY --------------------------------------------------------------------------
 FK_ratios = np.array(FK_ratios)
 if FK_ratios.size > 0:
     FK_ratios = FK_ratios[FK_ratios[:, 1].argsort()]
 else:
     sys.stdout = sys.__stdout__
-    print(f"\033[91mID {ID} | x_mid {x_mid} | No segment with FK ratio above {FK_ratio_threshold}\033[0m")
+    print(
+        f"\033[91mID {ID} | x_mid {x_mid} | No segment with FK ratio above {FK_ratio_threshold}\033[0m"
+    )
     sys.stdout = log_file
-    print(f"\033[91mID {ID} | x_mid {x_mid} | No segment with FK ratio above {FK_ratio_threshold}\033[0m")
+    print(
+        f"\033[91mID {ID} | x_mid {x_mid} | No segment with FK ratio above {FK_ratio_threshold}\033[0m"
+    )
     raise Exception("No segment selected")
 
-del files, stream, duration, ts_raw, TX_tmp, ks, FX, FK, K_pos, K_neg, ks_pos, ks_neg, fs_min_lim_neg, fs_max_lim_neg, fs_min_lim_pos, fs_max_lim_pos, tmp, tmp_0, tmp_del_tmp_0, acausal, causal, t_s, t_r, correl_sym, tukey_val
+del (
+    files,
+    stream,
+    duration,
+    ts_raw,
+    TX_tmp,
+    ks,
+    FX,
+    FK,
+    K_pos,
+    K_neg,
+    ks_pos,
+    ks_neg,
+    fs_min_lim_neg,
+    fs_max_lim_neg,
+    fs_min_lim_pos,
+    fs_max_lim_pos,
+    tmp,
+    tmp_0,
+    tmp_del_tmp_0,
+    acausal,
+    causal,
+    t_s,
+    t_r,
+    correl_sym,
+    tukey_val,
+)
 
 interf_db = np.delete(interf_db, to_del, 2)
 
-for i_r in range(N_sensors) :
-    if len(virtual_sources) == 2 :
+for i_r in range(N_sensors):
+    if len(virtual_sources) == 2:
         arr1 = np.copy(interf_db[0, i_r, :, :])
-        arr2 = np.copy(interf_db[1, N_sensors-1-i_r, :, :])
+        arr2 = np.copy(interf_db[1, N_sensors - 1 - i_r, :, :])
         arr = np.vstack((arr1, arr2))
 
     elif len(virtual_sources) == 1:
         if virtual_sources[0] == 1:
             arr = np.copy(interf_db[0, i_r, :, :])
         elif virtual_sources[0] == N_sensors:
-            arr = np.copy(interf_db[0, N_sensors-1-i_r, :, :])
+            arr = np.copy(interf_db[0, N_sensors - 1 - i_r, :, :])
 
     index = []
     for i, tr in enumerate(arr):
@@ -392,27 +421,38 @@ for i_r in range(N_sensors) :
     # PWS
     stream = array_to_stream(arr.T, dt, range(arr.shape[0]))
     stream = stream.stack(stack_type=("pw", pws_nu))
-    interf_db_stack[i_r, 0:int(segment_length/dt)+1] = stream[0].data
+    interf_db_stack[i_r, 0 : int(segment_length / dt) + 1] = stream[0].data
 
 # Stream format ---
 offsets = np.abs(positions - positions[0])
 st_interf = array_to_stream(interf_db_stack.T, dt, offsets)
-name_path = output_dir +  f"xmid{x_mid}_VSG.segy"
+name_path = output_dir + f"xmid{x_mid}_VSG.segy"
 try:
     st_interf.write(name_path, format="SEGY", data_encoding=1, byteorder=sys.byteorder)
 except:
-    print(f"\033[93mID {ID} | x_mid {x_mid} | Warning : Unable to write the SEGY file. Maybe because obspy can't write traces with more than 32767 samples.\033[0m")
+    print(
+        f"\033[93mID {ID} | x_mid {x_mid} | Warning : Unable to write the SEGY file. Maybe because obspy can't write traces with more than 32767 samples.\033[0m"
+    )
 
 name_path = output_dir + f"xmid{x_mid}_VSG.svg"
-display_seismic_wiggle_fromStream(st_interf, positions, path=name_path, norm_method="trace")
+display_seismic_wiggle_fromStream(
+    st_interf, positions, path=name_path, norm_method="trace"
+)
 
 # Spectrum ---
 name_path1 = output_dir + f"xmid{x_mid}_spectrogram.svg"
 name_path2 = output_dir + f"xmid{x_mid}_spectrogramFirstLastTrace.svg"
-display_spectrum_img_fromArray(interf_db_stack.T, dt, positions, path1=name_path1, path2=name_path2, norm_method="trace", f_min=f_min, f_max=f_max)
+display_spectrum_img_fromArray(
+    interf_db_stack.T,
+    dt,
+    positions,
+    path1=name_path1,
+    path2=name_path2,
+    norm_method="trace",
+    f_min=f_min,
+    f_max=f_max,
+)
 ### -----------------------------------------------------------------------------------------------
-
-
 
 
 ### SLANT STACK -----------------------------------------------------------------------------------
@@ -424,7 +464,14 @@ offsets = np.abs(positions - positions[0])
 # (fs, vs, FV) = phase_shift(TX_raw.T, dt, offsets, v_min, v_max, dv, f_min, f_max)
 
 name_path = output_dir + f"xmid{x_mid}_dispersion.svg"
-display_dispersion_img(FV, fs, vs, path=name_path, normalization='Frequency', dx=positions[1]-positions[0])
+display_dispersion_img(
+    FV,
+    fs,
+    vs,
+    path=name_path,
+    normalization="Frequency",
+    dx=positions[1] - positions[0],
+)
 
 name_path = output_dir + f"xmid{x_mid}_dispersion.csv"
 np.savetxt(name_path, FV, delimiter=",")
@@ -437,11 +484,12 @@ np.savetxt(name_path, vs, delimiter=",")
 ### -----------------------------------------------------------------------------------------------
 
 
-
 ### END -------------------------------------------------------------------------------------------
 toc = time()
-print(f"ID {ID} | x_mid {x_mid} | Computation completed in {toc-tic:.1f} s")
+print(f"ID {ID} | x_mid {x_mid} | Computation completed in {toc - tic:.1f} s")
 sys.stdout = sys.__stdout__
-print(f"\033[92mID {ID} | x_mid {x_mid} | Computation completed in {toc-tic:.1f} s\033[0m")
+print(
+    f"\033[92mID {ID} | x_mid {x_mid} | Computation completed in {toc - tic:.1f} s\033[0m"
+)
 sys.stdout = log_file
 ### -----------------------------------------------------------------------------------------------
