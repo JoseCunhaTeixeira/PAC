@@ -1,0 +1,19 @@
+[project]
+name = "PAC"
+version = "2.0.0"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "arviz",
+    "disba",
+    "matplotlib",
+    "numpy",
+    "obspy",
+    "pandas",
+    "plotly",
+    "scipy",
+    "streamlit",
+    "pydantic",
+]
+
+[tool.ruff]
+target-version = "py314"

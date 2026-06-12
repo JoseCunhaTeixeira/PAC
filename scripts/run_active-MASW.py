@@ -5,22 +5,23 @@ License : Creative Commons Attribution 4.0 International
 Date : Feb 4, 2025
 """
 
-import sys
 import argparse
 import json
-import numpy as np
+import sys
 from os import mkdir, path
 from time import time
+
+import numpy as np
 from obspy import read
-from scipy.signal import filtfilt, iirnotch
 
 sys.path.append("./modules/")
-from display import display_dispersion_img
-from obspy2numpy import stream_to_array
-from dispersion import phase_shift
-
 # Do not display warnings
 import warnings
+
+from dispersion import phase_shift
+from display import display_dispersion_img
+from obspy2numpy import stream_to_array
+
 warnings.filterwarnings("error")
 warnings.filterwarnings("ignore")
 
@@ -31,13 +32,13 @@ tic = time()
 ### ARGUMENTS -------------------------------------------------------------------------------------
 parser = argparse.ArgumentParser(description="Process an ID argument.")
 parser.add_argument("-ID", type=int, required=True, help="ID of the script")
-parser.add_argument("-r", type=str, required=True, help="Path to the folder containing the data")
+parser.add_argument(
+    "-r", type=str, required=True, help="Path to the folder containing the data"
+)
 args = parser.parse_args()
 output_dir = args.r
 ID = f"{int(args.ID)}"
 ### -----------------------------------------------------------------------------------------------
-
-
 
 
 ### READ-----------------------------------------------------------------------------
@@ -58,14 +59,12 @@ start = np.round(params["running_distribution"][ID]["start"], 6)
 end = np.round(params["running_distribution"][ID]["end"], 6)
 N_sensors = int(params["MASW_length"])
 MASW_step = int(params["MASW_step"])
-positions = np.round(np.array(params["positions"][start:end+1]), 6)
+positions = np.round(np.array(params["positions"][start : end + 1]), 6)
 d_position = np.round(positions[1] - positions[0], 6)
 source_positions = np.round(params["source_positions"], 6)
 distance_min = np.round(params["distance_min"], 6)
 distance_max = np.round(params["distance_max"], 6)
 ### -----------------------------------------------------------------------------------------------
-
-
 
 
 ### FK ratio results file -------------------------------------------------------------------------
@@ -83,21 +82,18 @@ sys.stderr = log_file
 ### -----------------------------------------------------------------------------------------------
 
 
-
-
 ### RUN -------------------------------------------------------------------------------------------
-print(f'ID {ID} | x_mid {x_mid} | Running computation')
+print(f"ID {ID} | x_mid {x_mid} | Running computation")
 sys.stdout = sys.__stdout__
-print(f'ID {ID} | x_mid {x_mid} | Running computation')
+print(f"ID {ID} | x_mid {x_mid} | Running computation")
 sys.stdout = log_file
 
 FVs = []
 
 for file, source_position in zip(files, source_positions):
-
     ### INITIALIZATION -----------------------------------------------------------------------
     # If source position is in the range of positions, skip
-    if (source_position >= positions[0] and source_position <= positions[-1]):
+    if source_position >= positions[0] and source_position <= positions[-1]:
         continue
 
     # Check if source at the left or right of the window
@@ -111,26 +107,22 @@ for file, source_position in zip(files, source_positions):
         continue
 
     # If the source position is too close to the positions, skip
-    if abs(source_position - origin) < distance_min: 
+    if abs(source_position - origin) < distance_min:
         continue
-
 
     ### READ FILE ---------------------------------------------------------------------------------
     stream = read(folder_path + file)
-    stream = stream[start:end+1]
+    stream = stream[start : end + 1]
     Nt = stream[0].stats.npts
     dt = stream[0].stats.delta
     f_ech = stream[0].stats.sampling_rate
 
-
     ### DEMAEN AND DETREND -----------------------------------------------------------------------
-    stream.detrend('demean')
+    stream.detrend("demean")
     stream.detrend("linear")
-
 
     ### ARRAY FORMAT ------------------------------------------------------------------------------
     TX_raw = stream_to_array(stream, len(stream), Nt)
-
 
     ### FILTERING (optional) ----------------------------------------------------------------------
     # Can help to remove some noise induced by the electrical frequency of the railway (50 Hz in France)
@@ -143,7 +135,6 @@ for file, source_position in zip(files, source_positions):
     #         TX_raw[:,i] = filtfilt(b, a, trace)
     #     f0 += 50
 
-
     ### SLANT STACK -------------------------------------------------------------------------------
     offsets = np.abs(positions - source_position)
     (fs, vs, FV) = phase_shift(TX_raw.T, dt, offsets, v_min, v_max, dv, f_min, f_max)
@@ -154,13 +145,13 @@ for file, source_position in zip(files, source_positions):
     ### -------------------------------------------------------------------------------------------
 
 
-
-
 ### SAVE RESULTS ----------------------------------------------------------------------------------
 if not FVs:
     print(f"ID {ID} | x_mid {x_mid} | No valid data found for this x_mid")
     sys.stdout = sys.__stdout__
-    print(f"\033[93mID {ID} | x_mid {x_mid} | No valid data found for this x_mid\033[0m")
+    print(
+        f"\033[93mID {ID} | x_mid {x_mid} | No valid data found for this x_mid\033[0m"
+    )
     sys.stdout = log_file
     log_file.close()
     sys.exit()
@@ -177,7 +168,14 @@ print(FVs.shape)
 FV_stacked = np.mean(FVs, axis=0)
 
 name_path = output_dir + f"xmid{x_mid}_dispersion.svg"
-display_dispersion_img(FV_stacked, fs, vs, path=name_path, normalization='Frequency', dx=positions[1]-positions[0])
+display_dispersion_img(
+    FV_stacked,
+    fs,
+    vs,
+    path=name_path,
+    normalization="Frequency",
+    dx=positions[1] - positions[0],
+)
 
 name_path = output_dir + f"xmid{x_mid}_dispersion.csv"
 np.savetxt(name_path, FV_stacked, delimiter=",")
@@ -190,11 +188,12 @@ np.savetxt(name_path, vs, delimiter=",")
 ### -----------------------------------------------------------------------------------------------
 
 
-
 ### END -------------------------------------------------------------------------------------------
 toc = time()
-print(f"ID {ID} | x_mid {x_mid} | Computation completed in {toc-tic:.1f} s")
+print(f"ID {ID} | x_mid {x_mid} | Computation completed in {toc - tic:.1f} s")
 sys.stdout = sys.__stdout__
-print(f"\033[92mID {ID} | x_mid {x_mid} | Computation completed in {toc-tic:.1f} s\033[0m")
+print(
+    f"\033[92mID {ID} | x_mid {x_mid} | Computation completed in {toc - tic:.1f} s\033[0m"
+)
 sys.stdout = log_file
 ### -----------------------------------------------------------------------------------------------
