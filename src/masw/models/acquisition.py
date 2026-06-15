@@ -6,13 +6,14 @@ from pydantic import BaseModel, computed_field, model_validator
 class AcquisitionParameters(BaseModel):
     folder_path: Path
     files: list[str]
-    positions: list[float]
+    durations: list[float]
     source_positions: list[float]
+    receiver_positions: list[float]
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
-    def file_paths(self) -> list[Path]:
-        return [self.folder_path / file for file in self.files]
+    def n_receivers(self) -> int:
+        return len(self.receiver_positions)
 
     @model_validator(mode="after")
     def validate_config(self):
@@ -20,22 +21,16 @@ class AcquisitionParameters(BaseModel):
             if not (self.folder_path / file).exists():
                 raise ValueError(f"File not found: {file}")
 
-        if sorted(self.positions) != self.positions:
+        if sorted(self.receiver_positions) != self.receiver_positions:
             raise ValueError("Sensor positions must be sorted")
 
-        if len(self.positions) < 2:
-            raise ValueError("At least two sensor positions are required")
+        if len(self.receiver_positions) < 2:
+            raise ValueError("At least two receiver positions are required")
 
         if len(self.files) != len(self.source_positions):
             raise ValueError("files and source_positions must have the same length")
 
+        if len(self.files) != len(self.durations):
+            raise ValueError("files and durations must have the same length")
+
         return self
-
-
-class AcquisitionInfo(BaseModel):
-    folder_path: Path
-    files: list[str]
-    durations: list[float]
-    source_positions: list[float]
-    sensor_positions: list[float]
-    n_receivers: int

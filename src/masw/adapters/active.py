@@ -22,8 +22,7 @@ def build_active_pipeline(
 
     load_kwargs = {
         "file_paths": window.selected_files,
-        "data_type": "segy",
-        "key": "signal",
+        "data_type": "segd",
         "receivers_to_load": window.receiver_indices,
     }
 
@@ -39,7 +38,7 @@ def build_active_pipeline(
         >> Detrend(method="linear")
         >> Mute(**mute_kwargs)
         >> Dispersion(**dispersion_kwargs)
-        >> Stack(**stack_kwargs)
+        >> Stack(**stack_kwargs, exclude_none=True)
         >> Plot(folder_path=output_folder)
         >> Save(folder_path=output_folder)
     )

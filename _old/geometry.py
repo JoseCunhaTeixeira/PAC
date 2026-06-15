@@ -19,8 +19,8 @@ def build_geometry_figure(
 
     # Receivers
     fig.add_scatter(
-        x=acquisition_params.positions,
-        y=[0] * len(acquisition_params.positions),
+        x=acquisition_params.receiver_positions,
+        y=[0] * len(acquisition_params.receiver_positions),
         mode="markers",
         name="Receivers",
     )
@@ -35,9 +35,9 @@ def build_geometry_figure(
 
     # MASW windows
     for window in windows:
-        xmin = acquisition_params.positions[window.receiver_indices[0]]
+        xmin = acquisition_params.receiver_positions[window.receiver_indices[0]]
 
-        xmax = acquisition_params.positions[window.receiver_indices[-1]]
+        xmax = acquisition_params.receiver_positions[window.receiver_indices[-1]]
 
         fig.add_vrect(
             x0=xmin,

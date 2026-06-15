@@ -6,12 +6,13 @@ Date : Feb 4, 2025
 """
 
 import sys
+
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from scipy.fft import fft, fftfreq
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 
 sys.path.append("./modules/")
 from old.modules.misc import arange, verify_expected
@@ -342,10 +343,10 @@ def plot_geophones(selected_geophone_positions, geophone_positions, source_posit
 
 ### -----------------------------------------------------------------------------------------------
 def display_seismic_wiggle_fromStream(
-    stream, x_sensors, path, scale=1.0, norm_method=None, **kwargs
+    stream, x_receivers, path, scale=1.0, norm_method=None, **kwargs
 ):
     for i, tr in enumerate(stream):
-        tr.stats.distance = x_sensors[i] * 1000
+        tr.stats.distance = x_receivers[i] * 1000
     fig = plt.figure(figsize=(18 * CM, 8 * CM), dpi=_DPI)
     if len(kwargs) == 0:
         stream.plot(
@@ -385,7 +386,7 @@ def display_seismic_wiggle_fromStream(
 
 ### -----------------------------------------------------------------------------------------------
 def display_spectrum_img_fromArray(
-    array, dt, x_sensors, path1, path2, norm_method=None, f_min=None, f_max=None
+    array, dt, x_receivers, path1, path2, norm_method=None, f_min=None, f_max=None
 ):
     Nt, Nx = array.shape
     SP = np.fft.rfft(array, axis=0)
@@ -403,7 +404,7 @@ def display_spectrum_img_fromArray(
         for i, col in enumerate(SP.T):
             SP[:, i] = np.abs(col) / np.max(np.abs(col))
 
-    extent = [x_sensors[0], x_sensors[-1], fs[0], fs[-1]]
+    extent = [x_receivers[0], x_receivers[-1], fs[0], fs[-1]]
 
     plt.figure(figsize=(18 * CM, 8 * CM), dpi=_DPI)
     plt.imshow(np.flipud(np.abs(SP)), cmap="gray_r", extent=extent, aspect="auto")
@@ -481,7 +482,7 @@ def display_dispersion_img(
                     fs_mode[::1],
                     vs_mode[::1],
                     dc_mode[::1],
-                    fmt=f"o-",
+                    fmt="o-",
                     ecolor="white",
                     elinewidth=0.5,
                     ms=1,
@@ -492,7 +493,7 @@ def display_dispersion_img(
                 plt.errorbar(
                     fs_mode[::1],
                     vs_mode[::1],
-                    fmt=f"o-",
+                    fmt="o-",
                     elinewidth=0.5,
                     ms=1.5,
                     color="white",
@@ -508,7 +509,7 @@ def display_dispersion_img(
             plt.errorbar(
                 fs_mode,
                 vs_mode,
-                fmt=f"o",
+                fmt="o",
                 elinewidth=0.5,
                 ms=2,
                 color="orange",

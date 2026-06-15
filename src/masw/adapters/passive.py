@@ -9,5 +9,4 @@ def build_passive_pipeline(
     window: MASWWindow,
     output_folder: Path,
 ):
-
     raise NotImplementedError

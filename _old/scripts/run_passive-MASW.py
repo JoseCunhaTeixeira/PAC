@@ -73,7 +73,7 @@ pws_nu = int(params["pws_nu"])
 x_mid = np.round(params["running_distribution"][ID]["x_mid"], 6)
 start = np.round(params["running_distribution"][ID]["start"], 6)
 end = np.round(params["running_distribution"][ID]["end"], 6)
-N_sensors = int(params["MASW_length"])
+N_receivers = int(params["MASW_length"])
 MASW_step = int(params["MASW_step"])
 positions = np.round(np.array(params["positions"][start : end + 1]), 6)
 
@@ -89,7 +89,7 @@ del stream
 
 
 ### INITIALISATION --------------------------------------------------------------------------------
-virtual_sources = [1, N_sensors]
+virtual_sources = [1, N_receivers]
 N_segments = 0
 for duration in durations:
     if segment_length < duration:
@@ -100,7 +100,7 @@ for duration in durations:
 
 try:
     interf_db = np.zeros(
-        (len(virtual_sources), N_sensors, N_segments, int(segment_length / dt) + 1)
+        (len(virtual_sources), N_receivers, N_segments, int(segment_length / dt) + 1)
     )
 except MemoryError:
     print(
@@ -108,7 +108,7 @@ except MemoryError:
     )
     raise SystemExit
 try:
-    interf_db_stack = np.zeros((N_sensors, int(segment_length / dt) + 1))
+    interf_db_stack = np.zeros((N_receivers, int(segment_length / dt) + 1))
 except MemoryError:
     print(
         f"\033[91mID {ID} | x_mid {x_mid} | MemoryError: Unable to allocate memory for interferometry stack.\033[0m"
@@ -324,13 +324,13 @@ for file in files:
                     if source_position == "R":
                         if virtual_source == 1:
                             correl_sym = causal
-                        elif virtual_source == N_sensors:
+                        elif virtual_source == N_receivers:
                             correl_sym = acausal
 
                     elif source_position == "L":
                         if virtual_source == 1:
                             correl_sym = acausal
-                        elif virtual_source == N_sensors:
+                        elif virtual_source == N_receivers:
                             correl_sym = causal
 
                     correl_sym = np.insert(correl_sym, 0, tmp_0)
@@ -400,17 +400,17 @@ del (
 
 interf_db = np.delete(interf_db, to_del, 2)
 
-for i_r in range(N_sensors):
+for i_r in range(N_receivers):
     if len(virtual_sources) == 2:
         arr1 = np.copy(interf_db[0, i_r, :, :])
-        arr2 = np.copy(interf_db[1, N_sensors - 1 - i_r, :, :])
+        arr2 = np.copy(interf_db[1, N_receivers - 1 - i_r, :, :])
         arr = np.vstack((arr1, arr2))
 
     elif len(virtual_sources) == 1:
         if virtual_sources[0] == 1:
             arr = np.copy(interf_db[0, i_r, :, :])
-        elif virtual_sources[0] == N_sensors:
-            arr = np.copy(interf_db[0, N_sensors - 1 - i_r, :, :])
+        elif virtual_sources[0] == N_receivers:
+            arr = np.copy(interf_db[0, N_receivers - 1 - i_r, :, :])
 
     index = []
     for i, tr in enumerate(arr):
