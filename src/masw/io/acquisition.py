@@ -3,7 +3,7 @@ from obspy import read
 from masw.io.paths import INPUT_DIR
 from masw.models.acquisition import AcquisitionInfo
 
-from .yaml import read_source_positions
+from .yaml import read_sensor_positions, read_source_positions
 
 
 def load_acquisition(
@@ -57,10 +57,18 @@ def load_acquisition(
     if list(source_positions.keys()) != files:
         raise ValueError("source_positions.yaml does not match seismic files")
 
+    sensor_positions_file = folder_path / "sensor_positions.yaml"
+    if not sensor_positions_file.exists():
+        raise ValueError(f"Missing file: {sensor_positions_file}")
+    sensor_positions = read_sensor_positions(sensor_positions_file)
+    if len(sensor_positions) != n_receivers:
+        raise ValueError("sensor_positions.yaml does not match seismic files")
+
     return AcquisitionInfo(
         folder_path=folder_path,
         files=files,
         durations=durations,
         source_positions=list(source_positions.values()),
+        sensor_positions=list(sensor_positions),
         n_receivers=n_receivers,
     )

@@ -37,4 +37,5 @@ class AcquisitionInfo(BaseModel):
     files: list[str]
     durations: list[float]
     source_positions: list[float]
+    sensor_positions: list[float]
     n_receivers: int
