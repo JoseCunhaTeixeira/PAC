@@ -3,8 +3,9 @@ from pathlib import Path
 from masw.models.computing import ComputingConfig
 
 
-def load_project(project_dir: Path) -> ComputingConfig:
-
-    return ComputingConfig.model_validate_json(
-        (project_dir / "config.json").read_text()
+def save_project(config: ComputingConfig, project_dir: Path) -> None:
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "config.json").write_text(
+        config.model_dump_json(indent=4),
+        encoding="utf-8",
     )

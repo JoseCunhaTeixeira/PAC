@@ -18,7 +18,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from obspy import read
-
 from Paths import input_dir, output_dir, work_dir
 
 warnings.filterwarnings("ignore")
@@ -61,7 +60,7 @@ def plot_MASW(geophone_positions, MASW_length_idx, MASW_step_idx, source_positio
     # Create a scatter plot
     fig = go.Figure()
 
-    # Add scatter points for selected sensors in blue
+    # Add scatter points for selected receivers in blue
     fig.add_trace(
         go.Scatter(
             x=geophone_positions,
@@ -454,7 +453,7 @@ st.text("")
 st.text("")
 
 st.number_input(
-    "First sensor position [m]",
+    "First receiver position [m]",
     key="ACT_x_start",
     value=None,
     step=0.01,
@@ -475,7 +474,7 @@ st.number_input(
 if st.session_state.ACT_x_start is None or st.session_state.ACT_x_step is None:
     st.text("")
     st.text("")
-    st.info("👆 Define all sensor positions.")
+    st.info("👆 Define all receiver positions.")
     st.stop()
 
 st.session_state.ACT_positions = [
@@ -488,7 +487,7 @@ st.text("")
 st.success("👌 Sensor positions defined.")
 
 data = {
-    "Number of sensors [#]": [st.session_state.ACT_N_traces],
+    "Number of receivers [#]": [st.session_state.ACT_N_traces],
     "Sensors positions [m]": [st.session_state.ACT_positions],
 }
 df = pd.DataFrame(data)
@@ -502,7 +501,7 @@ st.text("")
 st.text("")
 
 st.number_input(
-    "MASW window length [number of sensors]",
+    "MASW window length [number of receivers]",
     key="ACT_MASW_length",
     value=None,
     step=1,
@@ -511,7 +510,7 @@ st.number_input(
     on_change=set_MASW,
 )
 st.number_input(
-    "MASW window step [number of sensors]",
+    "MASW window step [number of receivers]",
     key="ACT_MASW_step",
     value=None,
     step=1,

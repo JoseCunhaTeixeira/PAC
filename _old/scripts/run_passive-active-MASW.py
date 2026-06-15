@@ -5,27 +5,30 @@ License : Creative Commons Attribution 4.0 International
 Date : Feb 4, 2025
 """
 
-import sys
 import argparse
 import json
-import numpy as np
-from os import mkdir, path, system
+import sys
+from os import mkdir, path
 from time import time
+
+import numpy as np
 from obspy import read
-from scipy.fft import fft, fftfreq, rfft, rfftfreq
-from scipy.signal import correlate, filtfilt, iirnotch
+from scipy.signal import correlate
 from scipy.signal.windows import tukey
-from math import isclose
 
 sys.path.append("./modules/")
-from misc import arange
-from signal_processing import normalize, whiten, cut
-from display import display_dispersion_img, display_spectrum_img_fromArray, display_seismic_wiggle_fromStream
-from obspy2numpy import array_to_stream, stream_to_array
-from dispersion import phase_shift
-
 # Do not display warnings
 import warnings
+
+from dispersion import phase_shift
+from display import (
+    display_dispersion_img,
+    display_seismic_wiggle_fromStream,
+    display_spectrum_img_fromArray,
+)
+from obspy2numpy import array_to_stream, stream_to_array
+from signal_processing import whiten
+
 warnings.filterwarnings("error")
 warnings.filterwarnings("ignore")
 
@@ -35,13 +38,13 @@ tic = time()
 ### ARGUMENTS -------------------------------------------------------------------------------------
 parser = argparse.ArgumentParser(description="Process an ID argument.")
 parser.add_argument("-ID", type=int, required=True, help="ID of the script")
-parser.add_argument("-r", type=str, required=True, help="Path to the folder containing the data")
+parser.add_argument(
+    "-r", type=str, required=True, help="Path to the folder containing the data"
+)
 args = parser.parse_args()
 output_dir = args.r
 ID = f"{int(args.ID)}"
 ### -----------------------------------------------------------------------------------------------
-
-
 
 
 ### READ-----------------------------------------------------------------------------
@@ -61,16 +64,14 @@ pws_nu = params["pws_nu"]
 x_mid = np.round(params["running_distribution"][ID]["x_mid"], 6)
 start = np.round(params["running_distribution"][ID]["start"], 6)
 end = np.round(params["running_distribution"][ID]["end"], 6)
-N_sensors = int(params["MASW_length"])
+N_receivers = int(params["MASW_length"])
 MASW_step = int(params["MASW_step"])
-positions = np.round(np.array(params["positions"][start:end+1]), 6)
+positions = np.round(np.array(params["positions"][start : end + 1]), 6)
 d_position = np.round(positions[1] - positions[0], 6)
 source_positions = np.round(params["source_positions"], 6)
 distance_min = np.round(params["distance_min"], 6)
 distance_max = np.round(params["distance_max"], 6)
 ### -----------------------------------------------------------------------------------------------
-
-
 
 
 ### FK ratio results file -------------------------------------------------------------------------
@@ -88,22 +89,19 @@ sys.stderr = log_file
 ### -----------------------------------------------------------------------------------------------
 
 
-
-
 ### RUN -------------------------------------------------------------------------------------------
-print(f'ID {ID} | x_mid {x_mid} | Running computation')
+print(f"ID {ID} | x_mid {x_mid} | Running computation")
 sys.stdout = sys.__stdout__
-print(f'ID {ID} | x_mid {x_mid} | Running computation')
+print(f"ID {ID} | x_mid {x_mid} | Running computation")
 sys.stdout = log_file
 
 
 VSGs = []
 
 for i_segment, (file, source_position) in enumerate(zip(files, source_positions)):
-
     ### INITIALIZATION -----------------------------------------------------------------------
     # If source position is in the range of positions, skip
-    if (source_position >= positions[0] and source_position <= positions[-1]):
+    if source_position >= positions[0] and source_position <= positions[-1]:
         continue
 
     # Check if source at the left or right of the window
@@ -119,26 +117,22 @@ for i_segment, (file, source_position) in enumerate(zip(files, source_positions)
         continue
 
     # If the source position is too close to the positions, skip
-    if abs(source_position - origin) < distance_min: 
+    if abs(source_position - origin) < distance_min:
         continue
-
 
     ### READ FILE ---------------------------------------------------------------------------------
     stream = read(folder_path + file)
-    stream = stream[start:end+1]
+    stream = stream[start : end + 1]
     Nt = stream[0].stats.npts
     dt = stream[0].stats.delta
     f_ech = stream[0].stats.sampling_rate
 
-
     ### DEMAEN AND DETREND -----------------------------------------------------------------------
-    stream.detrend('demean')
+    stream.detrend("demean")
     stream.detrend("linear")
-
 
     ### ARRAY FORMAT ------------------------------------------------------------------------------
     TX_raw = stream_to_array(stream, len(stream), Nt)
-
 
     ### FILTERING (optional) ----------------------------------------------------------------------
     # Can help to remove some noise induced by the electrical frequency of the railway (50 Hz in France)
@@ -151,48 +145,46 @@ for i_segment, (file, source_position) in enumerate(zip(files, source_positions)
     #         TX_raw[:,i] = filtfilt(b, a, trace)
     #     f0 += 50
 
-
     ### WHITENING -----------------------------------------------------------------------------
     TX = whiten(TX_raw, f_ech, 0, f_max)
 
-
     ### INTERFEROMETRY ------------------------------------------------------------------------
-    for virtual_source in [1, N_sensors]:
-        t_s = TX.T[virtual_source-1]
+    for virtual_source in [1, N_receivers]:
+        t_s = TX.T[virtual_source - 1]
 
         VSG = []
 
         for t_r in TX.T:
             correl = correlate(t_s, t_r)
             tmp = np.copy(correl)
-            tmp_0 = tmp[int(len(correl)//2)]
-            tmp_del_tmp_0 = np.delete(tmp, int(len(correl)//2))
+            tmp_0 = tmp[int(len(correl) // 2)]
+            tmp_del_tmp_0 = np.delete(tmp, int(len(correl) // 2))
             acausal, causal = np.hsplit(tmp_del_tmp_0, 2)
             acausal = np.flip(acausal)
 
-            if source_dir == "R" :
+            if source_dir == "R":
                 if virtual_source == 1:
                     trace = causal
-                elif virtual_source == N_sensors:
+                elif virtual_source == N_receivers:
                     trace = acausal
 
-            elif source_dir == "L" :
+            elif source_dir == "L":
                 if virtual_source == 1:
                     trace = acausal
-                elif virtual_source == N_sensors:
+                elif virtual_source == N_receivers:
                     trace = causal
 
             trace = np.insert(trace, 0, tmp_0)
-            trace = trace[0:int(TX_raw.shape[0]/dt)+1]
+            trace = trace[0 : int(TX_raw.shape[0] / dt) + 1]
 
-            for i, (correl_val, tukey_val)  in enumerate(zip(trace, tukey(len(trace)))):
-                if i >= len(trace)//2:
+            for i, (correl_val, tukey_val) in enumerate(zip(trace, tukey(len(trace)))):
+                if i >= len(trace) // 2:
                     trace[i] = correl_val * tukey_val
 
             VSG.append(trace)
 
         VSG = np.array(VSG)
-        if virtual_source == N_sensors:
+        if virtual_source == N_receivers:
             VSG = np.flip(VSG, axis=0)
 
         VSGs.append(VSG)
@@ -216,19 +208,32 @@ for i_r in range(VSGs.shape[1]):
 
 # Stream format ---
 st_interf = array_to_stream(VSG.T, dt, positions)
-name_path = output_dir +  f"xmid{x_mid}_VSG.segy"
+name_path = output_dir + f"xmid{x_mid}_VSG.segy"
 try:
     st_interf.write(name_path, format="SEGY", data_encoding=1, byteorder=sys.byteorder)
 except:
-    print(f"\033[93mID {ID} | x_mid {x_mid} | Warning : Unable to write the SEGY file. Maybe because obspy can't write traces with more than 32767 samples.\033[0m")
+    print(
+        f"\033[93mID {ID} | x_mid {x_mid} | Warning : Unable to write the SEGY file. Maybe because obspy can't write traces with more than 32767 samples.\033[0m"
+    )
 
 name_path = output_dir + f"xmid{x_mid}_VSG.svg"
-display_seismic_wiggle_fromStream(st_interf, positions, path=name_path, norm_method="trace")
+display_seismic_wiggle_fromStream(
+    st_interf, positions, path=name_path, norm_method="trace"
+)
 
 # Spectrum ---
 name_path1 = output_dir + f"xmid{x_mid}_spectrogram.svg"
 name_path2 = output_dir + f"xmid{x_mid}_spectrogramFirstLastTrace.svg"
-display_spectrum_img_fromArray(VSG.T, dt, positions, path1=name_path1, path2=name_path2, norm_method="trace", f_min=f_min, f_max=f_max)
+display_spectrum_img_fromArray(
+    VSG.T,
+    dt,
+    positions,
+    path1=name_path1,
+    path2=name_path2,
+    norm_method="trace",
+    f_min=f_min,
+    f_max=f_max,
+)
 
 
 ### SLANT STACK -------------------------------------------------------------------------------
@@ -236,7 +241,14 @@ offsets = np.abs(positions - positions[0])
 (fs, vs, FV) = phase_shift(VSG, dt, offsets, v_min, v_max, dv, f_min, f_max)
 
 name_path = output_dir + f"xmid{x_mid}_dispersion.svg"
-display_dispersion_img(FV, fs, vs, path=name_path, normalization='Frequency', dx=positions[1]-positions[0])
+display_dispersion_img(
+    FV,
+    fs,
+    vs,
+    path=name_path,
+    normalization="Frequency",
+    dx=positions[1] - positions[0],
+)
 
 name_path = output_dir + f"xmid{x_mid}_dispersion.csv"
 np.savetxt(name_path, FV, delimiter=",")
@@ -249,11 +261,12 @@ np.savetxt(name_path, vs, delimiter=",")
 ### -----------------------------------------------------------------------------------------------
 
 
-
 ### END -------------------------------------------------------------------------------------------
 toc = time()
-print(f"ID {ID} | x_mid {x_mid} | Computation completed in {toc-tic:.1f} s")
+print(f"ID {ID} | x_mid {x_mid} | Computation completed in {toc - tic:.1f} s")
 sys.stdout = sys.__stdout__
-print(f"\033[92mID {ID} | x_mid {x_mid} | Computation completed in {toc-tic:.1f} s\033[0m")
+print(
+    f"\033[92mID {ID} | x_mid {x_mid} | Computation completed in {toc - tic:.1f} s\033[0m"
+)
 sys.stdout = log_file
 ### -----------------------------------------------------------------------------------------------

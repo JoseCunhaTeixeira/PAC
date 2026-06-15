@@ -2,6 +2,9 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from sigproc.base.acquisition import Acquisition
+from sigproc.base.coordinate import Coordinate
+
 from masw.models.acquisition import AcquisitionParameters
 from masw.models.masw import MASWParameters
 
@@ -13,6 +16,7 @@ class MASWWindow:
     xmid: float
     selected_files: list[Path]
     receiver_indices: list[int]
+    acquisitions: list[Acquisition]
 
 
 def build_windows(
@@ -20,7 +24,7 @@ def build_windows(
     masw_params: MASWParameters,
 ) -> list[MASWWindow]:
 
-    positions = acquisition_params.positions
+    positions = acquisition_params.receiver_positions
 
     windows: list[MASWWindow] = []
 
@@ -41,6 +45,7 @@ def build_windows(
         xmid = 0.5 * (xmin + xmax)
 
         selected_files = []
+        acquisitions = []
 
         for i, (file, source_x) in enumerate(
             zip(
@@ -63,6 +68,15 @@ def build_windows(
 
             selected_files.append(acquisition_params.folder_path / file)
 
+            acquisitions.append(
+                Acquisition(
+                    source=Coordinate(x=source_x, y=0, z=0),
+                    receivers=tuple(
+                        Coordinate(x=x, y=0, z=0) for x in receiver_positions
+                    ),
+                )
+            )
+
         if not selected_files:
             logger.warning(f"No valid shots for xmid={xmid:.2f}")
             continue
@@ -72,6 +86,7 @@ def build_windows(
                 xmid=xmid,
                 receiver_indices=receiver_indices,
                 selected_files=selected_files,
+                acquisitions=acquisitions,
             )
         )
 

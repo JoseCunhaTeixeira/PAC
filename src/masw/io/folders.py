@@ -1,16 +1,14 @@
+import logging
+
 from masw.io.paths import INPUT_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def get_input_folders() -> list[str]:
-
-    print(f"INPUT_DIR = {INPUT_DIR}")
-
     if not INPUT_DIR.exists():
-        print("INPUT_DIR does not exist")
+        logger.warning(f"INPUT_DIR {INPUT_DIR} does not exist")
         return []
-
     folders = sorted(folder.name for folder in INPUT_DIR.iterdir() if folder.is_dir())
-
-    print(f"Folders found: {folders}")
-
+    logger.info(f"Folders found: {folders}")
     return folders

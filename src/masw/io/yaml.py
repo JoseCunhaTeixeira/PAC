@@ -3,7 +3,7 @@ from pathlib import Path
 import yaml
 
 
-def read_sensor_positions(
+def read_receiver_positions(
     file_path: Path,
 ) -> list[float]:
 
@@ -15,7 +15,7 @@ def read_sensor_positions(
         return yaml.safe_load(f)
 
 
-def write_sensor_positions(
+def write_receiver_positions(
     file_path: Path,
     positions: list[float],
 ) -> None:
