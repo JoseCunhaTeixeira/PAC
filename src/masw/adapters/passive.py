@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from masw.adapters.window import MASWWindow
+from masw.adapters.windows import MASWWindow
 from masw.models.computing import PassiveComputingConfig
 
 

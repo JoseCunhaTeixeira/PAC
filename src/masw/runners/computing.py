@@ -3,7 +3,7 @@ from typing import Callable
 from venv import logger
 
 from masw.adapters.registry import PIPELINE_BUILDERS, ProcessingMode
-from masw.adapters.window import MASWWindow, build_windows
+from masw.adapters.windows import MASWWindow, build_windows
 from masw.models.computing import ComputingConfig
 
 
