@@ -47,6 +47,10 @@ def build_windows(
         selected_files = []
         acquisitions = []
 
+        receiver_coords = tuple(
+            Coordinate(x=x, y=0.0, z=0.0) for x in receiver_positions
+        )
+
         for i, (file, source_x) in enumerate(
             zip(
                 acquisition_params.files,
@@ -70,10 +74,8 @@ def build_windows(
 
             acquisitions.append(
                 Acquisition(
-                    source=Coordinate(x=source_x, y=0, z=0),
-                    receivers=tuple(
-                        Coordinate(x=x, y=0, z=0) for x in receiver_positions
-                    ),
+                    source=Coordinate(x=source_x, y=0.0, z=0.0),
+                    receivers=receiver_coords,
                 )
             )
 
