@@ -11,10 +11,7 @@ dependencies = [
     "pandas",
     "plotly",
     "scipy",
-    "streamlit",
     "pydantic",
-    "dash",
-    "dash-bootstrap-components",
     "pyyaml",
 ]
 
