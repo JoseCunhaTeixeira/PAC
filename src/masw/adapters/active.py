@@ -10,7 +10,7 @@ from sigproc.transformers import (
     Stack,
 )
 
-from masw.adapters.window import MASWWindow
+from masw.adapters.windows import MASWWindow
 from masw.models.computing import ActiveComputingConfig
 
 

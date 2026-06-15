@@ -1,6 +1,6 @@
 from plotly import graph_objects as go
 
-from masw.adapters.window import build_windows
+from masw.adapters.windows import build_windows
 from masw.models.acquisition import AcquisitionParameters
 from masw.models.masw import MASWParameters
 
