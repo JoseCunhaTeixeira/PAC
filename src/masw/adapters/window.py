@@ -1,0 +1,80 @@
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+
+from masw.models.acquisition import AcquisitionParameters
+from masw.models.masw import MASWParameters
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class MASWWindow:
+    xmid: float
+    selected_files: list[Path]
+    receiver_indices: list[int]
+
+
+def build_windows(
+    acquisition_params: AcquisitionParameters,
+    masw_params: MASWParameters,
+) -> list[MASWWindow]:
+
+    positions = acquisition_params.positions
+
+    windows: list[MASWWindow] = []
+
+    for start in range(
+        0,
+        len(positions) - masw_params.length + 1,
+        masw_params.step,
+    ):
+        stop = start + masw_params.length
+
+        receiver_indices = list(range(start, stop))
+
+        receiver_positions = positions[start:stop]
+
+        xmin = receiver_positions[0]
+        xmax = receiver_positions[-1]
+
+        xmid = 0.5 * (xmin + xmax)
+
+        selected_files = []
+
+        for i, (file, source_x) in enumerate(
+            zip(
+                acquisition_params.files,
+                acquisition_params.source_positions,
+                strict=True,
+            )
+        ):
+            # source must be outside the MASW window
+            if xmin <= source_x <= xmax:
+                continue
+
+            distance = abs(source_x - xmid)
+
+            if distance < masw_params.distance_min:
+                continue
+
+            if distance > masw_params.distance_max:
+                continue
+
+            selected_files.append(acquisition_params.folder_path / file)
+
+        if not selected_files:
+            logger.warning(f"No valid shots for xmid={xmid:.2f}")
+            continue
+
+        windows.append(
+            MASWWindow(
+                xmid=xmid,
+                receiver_indices=receiver_indices,
+                selected_files=selected_files,
+            )
+        )
+
+    logger.info(f"Built {len(windows)} valid MASW windows")
+
+    return windows
