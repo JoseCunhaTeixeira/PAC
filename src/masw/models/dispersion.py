@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, model_validator
 class DispersionParameters(BaseModel):
     fmin: float = Field(ge=0)
     fmax: float = Field(gt=0)
-    vmin: float = Field(ge=0)
+    vmin: float = Field(gt=0)
     vmax: float = Field(gt=0)
     dv: float = Field(gt=0)
 
