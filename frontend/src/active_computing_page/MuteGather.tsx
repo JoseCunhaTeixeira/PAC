@@ -203,7 +203,7 @@ export function MuteGather({
   return (
     <div>
       <label>
-        Shot file:{" "}
+        Preview shot file:{" "}
         <select value={file} onChange={(e) => setFile(e.target.value)}>
           {acquisition.files.map((f) => (
             <option key={f} value={f}>{f}</option>

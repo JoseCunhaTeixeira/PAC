@@ -1,7 +1,15 @@
+from enum import Enum
+
 from pydantic import BaseModel, Field, model_validator
 
 
+class MutingMethod(str, Enum):
+    NONE = "none"
+    MUTE = "mute"
+
+
 class MutingParameters(BaseModel):
+    method: MutingMethod = MutingMethod.NONE
     tmin: float = Field(ge=0)
     tmax: float = Field(ge=0)
     vmin: float = Field(ge=0)

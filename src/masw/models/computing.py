@@ -5,9 +5,15 @@ from pydantic import BaseModel, Field, model_validator
 from masw.models.acquisition import AcquisitionParameters
 from masw.models.dispersion import DispersionParameters
 from masw.models.execution import ExecutionParameters
+from masw.models.filtering import FilteringParameters
 from masw.models.masw import MASWParameters
 from masw.models.modes import ProcessingMode
 from masw.models.muting import MutingParameters
+from masw.models.normalization import NormalizationParameters
+from masw.models.selection import SelectionParameters
+from masw.models.slicing import SlicingParameters
+from masw.models.stacking import StackingParameters
+from masw.models.whitening import WhiteningParameters
 
 
 class ComputingConfig(BaseModel):
@@ -34,6 +40,13 @@ class ActiveComputingConfig(ComputingConfig):
 
 class PassiveComputingConfig(ComputingConfig):
     mode: Literal[ProcessingMode.PASSIVE] = ProcessingMode.PASSIVE
+    filtering_params: FilteringParameters
+    slicing_params: SlicingParameters
+    selection_params: SelectionParameters
+    whitening_params: WhiteningParameters
+    normalization_params: NormalizationParameters
+    stacking_params: StackingParameters
+    dispersion_params: DispersionParameters
 
 
 class ActivePassiveComputingConfig(ComputingConfig):
