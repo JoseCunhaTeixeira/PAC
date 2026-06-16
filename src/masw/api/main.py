@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from masw.api.routers import acquisitions, config
+from masw.api.routers import acquisitions, config, run, windows
 from masw.logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,8 @@ app.add_middleware(
 
 app.include_router(acquisitions.router)
 app.include_router(config.router)
+app.include_router(run.router)
+app.include_router(windows.router)
 
 
 @app.get("/health")
