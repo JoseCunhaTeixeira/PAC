@@ -30,7 +30,7 @@ interface ValidationError {
 
 export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
   const [masw, setMasw] = useState<Masw>({ length: 3, step: 1, distance_min: 0, distance_max: 100 });
-  const [dispersion, setDispersion] = useState({ fmin: 0, fmax: 100, vmin: 0, vmax: 1000, dv: 1 });
+  const [dispersion, setDispersion] = useState({ fmin: 0, fmax: 100, vmin: 1, vmax: 1000, dv: 1 });
   const [muting, setMuting] = useState({ vmin: 0, vmax: 10000, taper: 0 });
   const [stacking, setStacking] = useState({ method: "linear", power: 2 });
   const [execution, setExecution] = useState({ n_workers: 1 });
