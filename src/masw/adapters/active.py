@@ -26,9 +26,8 @@ def build_active_pipeline(
         "receivers_to_load": window.receiver_indices,
     }
 
-    dispersion_kwargs = config.dispersion_params.model_dump()
-
     mute_kwargs = config.muting_params.model_dump()
+    dispersion_kwargs = config.dispersion_params.model_dump()
 
     return (
         Load(**load_kwargs)

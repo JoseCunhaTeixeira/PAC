@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ConfigForm } from "./ConfigForm";
 import { API, type Acquisition } from "../api";
 
 export default function App() {
@@ -81,6 +82,8 @@ export default function App() {
             Receiver positions [m]:{" "}
             {acquisition.receiver_positions.join(", ")}
           </p>
+
+          <ConfigForm acquisition={acquisition} />
         </>
       )}
     </div>
