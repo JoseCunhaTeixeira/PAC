@@ -7,6 +7,7 @@ class AcquisitionParameters(BaseModel):
     folder_path: Path
     files: list[str]
     durations: list[float]
+    sampling_frequencies: list[float]
     source_positions: list[float]
     receiver_positions: list[float]
 
@@ -32,5 +33,14 @@ class AcquisitionParameters(BaseModel):
 
         if len(self.files) != len(self.durations):
             raise ValueError("files and durations must have the same length")
+
+        if not all(
+            self.sampling_frequencies[0] == sampling_freq
+            for sampling_freq in self.sampling_frequencies
+        ):
+            raise ValueError("all sampling frequencies must be the same")
+
+        if not all(self.durations[0] == duration for duration in self.durations):
+            raise ValueError("all durations  must be the same")
 
         return self

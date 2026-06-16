@@ -29,7 +29,7 @@ def load_acquisition(
         raise ValueError(f"No seismic files found in {folder_path}")
 
     durations = []
-
+    sampling_frequencies = []
     stream = None
 
     for file in files:
@@ -38,6 +38,7 @@ def load_acquisition(
             str(file_path),
         )
         durations.append(float(stream[0].stats.endtime - stream[0].stats.starttime))
+        sampling_frequencies.append(float(stream[0].stats.sampling_rate))
 
     if stream is None:
         raise ValueError("Unable to read seismic files")
@@ -62,6 +63,7 @@ def load_acquisition(
         folder_path=folder_path,
         files=files,
         durations=durations,
+        sampling_frequencies=list(sampling_frequencies),
         source_positions=list(source_positions.values()),
         receiver_positions=list(receiver_positions),
     )

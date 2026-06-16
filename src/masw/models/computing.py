@@ -8,7 +8,6 @@ from masw.models.execution import ExecutionParameters
 from masw.models.masw import MASWParameters
 from masw.models.modes import ProcessingMode
 from masw.models.muting import MutingParameters
-from masw.models.stacking import StackingParameters
 
 
 class ComputingConfig(BaseModel):
@@ -31,7 +30,6 @@ class ActiveComputingConfig(ComputingConfig):
     mode: Literal[ProcessingMode.ACTIVE] = ProcessingMode.ACTIVE
     muting_params: MutingParameters
     dispersion_params: DispersionParameters
-    stacking_params: StackingParameters
 
 
 class PassiveComputingConfig(ComputingConfig):

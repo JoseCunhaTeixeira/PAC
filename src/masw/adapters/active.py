@@ -30,15 +30,13 @@ def build_active_pipeline(
 
     mute_kwargs = config.muting_params.model_dump()
 
-    stack_kwargs = config.stacking_params.model_dump()
-
     return (
         Load(**load_kwargs)
         >> Detrend(method="constant")
         >> Detrend(method="linear")
         >> Mute(**mute_kwargs)
         >> Dispersion(**dispersion_kwargs)
-        >> Stack(**stack_kwargs, exclude_none=True)
+        >> Stack(method="linear")
         >> Plot(folder_path=output_folder)
         >> Save(folder_path=output_folder)
     )
