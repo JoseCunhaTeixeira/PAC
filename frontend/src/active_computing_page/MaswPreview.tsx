@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { API, type Acquisition, type Masw } from "./api";
+import { API, type Acquisition, type Masw } from "../api";
 
 interface WindowSummary {
   xmid: number;
@@ -28,7 +28,7 @@ const star = (cx: number, cy: number, outer = 7, inner = 3, n = 5) => {
   return pts.join(" ");
 };
 
-const vertBar = (cx, cy, h = 12, w = 2) =>
+const vertBar = (cx: number, cy: number, h = 12, w = 2) =>
   `${cx - w/2},${cy - h/2} ${cx + w/2},${cy - h/2} ${cx + w/2},${cy + h/2} ${cx - w/2},${cy + h/2}`;
 
 export function MaswPreview({
@@ -107,17 +107,17 @@ export function MaswPreview({
       {error && <p style={{ color: "crimson" }}>Error: {error}</p>}
       <p>
         {invalid ? (
-          <em>Adjust window parameters…</em>
+          <em>✘ Invalid window parameters…</em>
         ) : (
           <>
-            <strong>{windows.length}</strong> positions to compute
+            ➜ <strong>{windows.length}</strong> mid positions to compute
           </>
         )}
       </p>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
         <text x={8} y={yS + 4} fontSize={11}>Sources</text>
         <text x={8} y={ySen + 4} fontSize={11}>Sensors</text>
-        <text x={8} y={yM + 4} fontSize={11}>Positions</text>
+        <text x={8} y={yM + 4} fontSize={11}>Mid positions</text>
 
         {acquisition.source_positions.map((x, i) => {
           const cx = scaleX(x);
@@ -138,9 +138,7 @@ export function MaswPreview({
           );
         })}
 
-        {/* <text x={left} y={yAxis + 18} fontSize={10}>{domainMin.toFixed(1)}</text> */}
         <text x={W / 2} y={yAxis + 18} fontSize={11} textAnchor="middle">Position [m]</text>
-        {/* <text x={W - right} y={yAxis + 18} fontSize={10} textAnchor="end">{domainMax.toFixed(1)}</text> */}
 
         {hover && (
           <text
