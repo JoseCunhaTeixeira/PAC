@@ -9,21 +9,31 @@ from masw.models.computing import AnyComputingConfig
 
 logger = logging.getLogger(__name__)
 
+ProgressCallback = Callable[[int, int], None]
 
-def run_compute(config: AnyComputingConfig) -> None:
+
+def run_compute(
+    config: AnyComputingConfig,
+    on_progress: ProgressCallback | None = None,
+) -> None:
     windows = build_windows(
         config.acquisition_params,
         config.masw_params,
     )
+    total = len(windows)
 
     builder = PIPELINE_BUILDERS[config.mode]
 
     logger.info(
         "Starting %s processing: %d windows, %d workers",
         config.mode.value,
-        len(windows),
+        total,
         config.execution_params.n_workers,
     )
+
+    completed = 0
+    if on_progress is not None:
+        on_progress(completed, total)
 
     with ProcessPoolExecutor(
         max_workers=config.execution_params.n_workers,
@@ -41,6 +51,10 @@ def run_compute(config: AnyComputingConfig) -> None:
                 logger.info("Finished xmid=%.2f", window.xmid)
             except Exception:
                 logger.exception("Processing failed for xmid=%.2f", window.xmid)
+            finally:
+                completed += 1
+                if on_progress is not None:
+                    on_progress(completed, total)
 
 
 def process_window(

@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class MASWParameters(BaseModel):
-    length: int = Field(gt=1)
+    length: int = Field(ge=3)
     step: int = Field(gt=0)
     distance_min: float = Field(ge=0)
     distance_max: float = Field(gt=0)
@@ -12,8 +12,5 @@ class MASWParameters(BaseModel):
 
         if self.distance_max <= self.distance_min:
             raise ValueError("distance_max must be greater than distance_min")
-
-        if self.step > self.length:
-            raise ValueError("step cannot exceed length")
 
         return self
