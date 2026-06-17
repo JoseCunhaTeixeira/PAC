@@ -59,15 +59,15 @@ def build_windows(
             )
         ):
             # source must be outside the MASW window
-            if xmin <= source_x <= xmax:
+            if xmin < source_x < xmax:
                 continue
 
             distance = abs(source_x - xmid)
 
-            if distance < masw_params.distance_min:
+            if distance <= masw_params.distance_min:
                 continue
 
-            if distance > masw_params.distance_max:
+            if distance >= masw_params.distance_max:
                 continue
 
             selected_files.append(acquisition_params.folder_path / file)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { ConfigForm } from "./ConfigForm";
-import { API, type Acquisition } from "../api";
+import { ConfigForm } from "./ActivePassiveConfigForm";
+import { API, type Acquisition } from "./api";
 
 export default function App() {
   const [folders, setFolders] = useState<string[]>([]);
@@ -35,7 +35,7 @@ export default function App() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h1>Active MASW computing</h1>
+      <h1>Passive-Active MASW computing</h1>
 
       <label>
         <h2>Loading</h2>
@@ -69,8 +69,8 @@ export default function App() {
               {acquisition.files.map((file, i) => (
                 <tr key={file}>
                   <td>{file}</td>
-                  <td>{acquisition.durations[i] ?? "—"}</td>
-                  <td>{acquisition.sampling_frequencies[i] ?? "—"}</td>
+                  <td>{acquisition.durations[i]?.toFixed(2) ?? "—"}</td>
+                  <td>{acquisition.sampling_frequencies[i]?.toFixed(2) ?? "—"}</td>
                   <td>{acquisition.source_positions[i] ?? "—"}</td>
                   <td>{acquisition.receiver_positions.length ?? "—"}</td>
                 </tr>

@@ -16,12 +16,8 @@ def run_compute(
     config: AnyComputingConfig,
     on_progress: ProgressCallback | None = None,
 ) -> None:
-    windows = build_windows(
-        config.acquisition_params,
-        config.masw_params,
-    )
+    windows = build_windows(config.acquisition_params, config.masw_params)
     total = len(windows)
-
     builder = PIPELINE_BUILDERS[config.mode]
 
     logger.info(
@@ -43,7 +39,6 @@ def run_compute(
             executor.submit(process_window, config, window, builder): window
             for window in windows
         }
-
         for future in as_completed(futures):
             window = futures[future]
             try:
@@ -62,15 +57,11 @@ def process_window(
     window: MASWWindow,
     build_pipeline: Callable,
 ) -> None:
-    output_folder = config.execution_params.output_folder / f"xmid_{window.xmid:.2f}"
-    output_folder.mkdir(parents=True, exist_ok=True)
-
-    logger.info("Processing xmid=%.2f -> %s", window.xmid, output_folder)
-
-    pipeline = build_pipeline(
-        config=config,
-        window=window,
-        output_folder=output_folder,
+    profile = config.acquisition_params.folder_path.name
+    output_folder = (
+        config.execution_params.output_folder / profile / f"xmid_{window.xmid:.2f}"
     )
-
-    pipeline.run()
+    output_folder.mkdir(parents=True, exist_ok=True)
+    logger.info("Processing xmid=%.2f -> %s", window.xmid, output_folder)
+    pipeline = build_pipeline(config=config, window=window, output_folder=output_folder)
+    pipeline.run(show_log=False)

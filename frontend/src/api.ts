@@ -29,5 +29,5 @@ export interface Dispersion {
   fmax: number;
   vmin: number;
   vmax: number;
-  dv: number;
+  nv: number;
 }

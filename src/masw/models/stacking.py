@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, model_validator
 
 class StackingMethod(str, Enum):
     LINEAR = "linear"
-    PWS = "pws"
+    PWS = "phase_weighted"
     ROOT = "root"
 
 
