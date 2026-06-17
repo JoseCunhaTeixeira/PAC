@@ -3,8 +3,10 @@ from pathlib import Path
 from sigproc.transformers import (
     Detrend,
     Dispersion,
+    Filter,
     Load,
     Mute,
+    Pad,
     Plot,
     Save,
     Stack,
@@ -22,20 +24,28 @@ def build_active_pipeline(
 
     load_kwargs = {
         "file_paths": window.selected_files,
+        "acquisitions": window.acquisitions,
         "data_type": "segd",
         "receivers_to_load": window.receiver_indices,
     }
 
-    mute_kwargs = config.muting_params.model_dump()
-    dispersion_kwargs = config.dispersion_params.model_dump()
+    mute_kwargs = config.muting_params.model_dump(exclude_none=True)
+    filter_kwargs = config.filtering_params.model_dump(exclude_none=True)
+    dispersion_kwargs = config.dispersion_params.model_dump(exclude_none=True)
 
     return (
         Load(**load_kwargs)
         >> Detrend(method="constant")
         >> Detrend(method="linear")
         >> Mute(**mute_kwargs)
-        >> Dispersion(**dispersion_kwargs)
-        >> Stack(method="linear")
+        >> Filter(**filter_kwargs)
         >> Plot(folder_path=output_folder)
+        >> Pad(n=1_000, taper=25)
+        >> Dispersion(method="phase", **dispersion_kwargs)
+        >> Stack(method="linear")
+        >> Plot(
+            folder_path=output_folder,
+            normalize=True,
+        )
         >> Save(folder_path=output_folder)
     )

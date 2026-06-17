@@ -34,9 +34,11 @@ const vertBar = (cx: number, cy: number, h = 12, w = 2) =>
 export function MaswPreview({
   acquisition,
   masw,
+  onCount,
 }: {
   acquisition: Acquisition;
   masw: Masw;
+  onCount?: (n: number) => void;
 }) {
   const [windows, setWindows] = useState<WindowSummary[]>([]);
   const [invalid, setInvalid] = useState(false);
@@ -63,6 +65,7 @@ export function MaswPreview({
           if (data) {
             setWindows(data);
             setInvalid(false);
+            onCount?.(data.length);
           }
         })
         .catch((err) => setError(String(err)));

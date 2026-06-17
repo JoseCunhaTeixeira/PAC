@@ -40,7 +40,4 @@ class AcquisitionParameters(BaseModel):
         ):
             raise ValueError("all sampling frequencies must be the same")
 
-        if not all(self.durations[0] == duration for duration in self.durations):
-            raise ValueError("all durations  must be the same")
-
         return self

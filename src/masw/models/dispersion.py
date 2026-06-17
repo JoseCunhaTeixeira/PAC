@@ -6,7 +6,7 @@ class DispersionParameters(BaseModel):
     fmax: float = Field(gt=0)
     vmin: float = Field(gt=0)
     vmax: float = Field(gt=0)
-    dv: float = Field(gt=0)
+    nv: int = Field(gt=0)
 
     @model_validator(mode="after")
     def validate_config(self):
@@ -16,8 +16,5 @@ class DispersionParameters(BaseModel):
 
         if self.vmax <= self.vmin:
             raise ValueError("vmax must be greater than vmin")
-
-        if self.dv >= self.vmax - self.vmin:
-            raise ValueError("dv must be smaller than vmax - vmin")
 
         return self

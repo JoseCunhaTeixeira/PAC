@@ -1,6 +1,7 @@
 import { Routes, Route, Link } from "react-router-dom";
-import ActiveComputingPage from "./active_computing_page/ActiveComputingPage";
-import PassiveComputingPage from "./passive_computing_page/PassiveComputingPage";
+import ActiveComputingPage from "./ActiveComputingPage";
+import PassiveComputingPage from "./PassiveComputingPage";
+import ActivePassiveComputingPage from "./ActivePassiveComputingPage";
 
 export default function App() {
   return (
@@ -15,12 +16,15 @@ export default function App() {
         <Link to="/active">Active Computing</Link>
         {" | "}
         <Link to="/passive">Passive Computing</Link>
+        {" | "}
+        <Link to="/passive-active">Passive-Active Computing</Link>
       </nav>
 
       <Routes>
         <Route path="/" element={<ActiveComputingPage />} />
         <Route path="/active" element={<ActiveComputingPage />} />
         <Route path="/passive" element={<PassiveComputingPage />} />
+        <Route path="/passive-active" element={<ActivePassiveComputingPage />} />
       </Routes>
     </>
   );

@@ -9,7 +9,7 @@ class MutingMethod(str, Enum):
 
 
 class MutingParameters(BaseModel):
-    method: MutingMethod = MutingMethod.NONE
+    method: MutingMethod = MutingMethod.MUTE
     tmin: float = Field(ge=0)
     tmax: float = Field(ge=0)
     vmin: float = Field(ge=0)
@@ -18,11 +18,9 @@ class MutingParameters(BaseModel):
 
     @model_validator(mode="after")
     def validate_config(self):
-
-        if self.tmax <= self.tmin:
-            raise ValueError("tmax must be greater than tmin")
-
-        if self.tmax <= self.vmin:
-            raise ValueError("vmax must be greater than vmin")
-
+        if self.method == MutingMethod.MUTE:
+            if self.tmax <= self.tmin:
+                raise ValueError("tmax must be greater than tmin")
+            if self.vmax <= self.vmin:
+                raise ValueError("vmax must be greater than vmin")
         return self

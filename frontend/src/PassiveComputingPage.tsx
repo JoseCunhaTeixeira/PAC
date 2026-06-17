@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { ConfigForm } from "./ConfigForm";
-import { API, type Acquisition } from "../api";
+import { ConfigForm } from "./PassiveConfigForm";
+import { API, type Acquisition } from "./api";
 
 export default function App() {
   const [folders, setFolders] = useState<string[]>([]);

@@ -10,8 +10,8 @@ class SelectionMethod(str, Enum):
 
 class SelectionParameters(BaseModel):
     method: SelectionMethod = SelectionMethod.NONE
-    threshold: float = Field(gt=0)
-    vmin: float = Field(gt=0)
+    threshold: float = Field(ge=0)
+    vmin: float = Field(ge=0)
     vmax: float = Field(gt=0)
 
     @model_validator(mode="after")

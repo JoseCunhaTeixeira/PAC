@@ -35,11 +35,13 @@ class ComputingConfig(BaseModel):
 class ActiveComputingConfig(ComputingConfig):
     mode: Literal[ProcessingMode.ACTIVE] = ProcessingMode.ACTIVE
     muting_params: MutingParameters
+    filtering_params: FilteringParameters
     dispersion_params: DispersionParameters
 
 
 class PassiveComputingConfig(ComputingConfig):
     mode: Literal[ProcessingMode.PASSIVE] = ProcessingMode.PASSIVE
+    muting_params: MutingParameters
     filtering_params: FilteringParameters
     slicing_params: SlicingParameters
     selection_params: SelectionParameters
@@ -51,6 +53,10 @@ class PassiveComputingConfig(ComputingConfig):
 
 class ActivePassiveComputingConfig(ComputingConfig):
     mode: Literal[ProcessingMode.ACTIVE_PASSIVE] = ProcessingMode.ACTIVE_PASSIVE
+    muting_params: MutingParameters
+    filtering_params: FilteringParameters
+    stacking_params: StackingParameters
+    dispersion_params: DispersionParameters
 
 
 AnyComputingConfig = Annotated[
