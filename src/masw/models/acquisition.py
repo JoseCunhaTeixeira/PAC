@@ -24,7 +24,7 @@ class AcquisitionParameters(BaseModel):
                 raise ValueError(f"File not found: {file}")
 
         if sorted(self.receiver_positions) != self.receiver_positions:
-            raise ValueError("Sensor positions must be sorted")
+            raise ValueError("Receiver positions must be sorted")
 
         if len(self.receiver_positions) < 2:
             raise ValueError("At least two receiver positions are required")

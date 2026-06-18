@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ConfigForm } from "./PassiveConfigForm";
 import { API, type Acquisition } from "./api";
+import { PositionsSummary } from "./components/PositionsSummary";
 
 export default function App() {
   const [folders, setFolders] = useState<string[]>([]);
@@ -10,7 +11,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${API}/folders`)
+    fetch(`${API}/input_folders`)
       .then((res) => res.json())
       .then((data: string[]) => setFolders(data))
       .catch((err) => setError(String(err)));
@@ -35,7 +36,7 @@ export default function App() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h1>Passive MASW computing</h1>
+      <h1>Passive computing</h1>
 
       <label>
         <h2>Loading</h2>
@@ -78,10 +79,7 @@ export default function App() {
             </tbody>
           </table>
 
-          <p>
-            Receiver positions [m]:{" "}
-            {acquisition.receiver_positions.join(", ")}
-          </p>
+          <PositionsSummary label="Receiver positions" positions={acquisition.receiver_positions} />
 
           <ConfigForm acquisition={acquisition} />
         </>

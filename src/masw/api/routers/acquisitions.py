@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["acquisitions"])
 
 
-@router.get("/folders")
-def list_folders() -> list[str]:
+@router.get("/input_folders")
+def list_input_folders() -> list[str]:
     return get_input_folders()
 
 

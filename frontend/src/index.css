@@ -1,85 +1,199 @@
 :root {
-  font-family: "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, Helvetica, Arial, sans-serif;
-  color: #1a1a1a;
-  background-color: #ffffff;
-  line-height: 1.5;
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #f2f2f3;
+  --border: #e3e3e6;
+  --text: #1a1a1a;
+  --text-muted: #5a5a60;
+  --text-faint: #8a8a90;
+
+  --accent: #ff4b4b;
+  --accent-hover: #e63c3c;
+  --accent-soft: rgba(255, 75, 75, 0.15);
+  --accent-text: #ffffff;
+
+  --success-bg: #ddf5df;
+  --success-text: #1a7f1a;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --radius: 10px;
+  --radius-sm: 7px;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #15161a;
+  --surface: #1e2025;
+  --surface-hover: #26292f;
+  --border: #2e3138;
+  --text: #e9e9ec;
+  --text-muted: #aaadb3;
+  --text-faint: #74777e;
+
+  --accent: #ff5c5c;
+  --accent-hover: #ff7373;
+  --accent-soft: rgba(255, 92, 92, 0.2);
+  --accent-text: #ffffff;
+
+  --success-bg: #163a1f;
+  --success-text: #6fdb83;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
 * {
   box-sizing: border-box;
 }
 
+:root {
+  font-family: "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+}
+
 body {
   margin: 0;
+  background-color: var(--bg);
+  color: var(--text);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 #root {
-  max-width: 800px;
-  margin: 0 auto;
+  min-height: 100vh;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.92rem;
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-link:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.sidebar-link.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+  padding: 9px 12px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  justify-content: flex-start;
+}
+
+.sidebar-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 h1 {
   font-size: 2rem;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   margin: 0 0 1.5rem;
+  color: var(--text);
 }
 
 h2 {
-  font-size: 1.35rem;
+  font-size: 1.3rem;
   font-weight: 600;
   margin: 2.5rem 0 0.75rem;
   padding-top: 1.5rem;
-  border-top: 1px solid #eaeaea; /* a Streamlit-style divider above each section */
+  border-top: 1px solid var(--border);
+  color: var(--text);
 }
 
 h3 {
   font-size: 1rem;
   font-weight: 600;
-  color: #555;
+  color: var(--text-muted);
   margin: 1.25rem 0 0.5rem;
 }
 
 p {
   margin: 0.5rem 0;
+  color: var(--text);
+}
+
+a {
+  color: var(--accent);
 }
 
 label {
   font-size: 0.9rem;
-  color: #333;
+  color: var(--text-muted);
 }
 
 input,
 select {
   font: inherit;
   font-size: 0.9rem;
-  padding: 6px 10px;
-  border: 1px solid #d0d0d0;
-  border-radius: 8px;
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   margin-left: 6px;
-  background: #fff;
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
 }
 
 input:focus,
 select:focus {
   outline: none;
-  border-color: #ff4b4b;
-  box-shadow: 0 0 0 2px rgba(255, 75, 75, 0.15);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 button {
   font: inherit;
   font-weight: 600;
-  background: #ff4b4b;
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-text);
   border: none;
   padding: 9px 18px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background-color 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
 }
 
 button:hover {
-  background: #e63c3c;
+  background: var(--accent-hover);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  background: var(--border);
+  color: var(--text-faint);
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 table {
@@ -93,10 +207,10 @@ th,
 td {
   text-align: left;
   padding: 7px 12px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border);
 }
 
 th {
-  color: #666;
+  color: var(--text-muted);
   font-weight: 600;
 }
