@@ -3,6 +3,7 @@ import { API, type Acquisition } from "./api";
 import { MaswPreview } from "./components/MaswPreview";
 import { MuteGather } from "./components/MuteGather";
 import { RunPanel } from "./components/RunPanel";
+import { buildFilteringParams, buildMutingParams } from "./builders";
 
 function NumberField({
   label,
@@ -50,8 +51,8 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
     mode: "active",
     acquisition_params: acquisition,
     masw_params: masw,
-    muting_params: muting,
-    filtering_params: filtering,
+    muting_params: buildMutingParams(muting),
+    filtering_params: buildFilteringParams(filtering),
     dispersion_params: dispersion,
     execution_params: execution,
   };
@@ -95,7 +96,7 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
           <option value="iir">IIR</option>
         </select>
       </label>
-      {filtering.method != "none" && (
+      {filtering.method === "iir" && (
         <>
           <NumberField label="Min frequency [Hz]" value={filtering.fmin} onChange={(v) => setFiltering({ ...filtering, fmin: v })} min={0} max={nyquist} step={5} />
           <NumberField label="Max frequency [Hz]" value={filtering.fmax} onChange={(v) => setFiltering({ ...filtering, fmax: v })} min={0} max={nyquist} step={5} />

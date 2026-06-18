@@ -1,15 +1,18 @@
-from enum import Enum
+from typing import Annotated, Literal, TypeAlias, Union
 
 from pydantic import BaseModel, Field, model_validator
 
 
-class WhiteningMethod(str, Enum):
-    NONE = "none"
-    ONEBIT_APOD = "onebit_apod"
+class NoneWhitening(BaseModel):
+    method: Literal["none"] = "none"
 
 
-class WhiteningParameters(BaseModel):
-    method: WhiteningMethod = WhiteningMethod.ONEBIT_APOD
+class OnebitWhitening(BaseModel):
+    method: Literal["onebit"] = "onebit"
+
+
+class OnebitApodWhitening(BaseModel):
+    method: Literal["onebit_apod"] = "onebit_apod"
     fmin: float = Field(ge=0)
     fmax: float = Field(gt=0)
     taper_width_Hz: float = Field(gt=0)
@@ -21,3 +24,9 @@ class WhiteningParameters(BaseModel):
             raise ValueError("fmax must be greater than fmin")
 
         return self
+
+
+WhiteningParameters: TypeAlias = Annotated[
+    Union[NoneWhitening, OnebitWhitening, OnebitApodWhitening],
+    Field(discriminator="method"),
+]

@@ -7,7 +7,7 @@ from enum import Enum
 from pydantic import BaseModel
 
 from masw.models.computing import AnyComputingConfig
-from masw.runners.computing import run_compute
+from masw.runners.computing import WindowError, run_compute
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ class Job(BaseModel):
     total: int = 0
     elapsed: float | None = None  # seconds, set when finished
     error: str | None = None
+    errors: list[WindowError] = []  # per-window failures
 
 
 class JobManager:
@@ -33,14 +34,31 @@ class JobManager:
         self._jobs: dict[str, Job] = {}
         self._started: dict[str, float] = {}
 
+    # def submit(self, config: AnyComputingConfig) -> Job:
+    #     job = Job(id=uuid.uuid4().hex)
+    #     self._jobs[job.id] = job
+    #     self._started[job.id] = time.monotonic()
+
+    #     def on_progress(completed: int, total: int) -> None:
+    #         job.completed = completed
+    #         job.total = total
+
+    #     future = self._executor.submit(run_compute, config, on_progress)
+    #     future.add_done_callback(lambda f: self._finalize(job.id, f))
+
+    #     logger.info("Submitted job %s", job.id)
+    #     return job
+
     def submit(self, config: AnyComputingConfig) -> Job:
         job = Job(id=uuid.uuid4().hex)
         self._jobs[job.id] = job
         self._started[job.id] = time.monotonic()
 
-        def on_progress(completed: int, total: int) -> None:
+        def on_progress(completed: int, total: int, err: WindowError | None) -> None:
             job.completed = completed
             job.total = total
+            if err is not None:
+                job.errors.append(err)
 
         future = self._executor.submit(run_compute, config, on_progress)
         future.add_done_callback(lambda f: self._finalize(job.id, f))

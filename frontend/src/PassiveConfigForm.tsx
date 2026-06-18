@@ -3,6 +3,7 @@ import { API, type Acquisition } from "./api";
 import { MaswPreview } from "./components/MaswPreview";
 import { MuteGather } from "./components/MuteGather";
 import { RunPanel } from "./components/RunPanel";
+import { buildMutingParams, buildNormalizationParams, buildFilteringParams, buildSelectionParams, buildStackingParams, buildWhiteningParams} from "./builders";
 
 function NumberField({
   label,
@@ -47,7 +48,7 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
   const [whitening, SetWhitening] = useState({ method: "none", fmin: 0, fmax : nyquist, taper_width_Hz: 5});
   const [normalization, setNormalization] = useState({ method: "none"});
   const [dispersion, setDispersion] = useState({ fmin: 0, fmax: 100, vmin: 1, vmax: 1_000, nv: 1_000 });
-  const [stacking, setStacking] = useState({ method: "linear", power: 2});
+  const [stacking, setStacking] = useState({ method: "linear", nu: 2, n : 2});
   const [execution, setExecution] = useState({ n_workers: 1 });
   const [nPositions, setNPositions] = useState(0);
 
@@ -55,16 +56,13 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
     mode: "passive",
     acquisition_params: acquisition,
     masw_params: masw,
-    muting_params: muting,
-    filtering_params: filtering,
+    muting_params: buildMutingParams(muting),
+    filtering_params: buildFilteringParams(filtering),
     slicing_params: slicing,
-    selection_params: selection,
-    whitening_params: whitening,
-    normalization_params: normalization,
-    stacking_params: {
-      method: stacking.method,
-      power: stacking.method === "linear" ? null : stacking.power,
-    },
+    selection_params: buildSelectionParams(selection),
+    whitening_params: buildWhiteningParams(whitening),
+    normalization_params: buildNormalizationParams(normalization),
+    stacking_params: buildStackingParams(stacking),
     dispersion_params: dispersion,
     execution_params: execution,
   };
@@ -118,8 +116,8 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
       )}
 
       <h2>Slicing</h2>
-      <NumberField label="Segment length [s]" value={slicing.segment_duration} onChange={(v) => setSlicing({ ...slicing, segment_duration: v })} min={0.1} max={maxTime} step={0.1} />
-      <NumberField label="Segment step [s]" value={slicing.segment_step} onChange={(v) => setSlicing({ ...slicing, segment_step: v })} min={0.01} max={maxTime} step={0.01} />
+      <NumberField label="Segment length [s]" value={slicing.segment_duration} onChange={(v) => setSlicing({ ...slicing, segment_duration: v })} min={0.1} max={maxTime} step={0.05} />
+      <NumberField label="Segment step [s]" value={slicing.segment_step} onChange={(v) => setSlicing({ ...slicing, segment_step: v })} min={0.01} max={maxTime} step={0.05} />
 
       <h2>Slice selection</h2>
       <label style={{ display: "block", margin: "4px 0" }}>
@@ -142,6 +140,7 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
         Method:{" "}
         <select value={whitening.method} onChange={(e) => SetWhitening({ ...whitening, method: e.target.value })}>
           <option value="none">None</option>
+          <option value="onebit">Onebit</option>
           <option value="onebit_apod">Onebit + Taper</option>
         </select>
       </label>
@@ -171,8 +170,11 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
           <option value="root">Root</option>
         </select>
       </label>
-      {stacking.method !== "linear" && (
-        <NumberField label="Power" value={stacking.power} onChange={(v) => setStacking({ ...stacking, power: v })} />
+      {stacking.method === "phase_weighted" && (
+        <NumberField label="Power" value={stacking.nu} onChange={(v) => setStacking({ ...stacking, nu: v })} />
+      )}
+      {stacking.method === "root" && (
+        <NumberField label="Power" value={stacking.n} onChange={(v) => setStacking({ ...stacking, n: v })} />
       )}
 
       <h2>Dispersion</h2>

@@ -1,9 +1,9 @@
 from pathlib import Path
 
 from sigproc.transformers import (
+    ActiveShotCorrelation,
     Apodize,
     Detrend,
-    DirectionalCorrelation,
     Dispersion,
     Filter,
     Load,
@@ -15,11 +15,11 @@ from sigproc.transformers import (
 )
 
 from masw.adapters.windows import MASWWindow
-from masw.models.computing import ActivePassiveComputingConfig
+from masw.models.computing import PassiveActiveComputingConfig
 
 
-def build_active_passive_pipeline(
-    config: ActivePassiveComputingConfig,
+def build_passive_active_pipeline(
+    config: PassiveActiveComputingConfig,
     window: MASWWindow,
     output_folder: Path,
 ):
@@ -43,7 +43,7 @@ def build_active_passive_pipeline(
         >> Mute(**mute_kwargs)
         >> Filter(**filter_kwargs)
         >> Apodize(method="hanning", frac=0.1)
-        >> DirectionalCorrelation(method="cross")
+        >> ActiveShotCorrelation(method="cross")
         >> Stack(**stacking_kwargs)
         >> Plot(folder_path=output_folder)
         >> Pad(n=1_000, taper=25)

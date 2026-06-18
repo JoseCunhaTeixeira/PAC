@@ -1,7 +1,7 @@
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 
+from pydantic import BaseModel
 from sigproc.base.acquisition import Acquisition
 from sigproc.base.coordinate import Coordinate
 
@@ -11,8 +11,7 @@ from masw.models.masw import MASWParameters
 logger = logging.getLogger(__name__)
 
 
-@dataclass(slots=True)
-class MASWWindow:
+class MASWWindow(BaseModel):
     xmid: float
     selected_files: list[Path]
     receiver_indices: list[int]

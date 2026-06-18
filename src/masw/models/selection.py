@@ -1,15 +1,14 @@
-from enum import Enum
+from typing import Annotated, Literal, TypeAlias, Union
 
 from pydantic import BaseModel, Field, model_validator
 
 
-class SelectionMethod(str, Enum):
-    NONE = "none"
-    FK = "fk"
+class NoneSelection(BaseModel):
+    method: Literal["none"] = "none"
 
 
-class SelectionParameters(BaseModel):
-    method: SelectionMethod = SelectionMethod.NONE
+class FKSelection(BaseModel):
+    method: Literal["fk"] = "fk"
     threshold: float = Field(ge=0)
     vmin: float = Field(ge=0)
     vmax: float = Field(gt=0)
@@ -24,3 +23,9 @@ class SelectionParameters(BaseModel):
             raise ValueError("vmax must be greater than vmin")
 
         return self
+
+
+SelectionParameters: TypeAlias = Annotated[
+    Union[NoneSelection, FKSelection],
+    Field(discriminator="method"),
+]

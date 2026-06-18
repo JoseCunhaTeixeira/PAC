@@ -3,6 +3,8 @@ import { API, type Acquisition } from "./api";
 import { MaswPreview } from "./components/MaswPreview";
 import { MuteGather } from "./components/MuteGather";
 import { RunPanel } from "./components/RunPanel";
+import { buildMutingParams, buildFilteringParams, buildStackingParams} from "./builders";
+
 
 function NumberField({
   label,
@@ -43,20 +45,18 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
   const [muting, setMuting] = useState({ method: "none", tmin: 0, tmax: maxTime, vmin: 0, vmax: 100_000, taper: 0 });
   const [filtering, setFiltering] = useState({ method: "none", fmin: 0, fmax: nyquist, order: 4 });
   const [dispersion, setDispersion] = useState({ fmin: 0, fmax: 100, vmin: 1, vmax: 1_000, nv: 1_000 });
-  const [stacking, setStacking] = useState({ method: "linear", power: 2});
+  const [stacking, setStacking] = useState({ method: "linear", nu: 2, n : 2});
   const [execution, setExecution] = useState({ n_workers: 1 });
   const [nPositions, setNPositions] = useState(0);
 
+
   const config = {
-    mode: "active_passive",
+    mode: "passive-active",
     acquisition_params: acquisition,
     masw_params: masw,
-    muting_params: muting,
-    filtering_params: filtering,
-    stacking_params: {
-      method: stacking.method,
-      power: stacking.method === "linear" ? null : stacking.power,
-    },
+    muting_params: buildMutingParams(muting),
+    filtering_params: buildFilteringParams(filtering),
+    stacking_params: buildStackingParams(stacking),
     dispersion_params: dispersion,
     execution_params: execution,
   };
@@ -118,8 +118,11 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
           <option value="root">Root</option>
         </select>
       </label>
-      {stacking.method !== "linear" && (
-        <NumberField label="Power" value={stacking.power} onChange={(v) => setStacking({ ...stacking, power: v })} />
+      {stacking.method === "phase_weighted" && (
+        <NumberField label="Power" value={stacking.nu} onChange={(v) => setStacking({ ...stacking, nu: v })} />
+      )}
+      {stacking.method === "root" && (
+        <NumberField label="Power" value={stacking.n} onChange={(v) => setStacking({ ...stacking, n: v })} />
       )}
 
       <h2>Dispersion</h2>

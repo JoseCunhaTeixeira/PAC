@@ -51,8 +51,8 @@ class PassiveComputingConfig(ComputingConfig):
     dispersion_params: DispersionParameters
 
 
-class ActivePassiveComputingConfig(ComputingConfig):
-    mode: Literal[ProcessingMode.ACTIVE_PASSIVE] = ProcessingMode.ACTIVE_PASSIVE
+class PassiveActiveComputingConfig(ComputingConfig):
+    mode: Literal[ProcessingMode.PASSIVE_ACTIVE] = ProcessingMode.PASSIVE_ACTIVE
     muting_params: MutingParameters
     filtering_params: FilteringParameters
     stacking_params: StackingParameters
@@ -60,6 +60,6 @@ class ActivePassiveComputingConfig(ComputingConfig):
 
 
 AnyComputingConfig = Annotated[
-    ActiveComputingConfig | PassiveComputingConfig | ActivePassiveComputingConfig,
+    ActiveComputingConfig | PassiveComputingConfig | PassiveActiveComputingConfig,
     Field(discriminator="mode"),
 ]

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ConfigForm } from "./ActivePassiveConfigForm";
+import { ConfigForm } from "./PassiveActiveConfigForm";
 import { API, type Acquisition } from "./api";
 
 export default function App() {
