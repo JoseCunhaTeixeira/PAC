@@ -1,0 +1,39 @@
+target-version = "py314"
+line-length = 100
+src = ["src"]
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort (import sorting)
+    "UP",   # pyupgrade (modern syntax)
+    "B",    # flake8-bugbear (likely bugs)
+    "SIM",  # flake8-simplify
+    "C4",   # flake8-comprehensions
+    "PIE",  # flake8-pie (misc cleanups)
+    "RET",  # flake8-return
+    "PTH",  # flake8-use-pathlib
+    "NPY",  # NumPy-specific rules
+    "RUF",  # Ruff-specific rules
+    "ANN",  # Annotation enforcement
+    "ARG",  # Unused arguments
+    "ERA",  # Commented-out code
+]
+ignore = [
+    "E501",  # line too long (formatter handles it)
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["S101"]      # allow asserts in tests
+"__init__.py" = ["F401"]  # allow unused imports (re-exports)
+
+[lint.isort]
+known-first-party = ["pac"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+docstring-code-format = true

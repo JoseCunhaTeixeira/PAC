@@ -1,4 +1,4 @@
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -22,12 +22,11 @@ class ComputingConfig(BaseModel):
     execution_params: ExecutionParameters
 
     @model_validator(mode="after")
-    def validate_config(self):
+    def validate_config(self) -> Self:
         n_receivers = len(self.acquisition_params.receiver_positions)
         if self.masw_params.length > n_receivers:
             raise ValueError(
-                f"length ({self.masw_params.length}) exceeds "
-                f"number of receivers ({n_receivers})"
+                f"length ({self.masw_params.length}) exceeds number of receivers ({n_receivers})"
             )
         return self
 

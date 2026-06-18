@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from sigproc.base import Pipeline
 from sigproc.transformers import (
     Apodize,
     BidirectionalCorrelate,
@@ -26,7 +27,7 @@ def build_passive_pipeline(
     config: PassiveComputingConfig,
     window: MASWWindow,
     output_folder: Path,
-):
+) -> Pipeline:
 
     load_kwargs = {
         "file_paths": window.selected_files,

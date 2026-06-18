@@ -1,9 +1,9 @@
 import json
 import logging
 import traceback
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
-from typing import Callable
 
 from masw.adapters.registry import PIPELINE_BUILDERS
 from masw.adapters.windows import MASWWindow, build_windows
@@ -50,8 +50,7 @@ def run_compute(
         initializer=setup_logging,
     ) as executor:
         futures = {
-            executor.submit(process_window, config, window, builder): window
-            for window in windows
+            executor.submit(process_window, config, window, builder): window for window in windows
         }
         for future in as_completed(futures):
             window = futures[future]
@@ -69,9 +68,7 @@ def run_compute(
                     traceback=traceback.format_exc(),
                 )
                 errors.append(win_err)
-                results.append(
-                    {"xmid": window.xmid, "status": "failed", **asdict(win_err)}
-                )
+                results.append({"xmid": window.xmid, "status": "failed", **asdict(win_err)})
             finally:
                 completed += 1
                 if on_progress is not None:
@@ -106,9 +103,7 @@ def process_window(
 
     logger.info("Processing xmid=%.2f -> %s", window.xmid, output_folder)
     try:
-        pipeline = build_pipeline(
-            config=config, window=window, output_folder=output_folder
-        )
+        pipeline = build_pipeline(config=config, window=window, output_folder=output_folder)
         pipeline.run(show_log=False)
     except Exception:
         (output_folder / "error.log").write_text(traceback.format_exc())

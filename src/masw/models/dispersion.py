@@ -1,3 +1,5 @@
+from typing import Self
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -9,7 +11,7 @@ class DispersionParameters(BaseModel):
     nv: int = Field(gt=0)
 
     @model_validator(mode="after")
-    def validate_config(self):
+    def validate_config(self) -> Self:
 
         if self.fmax <= self.fmin:
             raise ValueError("fmax must be greater than fmin")

@@ -1,4 +1,4 @@
-from typing import Annotated, Literal, TypeAlias, Union
+from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -14,7 +14,7 @@ class FKSelection(BaseModel):
     vmax: float = Field(gt=0)
 
     @model_validator(mode="after")
-    def validate_config(self):
+    def validate_config(self) -> Self:
 
         if self.threshold > 1:
             raise ValueError("threshold cannot exceed 1")
@@ -25,7 +25,7 @@ class FKSelection(BaseModel):
         return self
 
 
-SelectionParameters: TypeAlias = Annotated[
-    Union[NoneSelection, FKSelection],
+type SelectionParameters = Annotated[
+    NoneSelection | FKSelection,
     Field(discriminator="method"),
 ]
