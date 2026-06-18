@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Self
 
 from pydantic import BaseModel, computed_field, model_validator
 
@@ -17,7 +18,7 @@ class AcquisitionParameters(BaseModel):
         return len(self.receiver_positions)
 
     @model_validator(mode="after")
-    def validate_config(self):
+    def validate_config(self) -> Self:
         for file in self.files:
             if not (self.folder_path / file).exists():
                 raise ValueError(f"File not found: {file}")

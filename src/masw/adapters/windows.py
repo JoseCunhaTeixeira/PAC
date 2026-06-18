@@ -46,16 +46,12 @@ def build_windows(
         selected_files = []
         acquisitions = []
 
-        receiver_coords = tuple(
-            Coordinate(x=x, y=0.0, z=0.0) for x in receiver_positions
-        )
+        receiver_coords = tuple(Coordinate(x=x, y=0.0, z=0.0) for x in receiver_positions)
 
-        for i, (file, source_x) in enumerate(
-            zip(
-                acquisition_params.files,
-                acquisition_params.source_positions,
-                strict=True,
-            )
+        for file, source_x in zip(
+            acquisition_params.files,
+            acquisition_params.source_positions,
+            strict=True,
         ):
             # source must be outside the MASW window
             if xmin < source_x < xmax:

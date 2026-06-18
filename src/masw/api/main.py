@@ -1,4 +1,5 @@
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,9 +12,9 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     setup_logging()
-    logger.info("MASWvicorn masw.api.main:app --reload API starting")
+    logger.info("MASW API starting")
     yield
     logger.info("MASW API shutting down")
 

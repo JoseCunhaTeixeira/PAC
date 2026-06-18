@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from sigproc.base import Pipeline
 from sigproc.transformers import (
     Detrend,
     Dispersion,
@@ -20,7 +21,7 @@ def build_active_pipeline(
     config: ActiveComputingConfig,
     window: MASWWindow,
     output_folder: Path,
-):
+) -> Pipeline:
 
     load_kwargs = {
         "file_paths": window.selected_files,

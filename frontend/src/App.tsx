@@ -2,6 +2,7 @@ import { Routes, Route, Link } from "react-router-dom";
 import ActiveComputingPage from "./ActiveComputingPage";
 import PassiveComputingPage from "./PassiveComputingPage";
 import PassiveActiveComputingPage from "./PassiveActiveComputingPage";
+import DispersionPickingPage from "./DispersionPickingPage";
 
 export default function App() {
   return (
@@ -18,6 +19,8 @@ export default function App() {
         <Link to="/passive">Passive Computing</Link>
         {" | "}
         <Link to="/passive-active">Passive-Active Computing</Link>
+        {" | "}
+        <Link to="/dispersion_picking">Dispersion Picking</Link>
       </nav>
 
       <Routes>
@@ -25,6 +28,7 @@ export default function App() {
         <Route path="/active" element={<ActiveComputingPage />} />
         <Route path="/passive" element={<PassiveComputingPage />} />
         <Route path="/passive-active" element={<PassiveActiveComputingPage />} />
+        <Route path="/dispersion_picking" element={<DispersionPickingPage />} />
       </Routes>
     </>
   );

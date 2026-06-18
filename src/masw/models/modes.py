@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class ProcessingMode(str, Enum):
+class ProcessingMode(StrEnum):
     ACTIVE = "active"
     PASSIVE = "passive"
     PASSIVE_ACTIVE = "passive-active"

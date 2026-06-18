@@ -1,4 +1,4 @@
-from typing import Annotated, Literal, TypeAlias, Union
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -11,7 +11,7 @@ class OneBitNormalization(BaseModel):
     method: Literal["onebit"] = "onebit"
 
 
-NormalizationParameters: TypeAlias = Annotated[
-    Union[NoneNormalization, OneBitNormalization],
+type NormalizationParameters = Annotated[
+    NoneNormalization | OneBitNormalization,
     Field(discriminator="method"),
 ]

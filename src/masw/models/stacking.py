@@ -1,4 +1,4 @@
-from typing import Annotated, Literal, TypeAlias, Union
+from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -23,13 +23,13 @@ class RootStacking(BaseModel):
     n: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
-    def validate_root(self):
+    def validate_root(self) -> Self:
         if self.n is None:
             raise ValueError("n is required when method='root'")
         return self
 
 
-StackingParameters: TypeAlias = Annotated[
-    Union[LinearStacking, PhaseWeightedStacking, RootStacking],
+type StackingParameters = Annotated[
+    LinearStacking | PhaseWeightedStacking | RootStacking,
     Field(discriminator="method"),
 ]

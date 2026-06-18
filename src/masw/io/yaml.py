@@ -7,9 +7,7 @@ def read_receiver_positions(
     file_path: Path,
 ) -> list[float]:
 
-    with open(
-        file_path,
-        "r",
+    with file_path.open(
         encoding="utf-8",
     ) as f:
         return yaml.safe_load(f)
@@ -20,8 +18,7 @@ def write_receiver_positions(
     positions: list[float],
 ) -> None:
 
-    with open(
-        file_path,
+    with file_path.open(
         "w",
         encoding="utf-8",
     ) as f:
@@ -36,9 +33,7 @@ def read_source_positions(
     file_path: Path,
 ) -> dict[str, float]:
 
-    with open(
-        file_path,
-        "r",
+    with file_path.open(
         encoding="utf-8",
     ) as f:
         return yaml.safe_load(f)
@@ -49,8 +44,7 @@ def write_source_positions(
     source_positions: dict[str, float],
 ) -> None:
 
-    with open(
-        file_path,
+    with file_path.open(
         "w",
         encoding="utf-8",
     ) as f:
