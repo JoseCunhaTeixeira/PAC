@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { API, type Acquisition } from "./api";
+import { type Acquisition } from "./api";
 import { MaswPreview } from "./components/MaswPreview";
 import { MuteGather } from "./components/MuteGather";
 import { RunPanel } from "./components/RunPanel";
