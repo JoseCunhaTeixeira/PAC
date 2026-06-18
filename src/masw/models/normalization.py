@@ -1,12 +1,17 @@
-from enum import Enum
+from typing import Annotated, Literal, TypeAlias, Union
 
-from pydantic import BaseModel
-
-
-class NormalizationMethod(str, Enum):
-    NONE = "none"
-    ONEBIT = "onebit"
+from pydantic import BaseModel, Field
 
 
-class NormalizationParameters(BaseModel):
-    method: NormalizationMethod = NormalizationMethod.NONE
+class NoneNormalization(BaseModel):
+    method: Literal["none"] = "none"
+
+
+class OneBitNormalization(BaseModel):
+    method: Literal["onebit"] = "onebit"
+
+
+NormalizationParameters: TypeAlias = Annotated[
+    Union[NoneNormalization, OneBitNormalization],
+    Field(discriminator="method"),
+]

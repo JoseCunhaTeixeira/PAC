@@ -1,15 +1,14 @@
-from enum import Enum
+from typing import Annotated, Literal, TypeAlias, Union
 
 from pydantic import BaseModel, Field, model_validator
 
 
-class FilteringMethod(str, Enum):
-    NONE = "none"
-    IIR = "iir"
+class NoneFiltering(BaseModel):
+    method: Literal["none"] = "none"
 
 
-class FilteringParameters(BaseModel):
-    method: FilteringMethod = FilteringMethod.NONE
+class IIRFiltering(BaseModel):
+    method: Literal["iir"] = "iir"
     fmin: float = Field(ge=0)
     fmax: float = Field(gt=0)
     order: int = Field(gt=0)
@@ -21,3 +20,9 @@ class FilteringParameters(BaseModel):
             raise ValueError("fmax must be greater than fmin")
 
         return self
+
+
+FilteringParameters: TypeAlias = Annotated[
+    Union[NoneFiltering, IIRFiltering],
+    Field(discriminator="method"),
+]

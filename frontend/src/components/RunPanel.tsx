@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { API } from "../api";
 
+interface WindowError {
+  xmid: number;
+  error_type: string;
+  message: string;
+  traceback: string;
+}
+
 interface Job {
   id: string;
   state: string;
@@ -8,6 +15,7 @@ interface Job {
   total: number;
   elapsed: number | null;
   error: string | null;
+  errors: WindowError[];
 }
 
 function formatDuration(s: number): string {
@@ -20,6 +28,10 @@ function formatDuration(s: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.round((s % 3600) / 60);
   return `${h} h ${m} min`;
+}
+
+function normalizeJob(j: Job): Job {
+  return { ...j, errors: j.errors ?? [] };
 }
 
 export function RunPanel({ config }: { config: unknown }) {
@@ -44,8 +56,9 @@ export function RunPanel({ config }: { config: unknown }) {
           return res.json();
         })
         .then((j: Job) => {
-          setJob(j);
-          if (j.state !== "running") stopPolling();
+          const nj = normalizeJob(j);
+          setJob(nj);
+          if (nj.state !== "running") stopPolling();
         })
         .catch((err) => {
           setError(String(err));
@@ -67,8 +80,9 @@ export function RunPanel({ config }: { config: unknown }) {
         if (res.status === 422) {
           const body = await res.json();
           const msg = body.detail
-            .map((e: { loc: (string | number)[]; msg: string }) =>
-              `${e.loc.slice(1).join(".")}: ${e.msg}`,
+            .map(
+              (e: { loc: (string | number)[]; msg: string }) =>
+                `${e.loc.slice(1).join(".")}: ${e.msg}`,
             )
             .join("; ");
           throw new Error("Invalid config — " + msg);
@@ -77,41 +91,94 @@ export function RunPanel({ config }: { config: unknown }) {
         return res.json();
       })
       .then((j: Job) => {
-        setJob(j);
-        poll(j.id);
+        const nj = normalizeJob(j);
+        setJob(nj);
+        poll(nj.id);
       })
       .catch((err) => setError(String(err)));
   }
 
   const running = job?.state === "running";
-  const pct = job && job.total > 0 ? Math.round((job.completed / job.total) * 100) : 0;
+  const pct =
+    job && job.total > 0 ? Math.round((job.completed / job.total) * 100) : 0;
 
   return (
     <div>
       <button onClick={compute} disabled={running}>
         {running ? "Computing…" : "Compute"}
       </button>
+
       {error && <p style={{ color: "crimson" }}>{error}</p>}
+
       {job && (
         <div style={{ marginTop: 10 }}>
           {running && (
             <>
-              <div style={{ background: "#eee", borderRadius: 6, height: 14, maxWidth: 400, overflow: "hidden" }}>
-                <div style={{ width: `${pct}%`, background: "#ff4b4b", height: "100%" }} />
+              <div
+                style={{
+                  background: "#eee",
+                  borderRadius: 6,
+                  height: 14,
+                  maxWidth: 400,
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${pct}%`,
+                    background: "#ff4b4b",
+                    height: "100%",
+                  }}
+                />
               </div>
-              <p>{job.completed} / {job.total} windows</p>
+              <p>
+                {job.completed} / {job.total} windows
+              </p>
             </>
           )}
+
           {job.state === "succeeded" && (
             <p>
-              ✓ Done — {job.total} windows computed
-              {job.elapsed != null && ` in ${formatDuration(job.elapsed)}`}.
+              {job.errors.length === 0 ? "✓" : "⚠"} Done —{" "}
+              {job.total - job.errors.length}/{job.total} windows computed
+              {job.elapsed != null && ` in ${formatDuration(job.elapsed)}`}
+              {job.errors.length > 0 && ` (${job.errors.length} failed)`}.
             </p>
           )}
+
           {job.state === "failed" && (
             <p style={{ color: "crimson" }}>
-              ✗ Failed{job.elapsed != null && ` after ${formatDuration(job.elapsed)}`}: {job.error}
+              ✗ Failed
+              {job.elapsed != null && ` after ${formatDuration(job.elapsed)}`}:{" "}
+              {job.error}
             </p>
+          )}
+
+          {job.errors.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <p style={{ color: "crimson" }}>
+                {job.errors.length} window{job.errors.length > 1 ? "s" : ""} failed
+              </p>
+              {job.errors.map((e, i) => (
+                <details key={i} style={{ marginBottom: 4 }}>
+                  <summary
+                    style={{ cursor: "pointer", color: "crimson" }}
+                  >
+                    xmid {e.xmid.toFixed(2)} — {e.error_type}: {e.message}
+                  </summary>
+                  <pre
+                    style={{
+                      background: "#f6f6f6",
+                      padding: 8,
+                      overflow: "auto",
+                      fontSize: 12,
+                    }}
+                  >
+                    {e.traceback}
+                  </pre>
+                </details>
+              ))}
+            </div>
           )}
         </div>
       )}
