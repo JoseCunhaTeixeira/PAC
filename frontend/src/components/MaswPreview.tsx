@@ -107,7 +107,7 @@ export function MaswPreview({
 
   return (
     <div>
-      {error && <p style={{ color: "crimson" }}>Error: {error}</p>}
+      {error && <p style={{ color: "var(--accent)" }}>Error: {error}</p>}
       <p>
         {invalid ? (
           <em>✘ Invalid window parameters…</em>
@@ -118,9 +118,9 @@ export function MaswPreview({
         )}
       </p>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
-        <text x={8} y={yS + 4} fontSize={11}>Sources</text>
-        <text x={8} y={ySen + 4} fontSize={11}>Sensors</text>
-        <text x={8} y={yM + 4} fontSize={11}>Mid positions</text>
+        <text x={8} y={yS + 4} fontSize={11} style={{ fill: "var(--text)" }}>Sources</text>
+        <text x={8} y={ySen + 4} fontSize={11} style={{ fill: "var(--text)" }}>Receivers</text>
+        <text x={8} y={yM + 4} fontSize={11} style={{ fill: "var(--text)" }}>Mid positions</text>
 
         {acquisition.source_positions.map((x, i) => {
           const cx = scaleX(x);
@@ -141,7 +141,7 @@ export function MaswPreview({
           );
         })}
 
-        <text x={W / 2} y={yAxis + 18} fontSize={11} textAnchor="middle">Position [m]</text>
+        <text x={W / 2} y={yAxis + 18} fontSize={11} textAnchor="middle" style={{ fill: "var(--text)" }}>Position [m]</text>
 
         {hover && (
           <text
@@ -149,8 +149,7 @@ export function MaswPreview({
             y={hover.cy - 12}
             fontSize={12}
             textAnchor="middle"
-            fill="#111"
-            stroke="white"
+            style={{ fill: "var(--text)", stroke: "var(--bg)" }}
             strokeWidth={3}
             paintOrder="stroke"
           >

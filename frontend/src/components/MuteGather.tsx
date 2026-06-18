@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { API, type Acquisition, type Muting } from "../api";
+import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 
 interface Gather {
   dt: number;
@@ -36,6 +37,8 @@ export function MuteGather({
   const [gather, setGather] = useState<Gather | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const theme = useTheme();
+  const palette = canvasPalette(theme);
 
   useEffect(() => {
     setFile(acquisition.files[0] ?? "");
@@ -149,10 +152,10 @@ export function MuteGather({
     ctx.restore();
 
     // axes
-    ctx.strokeStyle = "#999";
+    ctx.strokeStyle = palette.axis;
     ctx.lineWidth = 1;
-    ctx.font = "11px sans-serif";
-    ctx.fillStyle = "#444";
+    ctx.font = CANVAS_FONT;
+    ctx.fillStyle = palette.tick;
 
     // time axis (y)
     ctx.beginPath();
@@ -189,7 +192,7 @@ export function MuteGather({
     }
 
     // axis titles
-    ctx.fillStyle = "#222";
+    ctx.fillStyle = palette.title;
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
     ctx.fillText("Offset [m]", ML + plotW / 2, totalH - 4);
@@ -198,7 +201,7 @@ export function MuteGather({
     ctx.rotate(-Math.PI / 2);
     ctx.fillText("Time [s]", 0, 0);
     ctx.restore();
-  }, [gather, muting, acquisition, file]);
+  }, [gather, muting, acquisition, file, theme]);
 
   return (
     <div>
@@ -210,7 +213,7 @@ export function MuteGather({
           ))}
         </select>
       </label>
-      {error && <p style={{ color: "crimson" }}>Error: {error}</p>}
+      {error && <p style={{ color: "var(--accent)" }}>Error: {error}</p>}
       <div style={{ marginTop: 8, overflowX: "auto" }}>
         <canvas ref={canvasRef} />
       </div>
