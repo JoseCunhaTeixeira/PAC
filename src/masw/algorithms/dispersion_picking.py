@@ -3,7 +3,7 @@ from collections.abc import Sequence
 import numpy as np
 from matplotlib.path import Path
 from scipy.signal import medfilt, savgol_filter
-
+from sigproc.algorithms.picking.dispersion.curve import lorentzian_uncertainty
 from sigproc.base.dispersion import DispersionCurve, DispersionCurves, DispersionImage
 
 
@@ -74,12 +74,10 @@ def pick_curve_lasso(
             )
 
         wl = (
-            len(v_picked_arr) // 2 + 1
-            if len(v_picked_arr) / 2 % 2 == 0
-            else len(v_picked_arr) // 2
+            len(v_picked_arr) // 2 + 1 if len(v_picked_arr) / 2 % 2 == 0 else len(v_picked_arr) // 2
         )
         v_picked_arr = np.asarray(
-            savgol_filter(v_picked_arr, window_length=wl, polyorder=2),
+            savgol_filter(v_picked_arr, window_length=wl, polyorder=3),
             dtype=np.float32,
         )
 
@@ -89,6 +87,7 @@ def pick_curve_lasso(
         label=label,
         type=dispersion_image.type,
         acquisitions=dispersion_image.acquisitions,
+        vs_std=lorentzian_uncertainty(f_picked_arr, v_picked_arr, dispersion_image.acquisitions),
     )
 
     existing = (
