@@ -160,10 +160,18 @@ export default function DispersionPickingPage() {
         <label>
           <h2>Loading</h2>
           Data folder:{" "}
-          <select value={folder} onChange={(e) => setFolder(e.target.value)}>
+          <select
+            value={folder}
+            onChange={(e) => {
+              setXmid(null);
+              setFolder(e.target.value);
+            }}
+          >
             <option value="">— choose —</option>
             {folders.map((name) => (
-              <option key={name} value={name}>{name}</option>
+              <option key={name} value={name}>
+                {name}
+              </option>
             ))}
           </select>
         </label>

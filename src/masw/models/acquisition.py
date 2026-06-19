@@ -3,14 +3,16 @@ from typing import Self
 
 from pydantic import BaseModel, computed_field, model_validator
 
+type PositionXZ = tuple[float, float]
+
 
 class AcquisitionParameters(BaseModel):
     folder_path: Path
     files: list[str]
     durations: list[float]
     sampling_frequencies: list[float]
-    source_positions: list[float]
-    receiver_positions: list[float]
+    source_positions: list[PositionXZ]
+    receiver_positions: list[PositionXZ]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -23,13 +25,16 @@ class AcquisitionParameters(BaseModel):
             if not (self.folder_path / file).exists():
                 raise ValueError(f"File not found: {file}")
 
-        if sorted(self.receiver_positions) != self.receiver_positions:
-            raise ValueError("Receiver positions must be sorted")
+        receiver_x = [position[0] for position in self.receiver_positions]
+        if sorted(receiver_x) != receiver_x:
+            raise ValueError("Receiver positions must be sorted by x")
 
         if len(self.receiver_positions) < 2:
             raise ValueError("At least two receiver positions are required")
 
-        if len(self.files) != len(self.source_positions):
+        # an empty list means the survey has no real source (e.g. passive
+        # acquisitions); otherwise there must be one position per file
+        if self.source_positions and len(self.files) != len(self.source_positions):
             raise ValueError("files and source_positions must have the same length")
 
         if len(self.files) != len(self.durations):

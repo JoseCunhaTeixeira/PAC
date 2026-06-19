@@ -45,16 +45,20 @@ def load_acquisition(
 
     n_receivers = len(stream)
 
+    # source_positions.yaml is optional: passive acquisitions have no real
+    # source, so the file may simply not exist for them
     source_positions_file = folder_path / "source_positions.yaml"
-    if not source_positions_file.exists():
-        raise ValueError(f"Missing file: {source_positions_file}")
-    source_positions = read_source_positions(source_positions_file)
-    if list(source_positions.keys()) != files:
-        raise ValueError("source_positions.yaml does not match seismic files")
+    if source_positions_file.exists():
+        source_positions = read_source_positions(source_positions_file)
+        if list(source_positions.keys()) != files:
+            raise ValueError("source_positions.yaml does not match seismic files")
+        source_positions_list = list(source_positions.values())
+    else:
+        source_positions_list = []
 
     receiver_positions_file = folder_path / "receiver_positions.yaml"
     if not receiver_positions_file.exists():
-        raise ValueError(f"Missing file: {receiver_positions_file}")
+        raise ValueError(f"Missing receiver_positions.yaml file in {folder_path}")
     receiver_positions = read_receiver_positions(receiver_positions_file)
     if len(receiver_positions) != n_receivers:
         raise ValueError("receiver_positions.yaml does not match seismic files")
@@ -64,6 +68,6 @@ def load_acquisition(
         files=files,
         durations=durations,
         sampling_frequencies=list(sampling_frequencies),
-        source_positions=list(source_positions.values()),
+        source_positions=source_positions_list,
         receiver_positions=list(receiver_positions),
     )

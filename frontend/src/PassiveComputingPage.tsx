@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { ConfigForm } from "./PassiveConfigForm";
 import { API, type Acquisition } from "./api";
-import { PositionsSummary } from "./components/PositionsSummary";
 
 export default function App() {
   const [folders, setFolders] = useState<string[]>([]);
@@ -25,12 +24,18 @@ export default function App() {
     setLoading(true);
     setError(null);
     fetch(`${API}/acquisitions/${selected}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: Acquisition) => setAcquisition(data))
-      .catch((err) => setError(String(err)))
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : String(err));
+        setAcquisition(null);
+      })
       .finally(() => setLoading(false));
   }, [selected]);
 
@@ -62,7 +67,6 @@ export default function App() {
                 <th>File</th>
                 <th>Duration [s]</th>
                 <th>Sampling frequency [Hz]</th>
-                <th>Source [m]</th>
                 <th>Receivers [#]</th>
               </tr>
             </thead>
@@ -72,14 +76,11 @@ export default function App() {
                   <td>{file}</td>
                   <td>{acquisition.durations[i]?.toFixed(2) ?? "—"}</td>
                   <td>{acquisition.sampling_frequencies[i]?.toFixed(2) ?? "—"}</td>
-                  <td>{acquisition.source_positions[i] ?? "—"}</td>
                   <td>{acquisition.receiver_positions.length ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-
-          <PositionsSummary label="Receiver positions" positions={acquisition.receiver_positions} />
 
           <ConfigForm acquisition={acquisition} />
         </>

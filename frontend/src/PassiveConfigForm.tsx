@@ -78,7 +78,7 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
       <NumberField label="Step [#]" value={masw.step} onChange={(v) => setMasw({ ...masw, step: v })} min={1} max={acquisition.receiver_positions.length} />
       <NumberField label="Min distance from sources [m]" value={masw.distance_min} onChange={(v) => setMasw({ ...masw, distance_min: v })} min={0} />
       <NumberField label="Max distance from sources [m]" value={masw.distance_max} onChange={(v) => setMasw({ ...masw, distance_max: v })} min={0} />
-      <MaswPreview acquisition={acquisition} masw={masw} onCount={setNPositions} />
+      <MaswPreview acquisition={acquisition} masw={masw} onCount={setNPositions} showSources={false} />
      
       <h2>Signal muting</h2>
       <label style={{ display: "block", margin: "4px 0" }}>
