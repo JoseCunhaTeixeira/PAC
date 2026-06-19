@@ -90,8 +90,13 @@ export function MuteGather({
     const amp = spacing * 0.45; // wiggle excursion
 
     const fi = acquisition.files.indexOf(file);
-    const src = acquisition.source_positions[fi] ?? 0;
-    const offsets = acquisition.receiver_positions.map((rp) => Math.abs(rp - src));
+    const src = acquisition.source_positions[fi] ?? [0, 0];
+    // true offset along the (x, z) topography profile (matches sigproc's
+    // Coordinate.distance_to with y=0), so a sloped line between source and
+    // receiver gives a longer offset than the flat horizontal distance would.
+    const offsets = acquisition.receiver_positions.map((rp) =>
+      Math.sqrt((rp[0] - src[0]) ** 2 + (rp[1] - src[1]) ** 2)
+    );
 
     // white plot background
     ctx.fillStyle = "#fff";

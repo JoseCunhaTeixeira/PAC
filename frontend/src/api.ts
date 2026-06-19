@@ -1,12 +1,15 @@
 export const API = "http://localhost:8000";
 
+// [x, z] in meters; y is always 0 and is hardcoded on the backend, not tracked here.
+export type Position = [number, number];
+
 export interface Acquisition {
   folder_path: string;
   files: string[];
   durations: number[];
   sampling_frequencies: number[];
-  source_positions: number[];
-  receiver_positions: number[];
+  source_positions: Position[];
+  receiver_positions: Position[];
 }
 
 export interface Masw {

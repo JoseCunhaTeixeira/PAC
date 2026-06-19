@@ -9,7 +9,7 @@ export default function HomePage() {
 
       <p>👋 Welcome to <strong>PAC</strong>!</p>
       <p>
-        📚 This app allows you to perform 2D surface wave dispersion analysis using both
+        📚 This app allows you to perform inline surface wave dispersion analysis using both
         traffic-induced seismic noise and conventional active sources.
       </p>
       <p>
@@ -46,7 +46,7 @@ export default function HomePage() {
 
       <div
         style={{
-          background: "#ffffff",
+          background: "#ffffff00",
           borderRadius: "var(--radius)",
           padding: 24,
           marginTop: 32,

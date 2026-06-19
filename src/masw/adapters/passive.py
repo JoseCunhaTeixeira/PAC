@@ -59,6 +59,7 @@ def build_passive_pipeline(
         >> BidirectionalCorrelate(method="cross")
         >> Stack(**stacking_kwargs)
         >> Plot(folder_path=output_folder)
+        >> Save(folder_path=output_folder)
         >> Pad(n=1_000, taper=25)
         >> Dispersion(method="phase", **dispersion_kwargs)
         >> Plot(
