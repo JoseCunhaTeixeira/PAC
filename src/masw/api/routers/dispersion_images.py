@@ -1,5 +1,6 @@
 import logging
 import math
+from itertools import pairwise
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
@@ -20,6 +21,7 @@ class DispersionCurveOut(BaseModel):
     label: str
     fs: list[float]
     vs: list[float]
+    vs_std: list[float] | None = None
 
 
 class DispersionImageOut(BaseModel):
@@ -28,6 +30,8 @@ class DispersionImageOut(BaseModel):
     vs: list[float]
     type: str
     curves: list[DispersionCurveOut]
+    lambda_min: float
+    lambda_max: float
 
 
 class LassoPickRequest(BaseModel):
@@ -65,18 +69,38 @@ def _nan_to_none(rows: np.ndarray) -> list[list[float | None]]:
 def _to_image_out(image) -> DispersionImageOut:  # noqa: ANN001
     curves = (
         [
-            DispersionCurveOut(label=c.label, fs=c.fs.tolist(), vs=c.vs.tolist())
+            DispersionCurveOut(
+                label=c.label,
+                fs=c.fs.tolist(),
+                vs=c.vs.tolist(),
+                vs_std=c.vs_std.tolist() if c.vs_std is not None else None,
+            )
             for c in image.dispersion_curves
         ]
         if image.dispersion_curves
         else []
     )
+
+    # array resolution limits: below lambda_min (Nyquist wavelength) picks
+    # are spatially aliased, above lambda_max (array aperture) they aren't
+    # resolvable. distances follow the receivers' x,z positions (topography),
+    # not just x, since the array can have elevation. dx is the smallest
+    # spacing between consecutive receivers (arrays aren't always uniform)
+    # and lambda_max is the actual array length along that profile.
+    receivers = sorted(image.acquisitions[0].receivers, key=lambda r: r.x)
+    spacings = [math.hypot(b.x - a.x, b.z - a.z) for a, b in pairwise(receivers)]
+    dx = min(spacings)
+    lambda_min = 2 * dx
+    lambda_max = sum(spacings)
+
     return DispersionImageOut(
         fv_map=image.fv_map.tolist(),
         fs=image.fs.tolist(),
         vs=image.vs.tolist(),
         type=image.type,
         curves=curves,
+        lambda_min=lambda_min,
+        lambda_max=lambda_max,
     )
 
 

@@ -7,6 +7,7 @@ export interface DispersionCurve {
   label: string;
   fs: number[];
   vs: number[];
+  vs_std?: number[] | null;
 }
 
 export interface DispersionImage {
@@ -15,6 +16,8 @@ export interface DispersionImage {
   vs: number[];
   type: string;
   curves: DispersionCurve[];
+  lambda_min: number;
+  lambda_max: number;
 }
 
 const ML = 60, MR = 16, MT = 16, MB = 38;
@@ -102,9 +105,74 @@ export function DispersionImageCanvas({
       ctx.drawImage(heatmapRef.current, 0, 0, heatmapRef.current.width, heatmapRef.current.height, ML, MT, PLOT_W, PLOT_H);
     }
 
+    // array resolution bounds: v = f * lambda, clipped to the velocity axis.
+    // Below lambda_min picks are spatially aliased; above lambda_max they
+    // aren't resolvable by the array's aperture.
+    function drawLambdaBound(lambda: number, labelText: string) {
+      if (!ctx) return;
+      ctx.save();
+      ctx.strokeStyle = "#999999";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      let started = false;
+      let lastPoint: [number, number] | null = null;
+      image.fs.forEach((f) => {
+        const v = f * lambda;
+        if (v < vMin || v > vMax) {
+          started = false;
+          return;
+        }
+        const x = xOf(f);
+        const y = yOf(v);
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+        lastPoint = [x, y];
+      });
+      ctx.stroke();
+      ctx.restore();
+
+      if (lastPoint) {
+        ctx.save();
+        ctx.font = FONT;
+        ctx.fillStyle = "#999999";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(labelText, lastPoint[0] - 4, lastPoint[1] - 2);
+        ctx.restore();
+      }
+    }
+    drawLambdaBound(image.lambda_min, "λmin");
+    drawLambdaBound(image.lambda_max, "λmax");
+
     // curves
     image.curves.forEach((curve, i) => {
-      ctx.strokeStyle = CURVE_COLORS[i % CURVE_COLORS.length];
+      const color = CURVE_COLORS[i % CURVE_COLORS.length];
+
+      // error bar whiskers, drawn under the curve line
+      if (curve.vs_std) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.6;
+        curve.fs.forEach((f, k) => {
+          const std = curve.vs_std?.[k];
+          if (std == null) return;
+          const x = xOf(f);
+          const yTop = yOf(curve.vs[k] + std);
+          const yBot = yOf(curve.vs[k] - std);
+          ctx.beginPath();
+          ctx.moveTo(x, yTop);
+          ctx.lineTo(x, yBot);
+          ctx.stroke();
+        });
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       curve.fs.forEach((f, k) => {

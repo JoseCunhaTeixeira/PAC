@@ -50,7 +50,6 @@ export default function HomePage() {
           borderRadius: "var(--radius)",
           padding: 24,
           marginTop: 32,
-          boxShadow: "var(--shadow-sm)",
         }}
       >
         <img
