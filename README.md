@@ -8,8 +8,8 @@ Dispersion curves can be semi-automatically picked on an interactive interface a
 
 
 ## Features
-- **Hybrid Processing:** Supports both passive and active MASW methods without needing source position information.
-- **Signal Processing Tools:** Uses an automatic source detection algorithm combined with seismic interferometry.
+- **Hybrid Processing:** Supports both passive and active MASW methods without needing source position information. Uses [sigproc](https://github.com/JoseCunhaTeixeira/sigproc), a signal processing Python pipeline.
+- **Signal Processing Tools:** Uses an automatic source detection algorithm combined with seismic interferometry. 
 - **Automated Dispersion Analysis:** Extracts and visualizes dispersion images and curves.
 - **Velocity Inversion:** Computes shear wave velocity profiles from dispersion data using the MCMC algorithm [BayesBay](https://bayes-bay.readthedocs.io/en/latest/#) and forward modeling algorithm [Disba](https://github.com/keurfonluu/disba).
 - **User-Friendly Interface:** Streamlined workflow with visualization capabilities.
@@ -22,10 +22,8 @@ https://github.com/user-attachments/assets/983d6761-53d0-4f0a-9dff-7742f1432696
 
 ## Installation
 ### Requirements
-- Python 3.14+
-- Uses [sigproc](https://github.com/JoseCunhaTeixeira/sigproc), a signal processing Python pipeline.
-- On Mac OS, BayesBay needs to be installed from source with no architecture target specified on the Makefile.
-
+- Requires [Docker](https://www.docker.com/) installed in your machine.
+  
 
 ### Clone Repository
 ```sh
@@ -33,7 +31,7 @@ git clone https://github.com/JoseCunhaTeixeira/PAC.git
 cd PAC/
 ```
 
-Content:
+Data:
 - **`data/`:**
     - `input/`: Contains one folder per profile with your raw seismic records (examples in git repo)
         - `profile_1/`: seismic files for profile 1
@@ -55,7 +53,7 @@ docker compose up --build -d
 Then open http://localhost:5173 in a browser. `data/input/` and `data/output/` are bind-mounted from the host, so dropping a new profile folder into `data/input/` works exactly as in a native install, and results in `data/output/` persist across container restarts.
 
 ```sh
-docker compose logs -f            # tail both services
+docker compose logs -f             # tail both services
 docker compose down                # stop (data/ untouched)
 docker compose up --build -d       # rebuild after a code change
 ```
