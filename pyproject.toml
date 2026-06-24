@@ -12,7 +12,16 @@ dependencies = [
     "fastapi[standard]",
     "sigproc @ git+https://github.com/JoseCunhaTeixeira/sigproc",
     "disba>=0.7.0",
+    "torch",
 ]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["setuptools>=61"]

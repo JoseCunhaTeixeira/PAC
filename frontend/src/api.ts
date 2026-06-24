@@ -1,4 +1,4 @@
-export const API = "http://localhost:8000";
+export const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 // [x, z] in meters; y is always 0 and is hardcoded on the backend, not tracked here.
 export type Position = [number, number];

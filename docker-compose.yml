@@ -1,0 +1,25 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      CORS_ORIGINS: "http://localhost:5173"
+    volumes:
+      - ./data/input:/app/data/input
+      - ./data/output:/app/data/output
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: "http://localhost:8000"
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

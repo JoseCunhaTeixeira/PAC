@@ -153,6 +153,7 @@ export function PseudoSectionComparisonCanvas({
     if (resLim === 0) resLim = 1;
 
     function drawPanel(
+      ctx: CanvasRenderingContext2D,
       top: number,
       grid: (number | null)[][],
       vMin: number,
@@ -278,9 +279,9 @@ export function PseudoSectionComparisonCanvas({
     const top2 = top1 + PLOT_H + PANEL_GAP;
     const top3 = top2 + PLOT_H + PANEL_GAP;
 
-    drawPanel(top1, observed_grid, zMin, zMax, viridis, `Obs ${velocityLabel}`);
-    drawPanel(top2, predicted_grid, zMin, zMax, viridis, `Pred ${velocityLabel}`);
-    drawPanel(top3, residual_grid, -resLim, resLim, bwr, "Residuals [%]");
+    drawPanel(ctx, top1, observed_grid, zMin, zMax, viridis, `Obs ${velocityLabel}`);
+    drawPanel(ctx, top2, predicted_grid, zMin, zMax, viridis, `Pred ${velocityLabel}`);
+    drawPanel(ctx, top3, residual_grid, -resLim, resLim, bwr, "Residuals [%]");
 
     ctx.fillStyle = palette.title;
     ctx.textAlign = "center";
