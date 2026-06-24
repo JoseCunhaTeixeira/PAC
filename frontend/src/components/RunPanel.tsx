@@ -63,8 +63,11 @@ export function RunPanel({
   function poll(id: string) {
     pollRef.current = window.setInterval(() => {
       fetch(`${API}/jobs/${id}`)
-        .then((res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        .then(async (res) => {
+          if (!res.ok) {
+            const body = await res.json().catch(() => null);
+            throw new Error(body?.detail ?? `HTTP ${res.status}`);
+          }
           return res.json();
         })
         .then((j: Job) => {
@@ -76,7 +79,7 @@ export function RunPanel({
           }
         })
         .catch((err) => {
-          setError(String(err));
+          setError(err instanceof Error ? err.message : String(err));
           stopPolling();
         });
     }, 1000);
@@ -102,7 +105,10 @@ export function RunPanel({
             .join("; ");
           throw new Error("Invalid config — " + msg);
         }
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((j: Job) => {
@@ -110,7 +116,7 @@ export function RunPanel({
         setJob(nj);
         poll(nj.id);
       })
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }
 
   const running = job?.state === "running";

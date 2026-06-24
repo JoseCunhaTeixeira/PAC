@@ -21,12 +21,15 @@ export default function VisualizationPage() {
     if (!mode) return;
     const endpoint = mode === "Signal" ? "input_folders" : "output_folders";
     fetch(`${API}/${endpoint}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: string[]) => setFolders(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [mode]);
 
   return (

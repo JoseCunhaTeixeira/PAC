@@ -79,12 +79,15 @@ export function MaswPreview({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ acquisition_params: acquisition, masw_params: masw }),
       })
-        .then((res) => {
+        .then(async (res) => {
           if (res.status === 422) {
             setInvalid(true);
             return null;
           }
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          if (!res.ok) {
+            const body = await res.json().catch(() => null);
+            throw new Error(body?.detail ?? `HTTP ${res.status}`);
+          }
           return res.json();
         })
         .then((data: WindowSummary[] | null) => {
@@ -94,7 +97,7 @@ export function MaswPreview({
             onCount?.(data.length);
           }
         })
-        .catch((err) => setError(String(err)));
+        .catch((err) => setError(err instanceof Error ? err.message : String(err)));
     }, 300);
     return () => clearTimeout(timer);
   }, [acquisition, masw]);

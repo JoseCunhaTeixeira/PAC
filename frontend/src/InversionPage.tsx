@@ -113,27 +113,33 @@ export default function InversionPage() {
     fetch(`${API}/output_folders`)
       .then((res) => res.json())
       .then((data: string[]) => setFolders(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, []);
 
   function refreshLabels(folderName: string) {
     fetch(`${API}/dispersion_image_labels/${encodeURIComponent(folderName)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: Record<string, number>) => setLabelCounts(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }
 
   function refreshPositionPicks(folderName: string) {
     fetch(`${API}/dispersion_picks_by_position/${encodeURIComponent(folderName)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: { xmid: number; labels: string[] }[]) => setPositionPicks(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }
 
   useEffect(() => {
@@ -148,12 +154,15 @@ export default function InversionPage() {
     if (!folder) return;
 
     fetch(`${API}/xmids/${encodeURIComponent(folder)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: number[]) => setXmids(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
 
     refreshLabels(folder);
     refreshPositionPicks(folder);
@@ -233,25 +242,31 @@ export default function InversionPage() {
   function loadResults(invertedLabels: string[]) {
     setResultLabels(invertedLabels);
     fetch(`${API}/inversion/velocity_section/${encodeURIComponent(folder)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: VelocitySection) => setVelocitySection(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
 
     invertedLabels.forEach((labelValue) => {
       fetch(
         `${API}/inversion/curves/${encodeURIComponent(folder)}/${encodeURIComponent(labelValue)}`,
       )
-        .then((res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        .then(async (res) => {
+          if (!res.ok) {
+            const body = await res.json().catch(() => null);
+            throw new Error(body?.detail ?? `HTTP ${res.status}`);
+          }
           return res.json();
         })
         .then((data: PositionCurves[]) =>
           setPositionCurves((prev) => ({ ...prev, [labelValue]: data })),
         )
-        .catch((err) => setError(String(err)));
+        .catch((err) => setError(err instanceof Error ? err.message : String(err)));
     });
   }
 
