@@ -93,6 +93,11 @@ def run_inversion(
     except Exception:
         logger.exception("Failed to save velocity section plot for folder=%s", config.folder)
 
+    try:
+        io.save_velocity_xzv(config.folder)
+    except Exception:
+        logger.exception("Failed to save velocity XZV file for folder=%s", config.folder)
+
     for label in config.labels:
         try:
             io.save_pseudo_section_comparison_plot(config.folder, label)

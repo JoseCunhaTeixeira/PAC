@@ -45,6 +45,22 @@ Content:
         - ...
 
 
+## Run docker app
+The app can also be run fully containerized (backend + frontend), with no local Python/Node setup required.
+
+```sh
+docker compose up --build -d
+```
+
+Then open http://localhost:5173 in a browser. `data/input/` and `data/output/` are bind-mounted from the host, so dropping a new profile folder into `data/input/` works exactly as in a native install, and results in `data/output/` persist across container restarts.
+
+```sh
+docker compose logs -f            # tail both services
+docker compose down                # stop (data/ untouched)
+docker compose up --build -d       # rebuild after a code change
+```
+
+
 ## License
 This project is under Creative Commons Attribution 4.0 International license, allowing re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited.
 Please cite as:

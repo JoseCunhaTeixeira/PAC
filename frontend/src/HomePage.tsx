@@ -1,3 +1,6 @@
+import logo from "./assets/logo.png";
+import logo2 from "./assets/logo2.png";
+
 export default function HomePage() {
   return (
     <div style={{ padding: 24 }}>
@@ -53,12 +56,12 @@ export default function HomePage() {
         }}
       >
         <img
-          src="/src/assets/logo.png"
+          src={logo}
           alt="Illustration of train-induced seismic surface waves recorded by sensors along a railway embankment"
           style={{ width: "100%", maxWidth: 560, display: "block", margin: "0 auto" }}
         />
         <img
-          src="/src/assets/logo2.png"
+          src={logo2}
           alt="Partner and funding organization logos: Sorbonne Universite, METIS UMR 7619, Mines Paris PSL, SNCF Reseau, European Union, Europe's Rail"
           style={{ width: "100%", maxWidth: 640, display: "block", margin: "32px auto 0" }}
         />

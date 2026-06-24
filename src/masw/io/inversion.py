@@ -2,7 +2,7 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,7 +24,11 @@ from sigproc.dataio.dispersion.section import (
 from sigproc.dataio.inversion.forward import MODEL_NAMES, forward_model_all
 from sigproc.dataio.inversion.plotting import plot_density_curves, plot_posterior_marginals
 from sigproc.dataio.velocity_model.loading import load_velocity_models
-from sigproc.dataio.velocity_model.section import plot_velocity_and_std_section, smooth_laterally
+from sigproc.dataio.velocity_model.section import (
+    plot_velocity_and_std_section,
+    save_velocity_models_sections,
+    smooth_laterally,
+)
 from sigproc.transformers import Plot
 
 from masw.adapters.inversion import DZ, VP_VS_RATIO, build_inversion_pipeline
@@ -253,6 +257,34 @@ def save_velocity_section_plot(
     path = OUTPUT_DIR / folder / f"VelocitySection_0000{suffix}.png"
     Plot.savefig(path=path, figure=fig)
     plt.close(fig)
+    return path
+
+
+def save_velocity_xzv(folder: str) -> Path:
+    """Save Vs(x, z) section grids for every model variant (best, smooth_best,
+    median, smooth_median, ensemble) into one HDF5 file in the profile's
+    output folder, one group per variant.
+
+    Best-effort per variant: a variant with too few inverted positions is
+    skipped (logged) rather than blocking the others.
+    """
+    sections: dict[str, VelocityModelsSection] = {}
+    for model in get_args(ModelName):
+        try:
+            sections[model] = _model_section(folder, model)
+        except ValueError:
+            logger.warning(
+                "Could not build a '%s' velocity section for folder=%s;"
+                " skipping it in the XZV export.",
+                model,
+                folder,
+            )
+    if not sections:
+        raise ValueError(
+            f"No model variant has at least two inverted positions in folder={folder}"
+        )
+    path = OUTPUT_DIR / folder / "VelocitySection_0000.hd5"
+    save_velocity_models_sections(sections, path, dz=DZ)
     return path
 
 
