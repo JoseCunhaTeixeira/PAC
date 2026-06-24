@@ -5,9 +5,11 @@ from itertools import pairwise
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+from sigproc.base.dispersion_image import DispersionImage
 
+from masw.algorithms.dispersion_picking import mode_to_label
 from masw.io import dispersion_images as io
-from masw.io.folders import get_output_folders
+from masw.io.folders import get_output_folders, get_xmid_folders
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +32,8 @@ class DispersionImageOut(BaseModel):
     vs: list[float]
     type: str
     curves: list[DispersionCurveOut]
-    lambda_min: float
-    lambda_max: float
+    lambda_min: float | None
+    lambda_max: float | None
 
 
 class LassoPickRequest(BaseModel):
@@ -62,20 +64,20 @@ class PseudoSectionOut(BaseModel):
     velocities_by_wavelength: list[list[float | None]]
 
 
-def _nan_to_none(rows: np.ndarray) -> list[list[float | None]]:
+def nan_to_none(rows: np.ndarray) -> list[list[float | None]]:
     return [[None if math.isnan(v) else float(v) for v in row] for row in rows]
 
 
-def _to_image_out(image) -> DispersionImageOut:  # noqa: ANN001
+def _to_image_out(image: DispersionImage) -> DispersionImageOut:
     curves = (
         [
             DispersionCurveOut(
-                label=c.label,
+                label=mode_to_label(c.mode),
                 fs=c.fs.tolist(),
                 vs=c.vs.tolist(),
-                vs_std=c.vs_std.tolist() if c.vs_std is not None else None,
+                vs_std=c.vs_err.tolist() if c.vs_err is not None else None,
             )
-            for c in image.dispersion_curves
+            for c in sorted(image.dispersion_curves, key=lambda c: c.mode)
         ]
         if image.dispersion_curves
         else []
@@ -87,11 +89,18 @@ def _to_image_out(image) -> DispersionImageOut:  # noqa: ANN001
     # not just x, since the array can have elevation. dx is the smallest
     # spacing between consecutive receivers (arrays aren't always uniform)
     # and lambda_max is the actual array length along that profile.
-    receivers = sorted(image.acquisitions[0].receivers, key=lambda r: r.x)
+    # Acquisition geometry may be unknown (e.g. older outputs computed
+    # without source_positions.yaml), leaving fewer than 2 real receivers —
+    # the bounds are then undefined rather than computable.
+    receivers = sorted(image.acquisition.receivers, key=lambda r: r.x)
     spacings = [math.hypot(b.x - a.x, b.z - a.z) for a, b in pairwise(receivers)]
-    dx = min(spacings)
-    lambda_min = 2 * dx
-    lambda_max = sum(spacings)
+    if image.acquisition.is_unknown or not spacings:
+        lambda_min = None
+        lambda_max = None
+    else:
+        dx = min(spacings)
+        lambda_min = 2 * dx
+        lambda_max = sum(spacings)
 
     return DispersionImageOut(
         fv_map=image.fv_map.tolist(),
@@ -112,7 +121,7 @@ def list_output_folders() -> list[str]:
 @router.get("/xmids/{folder}")
 def get_xmids(folder: str) -> list[float]:
     try:
-        return io.get_xmid_folders(folder)
+        return get_xmid_folders(folder)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -187,7 +196,7 @@ def get_pseudo_section(folder: str, label: str) -> PseudoSectionOut:
     return PseudoSectionOut(
         positions=section.positions.tolist(),
         fs_grid=section.fs_grid.tolist(),
-        velocities_by_frequency=_nan_to_none(section.velocities_by_frequency),
+        velocities_by_frequency=nan_to_none(section.velocities_by_frequency),
         lambdas_grid=section.lambdas_grid.tolist(),
-        velocities_by_wavelength=_nan_to_none(section.velocities_by_wavelength),
+        velocities_by_wavelength=nan_to_none(section.velocities_by_wavelength),
     )

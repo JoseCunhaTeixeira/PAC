@@ -3,8 +3,18 @@ from collections.abc import Sequence
 import numpy as np
 from matplotlib.path import Path
 from scipy.signal import medfilt, savgol_filter
-from sigproc.algorithms.picking.dispersion.curve import lorentzian_uncertainty
-from sigproc.base.dispersion import DispersionCurve, DispersionCurves, DispersionImage
+from sigproc.algorithms.picking.dispersion.curve import lorentzian_uncertainty, resample_wavelength
+from sigproc.base.dispersion_curve import DispersionCurve, DispersionCurvesImage, Mode
+from sigproc.base.dispersion_image import DispersionImage
+
+
+def label_to_mode(label: str) -> Mode:
+    wave = label.rstrip("0123456789")
+    return Mode(wave, int(label[len(wave) :]))
+
+
+def mode_to_label(mode: Mode) -> str:
+    return f"{mode.wave}{mode.number}"
 
 
 def pick_curve_lasso(
@@ -81,19 +91,22 @@ def pick_curve_lasso(
             dtype=np.float32,
         )
 
-    new_curve = DispersionCurve(
-        fs=f_picked_arr,
-        vs=v_picked_arr,
-        label=label,
-        type=dispersion_image.type,
-        acquisitions=dispersion_image.acquisitions,
-        vs_std=lorentzian_uncertainty(f_picked_arr, v_picked_arr, dispersion_image.acquisitions),
+    mode = label_to_mode(label)
+    new_curve = resample_wavelength(
+        DispersionCurve(
+            fs=f_picked_arr,
+            vs=v_picked_arr,
+            mode=mode,
+            type=dispersion_image.type,
+            acquisition=dispersion_image.acquisition,
+            vs_err=lorentzian_uncertainty(f_picked_arr, v_picked_arr, dispersion_image.acquisition),
+        )
     )
 
     existing = (
         list(dispersion_image.dispersion_curves) if dispersion_image.dispersion_curves else []
     )
-    existing = [c for c in existing if c.label != label]
+    existing = [c for c in existing if c.mode != mode]
     existing.append(new_curve)
 
     return DispersionImage(
@@ -101,6 +114,6 @@ def pick_curve_lasso(
         fs=dispersion_image.fs,
         vs=dispersion_image.vs,
         type=dispersion_image.type,
-        acquisitions=dispersion_image.acquisitions,
-        dispersion_curves=DispersionCurves(curves=tuple(existing)),
+        acquisition=dispersion_image.acquisition,
+        dispersion_curves=DispersionCurvesImage(dispersion_curves=tuple(existing)),
     )

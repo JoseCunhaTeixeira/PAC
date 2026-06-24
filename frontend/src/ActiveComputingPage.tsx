@@ -50,7 +50,7 @@ export default function App() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h1>Active computing</h1>
+      <h1>Active Computing</h1>
 
       <label>
         <h2>Loading</h2>
@@ -76,7 +76,7 @@ export default function App() {
             borderRadius: "var(--radius-sm)",
           }}
         >
-        ⚠️ source_positions.yaml is missing for this folder — required for active computing
+          ⚠️ source_positions.yaml is missing for this folder — required for active computing
         </p>
       )}
 

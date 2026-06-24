@@ -1,4 +1,5 @@
 import logging
+from typing import Literal
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
@@ -19,7 +20,9 @@ class GatherResponse(BaseModel):
 
 
 @router.get("/gather/{folder}/{file}")
-def get_gather(folder: str, file: str) -> GatherResponse:
+def get_gather(
+    folder: str, file: str, norm: Literal["trace", "global"] = "trace"
+) -> GatherResponse:
     path = INPUT_DIR / folder / file
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {file}")
@@ -34,11 +37,14 @@ def get_gather(folder: str, file: str) -> GatherResponse:
     data = data[:, ::step]
     dt *= step
 
-    # Normalise each trace to [-1, 1] for display.
-    peak = np.max(np.abs(data), axis=1, keepdims=True)
+    # Normalise to [-1, 1] for display, either trace-by-trace or globally.
+    if norm == "trace":
+        peak = np.max(np.abs(data), axis=1, keepdims=True)
+    else:
+        peak = np.full((data.shape[0], 1), np.max(np.abs(data)))
     peak[peak == 0] = 1.0
-    norm = data / peak
+    normalized = data / peak
 
     return GatherResponse(
-        dt=dt, n_samples=norm.shape[1], traces=np.round(norm, 4).tolist()
+        dt=dt, n_samples=normalized.shape[1], traces=np.round(normalized, 4).tolist()
     )

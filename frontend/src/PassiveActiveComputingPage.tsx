@@ -50,7 +50,7 @@ export default function App() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h1>Passive-Active computing</h1>
+      <h1>Passive-Active Computing</h1>
 
       <label>
         <h2>Loading</h2>

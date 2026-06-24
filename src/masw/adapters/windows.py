@@ -1,5 +1,6 @@
 import logging
 import math
+from itertools import pairwise
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -29,7 +30,7 @@ def _arc_midpoint_x(positions: list[PositionXZ]) -> float:
     """
 
     cumulative = [0.0]
-    for (x0, z0), (x1, z1) in zip(positions[:-1], positions[1:], strict=True):
+    for (x0, z0), (x1, z1) in pairwise(positions):
         cumulative.append(cumulative[-1] + math.hypot(x1 - x0, z1 - z0))
 
     half = cumulative[-1] / 2

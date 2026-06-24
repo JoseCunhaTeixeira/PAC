@@ -12,23 +12,26 @@ export interface PseudoSection {
 }
 
 const ML = 60, MR = 120, MT = 16, MB = 40;
-const PLOT_W = 640, PLOT_H = 320;
+const PLOT_W = 640;
 const FONT = CANVAS_FONT;
 const TOTAL_W = ML + PLOT_W + MR;
-const TOTAL_H = MT + PLOT_H + MB;
 
 export function PseudoSectionCanvas({
   section,
   mode,
+  height = 320,
 }: {
   section: PseudoSection;
   mode: "frequency" | "wavelength";
+  height?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
   const palette = canvasPalette(theme);
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
   const scale = containerWidth > 0 ? Math.min(containerWidth / TOTAL_W, 1) : 1;
+  const PLOT_H = height;
+  const TOTAL_H = MT + PLOT_H + MB;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -75,49 +78,68 @@ export function PseudoSectionCanvas({
     if (!Number.isFinite(vMin)) { vMin = 0; vMax = 1; }
     const vSpan = vMax - vMin || 1;
 
-    // true pcolormesh: column boundaries are the midpoints between
-    // neighboring xmid positions, so each column is exactly one xmid and
-    // its width reflects the real spacing between positions. The plotted
-    // x-domain is the full cell-edge range (not just min/max position),
-    // since the first/last cells extend half a step beyond their position.
-    const cellEdges: number[] = new Array(np + 1);
-    for (let i = 1; i < np; i++) cellEdges[i] = (positions[i - 1] + positions[i]) / 2;
-    cellEdges[0] = np > 1 ? positions[0] - (cellEdges[1] - positions[0]) : positions[0] - 0.5;
-    cellEdges[np] = np > 1 ? positions[np - 1] + (positions[np - 1] - cellEdges[np - 1]) : positions[0] + 0.5;
+    // Plot exactly between min(position) and max(position)
+    const xMin = positions[0];
+    const xMax = positions[np - 1];
+    const xSpan = xMax - xMin || 1;
 
-    const domainMin = cellEdges[0];
-    const domainSpan = cellEdges[np] - cellEdges[0] || 1;
-    const xOf = (p: number) => ML + ((p - domainMin) / domainSpan) * PLOT_W;
+    const xOf = (p: number) =>
+      ML + ((p - xMin) / xSpan) * PLOT_W;
 
-    // Render each column through a 1px-wide offscreen image, scaled up with
-    // drawImage. Tiling many fillRect calls (one per row) leaves visible
-    // antialiasing seams between rows whenever PLOT_H/ny isn't an integer;
-    // image scaling has no such seams.
+    // Midpoint boundaries, clipped to plot limits
+    const columnEdges: number[] = new Array(np + 1);
+
+    columnEdges[0] = xMin;
+    columnEdges[np] = xMax;
+
+    for (let i = 1; i < np; i++) {
+      columnEdges[i] = (positions[i - 1] + positions[i]) / 2;
+    }
+
     for (let i = 0; i < np; i++) {
-      const xLeft = xOf(cellEdges[i]);
-      const xRight = xOf(cellEdges[i + 1]);
+      const xLeft = xOf(columnEdges[i]);
+      const xRight = xOf(columnEdges[i + 1]);
+
       const off = document.createElement("canvas");
       off.width = 1;
       off.height = ny;
+
       const octx = off.getContext("2d");
       if (!octx) continue;
+
       const imgData = octx.createImageData(1, ny);
+
       for (let j = 0; j < ny; j++) {
         const v = velocities[i][j];
         const y = invertY ? j : ny - 1 - j;
         const idx = y * 4;
+
         if (v === null) {
           imgData.data[idx + 3] = 0;
           continue;
         }
+
         const [r, g, b] = cividis((v - vMin) / vSpan);
+
         imgData.data[idx] = r;
         imgData.data[idx + 1] = g;
         imgData.data[idx + 2] = b;
         imgData.data[idx + 3] = 255;
       }
+
       octx.putImageData(imgData, 0, 0);
-      ctx.drawImage(off, 0, 0, 1, ny, xLeft, MT, Math.max(1, xRight - xLeft), PLOT_H);
+
+      ctx.drawImage(
+        off,
+        0,
+        0,
+        1,
+        ny,
+        xLeft,
+        MT,
+        Math.max(1, xRight - xLeft),
+        PLOT_H
+      );
     }
 
     // axes
@@ -206,7 +228,7 @@ export function PseudoSectionCanvas({
     ctx.textAlign = "center";
     ctx.fillText("Phase velocity [m/s]", 0, 0);
     ctx.restore();
-  }, [section, mode, theme, scale]);
+  }, [section, mode, height, theme, scale]);
 
   return (
     <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W }}>

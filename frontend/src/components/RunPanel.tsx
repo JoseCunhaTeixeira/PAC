@@ -8,7 +8,7 @@ interface WindowError {
   traceback: string;
 }
 
-interface Job {
+export interface Job {
   id: string;
   state: string;
   completed: number;
@@ -34,7 +34,19 @@ function normalizeJob(j: Job): Job {
   return { ...j, errors: j.errors ?? [] };
 }
 
-export function RunPanel({ config }: { config: unknown }) {
+export function RunPanel({
+  config,
+  runUrl = "/run",
+  itemLabel = "windows",
+  itemLabelSingular = "window",
+  onDone,
+}: {
+  config: unknown;
+  runUrl?: string;
+  itemLabel?: string;
+  itemLabelSingular?: string;
+  onDone?: (job: Job) => void;
+}) {
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
@@ -58,7 +70,10 @@ export function RunPanel({ config }: { config: unknown }) {
         .then((j: Job) => {
           const nj = normalizeJob(j);
           setJob(nj);
-          if (nj.state !== "running") stopPolling();
+          if (nj.state !== "running") {
+            stopPolling();
+            onDone?.(nj);
+          }
         })
         .catch((err) => {
           setError(String(err));
@@ -71,7 +86,7 @@ export function RunPanel({ config }: { config: unknown }) {
     setError(null);
     setJob(null);
     stopPolling();
-    fetch(`${API}/run`, {
+    fetch(`${API}${runUrl}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(config),
@@ -132,7 +147,7 @@ export function RunPanel({ config }: { config: unknown }) {
                 />
               </div>
               <p>
-                {job.completed} / {job.total} windows
+                {job.completed} / {job.total} {itemLabel}
               </p>
             </>
           )}
@@ -140,7 +155,7 @@ export function RunPanel({ config }: { config: unknown }) {
           {job.state === "succeeded" && (
             <p>
               {job.errors.length === 0 ? "✓" : "⚠"} Done —{" "}
-              {job.total - job.errors.length}/{job.total} windows computed
+              {job.total - job.errors.length}/{job.total} {itemLabel} computed
               {job.elapsed != null && ` in ${formatDuration(job.elapsed)}`}
               {job.errors.length > 0 && ` (${job.errors.length} failed)`}.
             </p>
@@ -157,7 +172,7 @@ export function RunPanel({ config }: { config: unknown }) {
           {job.errors.length > 0 && (
             <div style={{ marginTop: 10 }}>
               <p style={{ color: "crimson" }}>
-                {job.errors.length} window{job.errors.length > 1 ? "s" : ""} failed
+                {job.errors.length} {job.errors.length > 1 ? itemLabel : itemLabelSingular} failed
               </p>
               {job.errors.map((e, i) => (
                 <details key={i} style={{ marginBottom: 4 }}>

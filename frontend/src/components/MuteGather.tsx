@@ -26,14 +26,21 @@ function ticks(max: number, count = 5): number[] {
 export function MuteGather({
   acquisition,
   muting,
+  file: fileProp,
+  norm = "trace",
 }: {
   acquisition: Acquisition;
-  muting: Muting;
+  muting?: Muting;
+  // Controlled file selection: when omitted, the component owns its own
+  // selector (the original config-preview behavior, one file at a time).
+  file?: string;
+  norm?: "trace" | "global";
 }) {
   const folder =
     acquisition.folder_path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
 
-  const [file, setFile] = useState(acquisition.files[0] ?? "");
+  const [internalFile, setInternalFile] = useState(acquisition.files[0] ?? "");
+  const file = fileProp ?? internalFile;
   const [gather, setGather] = useState<Gather | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -41,20 +48,20 @@ export function MuteGather({
   const palette = canvasPalette(theme);
 
   useEffect(() => {
-    setFile(acquisition.files[0] ?? "");
-  }, [acquisition]);
+    if (fileProp === undefined) setInternalFile(acquisition.files[0] ?? "");
+  }, [acquisition, fileProp]);
 
   useEffect(() => {
     if (!file) return;
     setError(null);
-    fetch(`${API}/gather/${encodeURIComponent(folder)}/${encodeURIComponent(file)}`)
+    fetch(`${API}/gather/${encodeURIComponent(folder)}/${encodeURIComponent(file)}?norm=${norm}`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
       .then((data: Gather) => setGather(data))
       .catch((err) => setError(String(err)));
-  }, [file, folder]);
+  }, [file, folder, norm]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -134,24 +141,26 @@ export function MuteGather({
       ctx.stroke();
     }
 
-    // mute overlay
-    const { tmin, tmax, vmin, vmax, taper } = muting;
-    const clampR = (r: number) => Math.max(0, Math.min(ns, r));
-    for (let c = 0; c < nt; c++) {
-      const off = offsets[c];
-      const rFast = vmax > 0 ? off / vmax / dt : 0;
-      const rSlow = vmin > 0 ? off / vmin / dt : Infinity;
-      const rTop = clampR(Math.max(tmin / dt, rFast));
-      const rBot = clampR(Math.min(tmax / dt, rSlow));
-      const xL = xOf(c) - spacing / 2;
-      ctx.fillStyle = "rgba(110,110,120,0.55)";
-      ctx.fillRect(xL, yOfSample(0), spacing, yOfSample(rTop) - yOfSample(0));
-      ctx.fillRect(xL, yOfSample(rBot), spacing, yOfSample(ns) - yOfSample(rBot));
-      if (taper > 0 && rBot > rTop) {
-        const tt = Math.min(taper, rBot - rTop);
-        ctx.fillStyle = "rgba(110,110,120,0.3)";
-        ctx.fillRect(xL, yOfSample(rTop), spacing, yOfSample(rTop + tt) - yOfSample(rTop));
-        ctx.fillRect(xL, yOfSample(rBot - tt), spacing, yOfSample(rBot) - yOfSample(rBot - tt));
+    // mute overlay (only when a muting config was passed in)
+    if (muting) {
+      const { tmin, tmax, vmin, vmax, taper } = muting;
+      const clampR = (r: number) => Math.max(0, Math.min(ns, r));
+      for (let c = 0; c < nt; c++) {
+        const off = offsets[c];
+        const rFast = vmax > 0 ? off / vmax / dt : 0;
+        const rSlow = vmin > 0 ? off / vmin / dt : Infinity;
+        const rTop = clampR(Math.max(tmin / dt, rFast));
+        const rBot = clampR(Math.min(tmax / dt, rSlow));
+        const xL = xOf(c) - spacing / 2;
+        ctx.fillStyle = "rgba(110,110,120,0.55)";
+        ctx.fillRect(xL, yOfSample(0), spacing, yOfSample(rTop) - yOfSample(0));
+        ctx.fillRect(xL, yOfSample(rBot), spacing, yOfSample(ns) - yOfSample(rBot));
+        if (taper > 0 && rBot > rTop) {
+          const tt = Math.min(taper, rBot - rTop);
+          ctx.fillStyle = "rgba(110,110,120,0.3)";
+          ctx.fillRect(xL, yOfSample(rTop), spacing, yOfSample(rTop + tt) - yOfSample(rTop));
+          ctx.fillRect(xL, yOfSample(rBot - tt), spacing, yOfSample(rBot) - yOfSample(rBot - tt));
+        }
       }
     }
     ctx.restore();
@@ -210,14 +219,16 @@ export function MuteGather({
 
   return (
     <div>
-      <label>
-        Preview shot file:{" "}
-        <select value={file} onChange={(e) => setFile(e.target.value)}>
-          {acquisition.files.map((f) => (
-            <option key={f} value={f}>{f}</option>
-          ))}
-        </select>
-      </label>
+      {fileProp === undefined && (
+        <label>
+          Preview shot file:{" "}
+          <select value={file} onChange={(e) => setInternalFile(e.target.value)}>
+            {acquisition.files.map((f) => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+        </label>
+      )}
       {error && <p style={{ color: "var(--accent)" }}>Error: {error}</p>}
       <div style={{ marginTop: 8, overflowX: "auto" }}>
         <canvas ref={canvasRef} />

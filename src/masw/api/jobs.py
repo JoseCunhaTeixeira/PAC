@@ -7,7 +7,9 @@ from enum import StrEnum
 from pydantic import BaseModel
 
 from masw.models.computing import AnyComputingConfig
+from masw.models.inversion import InversionRunConfig
 from masw.runners.computing import WindowError, run_compute
+from masw.runners.inversion import run_inversion
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,24 @@ class JobManager:
         logger.info("Submitted job %s", job.id)
         return job
 
-    def _finalize(self, job_id: str, future: Future) -> None:
+    def submit_inversion(self, config: InversionRunConfig) -> Job:
+        job = Job(id=uuid.uuid4().hex)
+        self._jobs[job.id] = job
+        self._started[job.id] = time.monotonic()
+
+        def on_progress(completed: int, total: int, err: WindowError | None) -> None:
+            job.completed = completed
+            job.total = total
+            if err is not None:
+                job.errors.append(err)
+
+        future = self._executor.submit(run_inversion, config, on_progress)
+        future.add_done_callback(lambda f: self._finalize(job.id, f))
+
+        logger.info("Submitted inversion job %s", job.id)
+        return job
+
+    def _finalize(self, job_id: str, future: Future[list[WindowError]]) -> None:
         job = self._jobs[job_id]
         job.elapsed = time.monotonic() - self._started[job_id]
         error = future.exception()
