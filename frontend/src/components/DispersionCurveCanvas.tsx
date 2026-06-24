@@ -42,9 +42,9 @@ export function DispersionCurveCanvas({
       ...(s.predictedVs ?? []),
       ...(s.observedVs && s.observedVsErr
         ? s.observedVs.flatMap((v, i) => {
-            const err = s.observedVsErr![i];
-            return err == null ? [] : [v - err, v + err];
-          })
+          const err = s.observedVsErr![i];
+          return err == null ? [] : [v - err, v + err];
+        })
         : []),
     ]);
     if (allFs.length === 0 || allVs.length === 0) return null;
