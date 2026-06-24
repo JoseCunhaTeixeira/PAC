@@ -21,29 +21,38 @@ export function VisualizationDispersion({ folder }: { folder: string }) {
     setError(null);
 
     fetch(`${API}/xmids/${encodeURIComponent(folder)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: number[]) => {
         setXmids(data);
         data.forEach((xmid) => {
           fetch(`${API}/dispersion_images/${encodeURIComponent(folder)}/${xmid}`)
-            .then((res) => {
-              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            .then(async (res) => {
+              if (!res.ok) {
+                const body = await res.json().catch(() => null);
+                throw new Error(body?.detail ?? `HTTP ${res.status}`);
+              }
               return res.json();
             })
             .then((image: DispersionImage) =>
               setImages((prev) => ({ ...prev, [xmid]: image })),
             )
-            .catch((err) => setError(String(err)));
+            .catch((err) => setError(err instanceof Error ? err.message : String(err)));
         });
       })
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
 
     fetch(`${API}/dispersion_image_labels/${encodeURIComponent(folder)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: Record<string, number>) => {
@@ -52,17 +61,20 @@ export function VisualizationDispersion({ folder }: { folder: string }) {
           fetch(
             `${API}/dispersion_pseudo_section/${encodeURIComponent(folder)}/${encodeURIComponent(labelValue)}`,
           )
-            .then((res) => {
-              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            .then(async (res) => {
+              if (!res.ok) {
+                const body = await res.json().catch(() => null);
+                throw new Error(body?.detail ?? `HTTP ${res.status}`);
+              }
               return res.json();
             })
             .then((section: PseudoSection) =>
               setPseudoSections((prev) => ({ ...prev, [labelValue]: section })),
             )
-            .catch((err) => setError(String(err)));
+            .catch((err) => setError(err instanceof Error ? err.message : String(err)));
         });
       })
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [folder]);
 
   if (error) return <p style={{ color: "var(--accent)" }}>Error: {error}</p>;

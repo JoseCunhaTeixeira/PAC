@@ -64,12 +64,15 @@ export function VisualizationInversion({ folder }: { folder: string }) {
     setSaveResult(null);
 
     fetch(`${API}/dispersion_image_labels/${encodeURIComponent(folder)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: Record<string, number>) => setLabels(Object.keys(data)))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [folder]);
 
   useEffect(() => {
@@ -79,25 +82,31 @@ export function VisualizationInversion({ folder }: { folder: string }) {
     fetch(
       `${API}/inversion/velocity_section/${encodeURIComponent(folder)}?model=${model}&lateral_smoothing=${lateralSmoothing}`,
     )
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: VelocitySection) => setVelocitySection(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
 
     labels.forEach((labelValue) => {
       fetch(
         `${API}/inversion/curves/${encodeURIComponent(folder)}/${encodeURIComponent(labelValue)}?model=${model}`,
       )
-        .then((res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        .then(async (res) => {
+          if (!res.ok) {
+            const body = await res.json().catch(() => null);
+            throw new Error(body?.detail ?? `HTTP ${res.status}`);
+          }
           return res.json();
         })
         .then((data: PositionCurves[]) =>
           setPositionCurves((prev) => ({ ...prev, [labelValue]: data })),
         )
-        .catch((err) => setError(String(err)));
+        .catch((err) => setError(err instanceof Error ? err.message : String(err)));
     });
   }, [folder, model, lateralSmoothing, labels]);
 
@@ -151,8 +160,11 @@ export function VisualizationInversion({ folder }: { folder: string }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ labels, model, lateral_smoothing: lateralSmoothing }),
     })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: { saved_paths: string[]; errors: string[] }) => {
@@ -160,7 +172,7 @@ export function VisualizationInversion({ folder }: { folder: string }) {
         if (data.errors.length > 0) parts.push(`${data.errors.length} skipped: ${data.errors.join("; ")}`);
         setSaveResult(parts.join(" "));
       })
-      .catch((err) => setError(String(err)))
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setSaving(false));
   }
 

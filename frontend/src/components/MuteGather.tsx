@@ -98,12 +98,15 @@ export function MuteGather({
     if (!file) return;
     setError(null);
     fetch(`${API}/gather/${encodeURIComponent(folder)}/${encodeURIComponent(file)}?norm=${norm}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: Gather) => setGather(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [file, folder, norm]);
 
   useEffect(() => {

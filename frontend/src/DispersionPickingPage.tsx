@@ -48,7 +48,7 @@ export default function DispersionPickingPage() {
     fetch(`${API}/output_folders`)
       .then((res) => res.json())
       .then((data: string[]) => setFolders(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, []);
 
   useEffect(() => {
@@ -62,12 +62,15 @@ export default function DispersionPickingPage() {
       return;
     }
     fetch(`${API}/xmids/${encodeURIComponent(folder)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: number[]) => setXmids(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
     refreshLabels(folder);
     refreshPositionPicks(folder);
   }, [folder]);
@@ -75,8 +78,11 @@ export default function DispersionPickingPage() {
   function loadImage(folderName: string, xmidValue: number) {
     setError(null);
     fetch(`${API}/dispersion_images/${encodeURIComponent(folderName)}/${xmidValue}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: DispersionImage) => {
@@ -84,7 +90,7 @@ export default function DispersionPickingPage() {
         setPendingPolygon(null);
         setLabel(nextLabel("M", data.curves));
       })
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }
 
   useEffect(() => {
@@ -94,8 +100,11 @@ export default function DispersionPickingPage() {
 
   function refreshLabels(folderName: string) {
     fetch(`${API}/dispersion_image_labels/${encodeURIComponent(folderName)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: Record<string, number>) => {
@@ -105,28 +114,34 @@ export default function DispersionPickingPage() {
         );
         Object.keys(data).forEach((labelValue) => loadPseudoSection(folderName, labelValue));
       })
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }
 
   function refreshPositionPicks(folderName: string) {
     fetch(`${API}/dispersion_picks_by_position/${encodeURIComponent(folderName)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: { xmid: number; labels: string[] }[]) => setPositionPicks(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }
 
   function loadPseudoSection(folderName: string, labelValue: string) {
     setError(null);
     fetch(`${API}/dispersion_pseudo_section/${encodeURIComponent(folderName)}/${encodeURIComponent(labelValue)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: PseudoSection) => setPseudoSections((prev) => ({ ...prev, [labelValue]: data })))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }
 
   function handlePick() {
@@ -137,8 +152,11 @@ export default function DispersionPickingPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ polygon: pendingPolygon, label }),
     })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: DispersionImage) => {
@@ -148,7 +166,7 @@ export default function DispersionPickingPage() {
         refreshLabels(folder);
         refreshPositionPicks(folder);
       })
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }
 
   function handleDelete(curveLabel: string) {
@@ -157,8 +175,11 @@ export default function DispersionPickingPage() {
     fetch(`${API}/dispersion_images/${encodeURIComponent(folder)}/${xmid}/pick/${encodeURIComponent(curveLabel)}`, {
       method: "DELETE",
     })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: DispersionImage) => {
@@ -167,7 +188,7 @@ export default function DispersionPickingPage() {
         refreshLabels(folder);
         refreshPositionPicks(folder);
       })
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }
 
   return (

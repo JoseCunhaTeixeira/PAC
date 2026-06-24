@@ -11,12 +11,15 @@ export function VisualizationSignal({ folder }: { folder: string }) {
     setAcquisition(null);
     setError(null);
     fetch(`${API}/acquisitions/${encodeURIComponent(folder)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
         return res.json();
       })
       .then((data: Acquisition) => setAcquisition(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [folder]);
 
   if (error) return <p style={{ color: "var(--accent)" }}>Error: {error}</p>;

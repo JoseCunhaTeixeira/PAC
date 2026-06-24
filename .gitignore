@@ -1,5 +1,6 @@
 data/input/*
-!data/input/.gitkeep
+!data/input/active_p1
+!data/input/passive_p1
 
 data/output/*
 !data/output/.gitkeep
