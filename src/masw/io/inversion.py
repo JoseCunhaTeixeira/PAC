@@ -145,9 +145,7 @@ def invert_position(
     plt.close(density_fig)
 
     try:
-        samples = {
-            f"Vs{i + 1} [m/s]": result.samples[f"vs{i + 1}"] for i in range(result.n_layers)
-        }
+        samples = {f"Vs{i + 1} [m/s]": result.samples[f"vs{i + 1}"] for i in range(result.n_layers)}
         samples.update(
             {f"H{i + 1} [m]": result.samples[f"thick{i + 1}"] for i in range(result.n_layers - 1)}
         )
@@ -155,7 +153,9 @@ def invert_position(
         Plot.savefig(path=output_folder / "InversionMarginals_0000.png", figure=marginals_fig)
         plt.close(marginals_fig)
     except Exception:
-        logger.exception("Failed to plot posterior marginals for folder=%s, xmid=%.2f", folder, xmid)
+        logger.exception(
+            "Failed to plot posterior marginals for folder=%s, xmid=%.2f", folder, xmid
+        )
 
     return result
 
@@ -280,10 +280,8 @@ def save_velocity_xzv(folder: str) -> Path:
                 folder,
             )
     if not sections:
-        raise ValueError(
-            f"No model variant has at least two inverted positions in folder={folder}"
-        )
-    path = OUTPUT_DIR / folder / "VelocitySection_0000.hd5"
+        raise ValueError(f"No model variant has at least two inverted positions in folder={folder}")
+    path = OUTPUT_DIR / folder / "VelocitySection_0000.hdf5"
     save_velocity_models_sections(sections, path, dz=DZ)
     return path
 

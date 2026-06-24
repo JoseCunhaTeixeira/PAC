@@ -25,7 +25,7 @@ def xmid_folder(folder: str, xmid: float) -> Path:
 
 
 def _image_path(folder: str, xmid: float) -> Path:
-    return xmid_folder(folder, xmid) / "DispersionImage_0000.hd5"
+    return xmid_folder(folder, xmid) / "DispersionImage_0000.hdf5"
 
 
 def _curves_path(folder: str, xmid: float) -> Path:
