@@ -12,7 +12,7 @@ class PhaseWeightedStacking(BaseModel):
     nu: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
-    def validate_root(self):
+    def validate_root(self) -> Self:
         if self.nu is None:
             raise ValueError("nu is required when method='phase_weighted'")
         return self

@@ -58,6 +58,27 @@ export function CrosshairIcon({ size = 18 }: IconProps) {
   );
 }
 
+export function DepthIcon({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <line x1="3" y1="4" x2="21" y2="4" />
+      <line x1="3" y1="11" x2="21" y2="11" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+      <path d="M9 4v14" />
+      <polyline points="6 15 9 18 12 15" />
+    </svg>
+  );
+}
+
+export function EyeIcon({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
 export function SunIcon({ size = 18 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" {...base}>

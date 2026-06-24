@@ -25,3 +25,16 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "scipy.*",
+    "obspy.*",
+    "disba.*",
+    "yaml.*",
+]
+ignore_missing_imports = true

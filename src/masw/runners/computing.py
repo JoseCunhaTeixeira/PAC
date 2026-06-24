@@ -1,9 +1,13 @@
 import json
 import logging
+import time
 import traceback
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
+from typing import cast
+
+from sigproc.base import Pipeline
 
 from masw.adapters.registry import PIPELINE_BUILDERS
 from masw.adapters.windows import MASWWindow, build_windows
@@ -40,7 +44,7 @@ def run_compute(
     )
 
     errors: list[WindowError] = []
-    results: list[dict] = []
+    results: list[dict[str, object]] = []
     completed = 0
     if on_progress is not None:
         on_progress(completed, total, None)
@@ -56,9 +60,11 @@ def run_compute(
             window = futures[future]
             win_err = None
             try:
-                future.result()
+                duration_s = future.result()
                 logger.info("Finished xmid=%.2f", window.xmid)
-                results.append({"xmid": window.xmid, "status": "success"})
+                results.append(
+                    {"xmid": window.xmid, "status": "success", "duration_s": duration_s}
+                )
             except Exception as exc:
                 logger.exception("Processing failed for xmid=%.2f", window.xmid)
                 win_err = WindowError(
@@ -68,7 +74,9 @@ def run_compute(
                     traceback=traceback.format_exc(),
                 )
                 errors.append(win_err)
-                results.append({"xmid": window.xmid, "status": "failed", **asdict(win_err)})
+                results.append(
+                    {"xmid": window.xmid, "status": "failed", "duration_s": None, **asdict(win_err)}
+                )
             finally:
                 completed += 1
                 if on_progress is not None:
@@ -78,8 +86,8 @@ def run_compute(
     out_dir = config.execution_params.output_folder / profile
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    results.sort(key=lambda r: r["xmid"])
-    (out_dir / "outcome.json").write_text(json.dumps(results, indent=2))
+    results.sort(key=lambda r: cast(float, r["xmid"]))
+    (out_dir / "computing_outcome.json").write_text(json.dumps(results, indent=2))
 
     n_failed = len(errors)
     logger.info("%d/%d succeeded, %d failed", total - n_failed, total, n_failed)
@@ -90,21 +98,23 @@ def run_compute(
 def process_window(
     config: AnyComputingConfig,
     window: MASWWindow,
-    build_pipeline: Callable,
-) -> None:
+    build_pipeline: Callable[..., Pipeline],
+) -> float:
     profile = config.acquisition_params.folder_path.name
     base = config.execution_params.output_folder / profile
     base.mkdir(parents=True, exist_ok=True)
-    (base / "config.json").write_text(config.model_dump_json(indent=2))
+    (base / "computing_config.json").write_text(config.model_dump_json(indent=2))
 
     output_folder = base / f"xmid_{window.xmid:.2f}"
     output_folder.mkdir(parents=True, exist_ok=True)  # <-- was missing
     (output_folder / "window.json").write_text(window.model_dump_json(indent=2))
 
     logger.info("Processing xmid=%.2f -> %s", window.xmid, output_folder)
+    start = time.perf_counter()
     try:
         pipeline = build_pipeline(config=config, window=window, output_folder=output_folder)
         pipeline.run(show_log=False)
     except Exception:
         (output_folder / "error.log").write_text(traceback.format_exc())
         raise
+    return time.perf_counter() - start

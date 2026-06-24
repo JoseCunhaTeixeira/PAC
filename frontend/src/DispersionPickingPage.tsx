@@ -4,9 +4,26 @@ import { DispersionImageCanvas, type DispersionImage } from "./components/Disper
 import { PseudoSectionCanvas, type PseudoSection } from "./components/PseudoSectionCanvas";
 
 const LABEL_PATTERN = /^[A-Z]{1,3}[0-9]+$/;
+const LABEL_PARTS = /^([A-Z]{1,3})([0-9]+)$/;
 
 function sanitizeLabel(raw: string): string {
   return raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+}
+
+function labelPrefix(currentLabel: string): string {
+  return currentLabel.match(LABEL_PARTS)?.[1] ?? "M";
+}
+
+// Next free number for a given wave-type prefix (e.g. "M" or "L"), based on
+// what's actually picked -- not just the picked count -- so it lands on the
+// right number after deletions or mixed wave types leave gaps.
+function nextLabel(prefix: string, curves: { label: string }[]): string {
+  const taken = curves
+    .map((c) => c.label.match(LABEL_PARTS))
+    .filter((m): m is RegExpMatchArray => m !== null && m[1] === prefix)
+    .map((m) => Number(m[2]));
+  const next = taken.length > 0 ? Math.max(...taken) + 1 : 0;
+  return `${prefix}${next}`;
 }
 
 export default function DispersionPickingPage() {
@@ -65,7 +82,7 @@ export default function DispersionPickingPage() {
       .then((data: DispersionImage) => {
         setImage(data);
         setPendingPolygon(null);
-        setLabel(`M${data.curves.length}`);
+        setLabel(nextLabel("M", data.curves));
       })
       .catch((err) => setError(String(err)));
   }
@@ -127,7 +144,7 @@ export default function DispersionPickingPage() {
       .then((data: DispersionImage) => {
         setImage(data);
         setPendingPolygon(null);
-        setLabel(`M${data.curves.length}`);
+        setLabel(nextLabel(labelPrefix(label), data.curves));
         refreshLabels(folder);
         refreshPositionPicks(folder);
       })
@@ -146,6 +163,7 @@ export default function DispersionPickingPage() {
       })
       .then((data: DispersionImage) => {
         setImage(data);
+        setLabel(nextLabel(labelPrefix(label), data.curves));
         refreshLabels(folder);
         refreshPositionPicks(folder);
       })
@@ -293,7 +311,9 @@ export default function DispersionPickingPage() {
             >
               <h3 style={{ marginTop: 0 }}>{lbl}</h3>
               <p>{count}/{xmids.length} positions picked</p>
-              {pseudoSections[lbl] && <PseudoSectionCanvas section={pseudoSections[lbl]} mode={pseudoMode} />}
+              {pseudoSections[lbl] && (
+                <PseudoSectionCanvas section={pseudoSections[lbl]} mode={pseudoMode} height={200} />
+              )}
             </div>
           ))}
         </>

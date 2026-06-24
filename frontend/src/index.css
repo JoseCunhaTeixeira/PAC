@@ -56,6 +56,15 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Reserve the scrollbar's width permanently, so content that grows past
+     the viewport height doesn't shrink every element's available width when
+     the scrollbar appears — which would otherwise cascade into every
+     ResizeObserver-driven canvas (MaswPreview, *SectionCanvas) resizing and
+     redrawing a frame late, visible as a flicker. */
+  scrollbar-gutter: stable;
+}
+
 :root {
   font-family: "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, Helvetica, Arial, sans-serif;
@@ -154,7 +163,7 @@ label {
   color: var(--text-muted);
 }
 
-input,
+input:not([type="checkbox"]):not([type="radio"]),
 select {
   font: inherit;
   font-size: 0.9rem;
@@ -219,4 +228,8 @@ td {
 th {
   color: var(--text-muted);
   font-weight: 600;
+}
+
+input[type="number"] {
+  width: 190px;
 }

@@ -10,6 +10,6 @@ router = APIRouter(tags=["config"])
 
 
 @router.post("/config")
-def validate_config(config: AnyComputingConfig) -> dict:
+def validate_config(config: AnyComputingConfig) -> dict[str, object]:
     logger.info("Validated %s config", config.mode.value)
     return {"valid": True, "mode": config.mode}

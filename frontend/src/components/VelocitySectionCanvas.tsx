@@ -3,26 +3,24 @@ import { cividis } from "./colormaps";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { useContainerWidth } from "./useContainerWidth";
 
-export interface PseudoSection {
-  positions: number[];
-  fs_grid: number[];
-  velocities_by_frequency: (number | null)[][];
-  lambdas_grid: number[];
-  velocities_by_wavelength: (number | null)[][];
-}
-
 const ML = 60, MR = 120, MT = 16, MB = 40;
 const PLOT_W = 640;
 const FONT = CANVAS_FONT;
 const TOTAL_W = ML + PLOT_W + MR;
 
-export function PseudoSectionCanvas({
-  section,
-  mode,
+export function VelocitySectionCanvas({
+  positions,
+  elevations,
+  values,
+  colorLabel,
+  colormap = cividis,
   height = 320,
 }: {
-  section: PseudoSection;
-  mode: "frequency" | "wavelength";
+  positions: number[];
+  elevations: number[];
+  values: (number | null)[][];
+  colorLabel: string;
+  colormap?: (t: number) => [number, number, number];
   height?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -47,27 +45,19 @@ export function PseudoSectionCanvas({
     ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
     ctx.clearRect(0, 0, TOTAL_W, TOTAL_H);
 
-    const yGrid = mode === "frequency" ? section.fs_grid : section.lambdas_grid;
-    const velocities = mode === "frequency" ? section.velocities_by_frequency : section.velocities_by_wavelength;
-    const yLabel = mode === "frequency" ? "Frequency [Hz]" : "Wavelength [m]";
-    const positions = section.positions;
     const np = positions.length;
-    const ny = yGrid.length;
+    const nz = elevations.length;
 
-    // Wavelength roughly tracks depth sensitivity, so unlike frequency it is
-    // plotted like a depth axis: smaller (shallower) at the top, larger
-    // (deeper) at the bottom — the reverse of the frequency orientation.
-    const invertY = mode === "wavelength";
-    const yMin = yGrid[0];
-    const yMax = yGrid[yGrid.length - 1];
-    const ySpan = yMax - yMin || 1;
-    const yOf = (y: number) =>
-      invertY
-        ? MT + ((y - yMin) / ySpan) * PLOT_H
-        : MT + PLOT_H - ((y - yMin) / ySpan) * PLOT_H;
+    // Elevation decreases downward (shallow/high elevation at the top of the
+    // chart, deep/low elevation at the bottom) — the same orientation as a
+    // geological cross-section.
+    const zMin = elevations[elevations.length - 1];
+    const zMax = elevations[0];
+    const zSpan = zMax - zMin || 1;
+    const yOf = (z: number) => MT + ((zMax - z) / zSpan) * PLOT_H;
 
     let vMin = Infinity, vMax = -Infinity;
-    for (const row of velocities) {
+    for (const row of values) {
       for (const v of row) {
         if (v !== null) {
           if (v < vMin) vMin = v;
@@ -78,68 +68,39 @@ export function PseudoSectionCanvas({
     if (!Number.isFinite(vMin)) { vMin = 0; vMax = 1; }
     const vSpan = vMax - vMin || 1;
 
-    // Plot exactly between min(position) and max(position)
-    const xMin = positions[0];
-    const xMax = positions[np - 1];
-    const xSpan = xMax - xMin || 1;
+    const cellEdges: number[] = new Array(np + 1);
+    for (let i = 1; i < np; i++) cellEdges[i] = (positions[i - 1] + positions[i]) / 2;
+    cellEdges[0] = np > 1 ? positions[0] - (cellEdges[1] - positions[0]) : positions[0] - 0.5;
+    cellEdges[np] = np > 1 ? positions[np - 1] + (positions[np - 1] - cellEdges[np - 1]) : positions[0] + 0.5;
 
-    const xOf = (p: number) =>
-      ML + ((p - xMin) / xSpan) * PLOT_W;
-
-    // Midpoint boundaries, clipped to plot limits
-    const columnEdges: number[] = new Array(np + 1);
-
-    columnEdges[0] = xMin;
-    columnEdges[np] = xMax;
-
-    for (let i = 1; i < np; i++) {
-      columnEdges[i] = (positions[i - 1] + positions[i]) / 2;
-    }
+    const domainMin = cellEdges[0];
+    const domainSpan = cellEdges[np] - cellEdges[0] || 1;
+    const xOf = (p: number) => ML + ((p - domainMin) / domainSpan) * PLOT_W;
 
     for (let i = 0; i < np; i++) {
-      const xLeft = xOf(columnEdges[i]);
-      const xRight = xOf(columnEdges[i + 1]);
-
+      const xLeft = xOf(cellEdges[i]);
+      const xRight = xOf(cellEdges[i + 1]);
       const off = document.createElement("canvas");
       off.width = 1;
-      off.height = ny;
-
+      off.height = nz;
       const octx = off.getContext("2d");
       if (!octx) continue;
-
-      const imgData = octx.createImageData(1, ny);
-
-      for (let j = 0; j < ny; j++) {
-        const v = velocities[i][j];
-        const y = invertY ? j : ny - 1 - j;
-        const idx = y * 4;
-
+      const imgData = octx.createImageData(1, nz);
+      for (let j = 0; j < nz; j++) {
+        const v = values[i][j];
+        const idx = j * 4;
         if (v === null) {
           imgData.data[idx + 3] = 0;
           continue;
         }
-
-        const [r, g, b] = cividis((v - vMin) / vSpan);
-
+        const [r, g, b] = colormap((v - vMin) / vSpan);
         imgData.data[idx] = r;
         imgData.data[idx + 1] = g;
         imgData.data[idx + 2] = b;
         imgData.data[idx + 3] = 255;
       }
-
       octx.putImageData(imgData, 0, 0);
-
-      ctx.drawImage(
-        off,
-        0,
-        0,
-        1,
-        ny,
-        xLeft,
-        MT,
-        Math.max(1, xRight - xLeft),
-        PLOT_H
-      );
+      ctx.drawImage(off, 0, 0, 1, nz, xLeft, MT, Math.max(1, xRight - xLeft), PLOT_H);
     }
 
     // axes
@@ -151,15 +112,15 @@ export function PseudoSectionCanvas({
     ctx.fillStyle = palette.tick;
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    const nyTicks = 6;
-    for (let i = 0; i <= nyTicks; i++) {
-      const y = yMin + (i / nyTicks) * ySpan;
-      const py = yOf(y);
+    const nzTicks = 6;
+    for (let i = 0; i <= nzTicks; i++) {
+      const z = zMin + (i / nzTicks) * zSpan;
+      const py = yOf(z);
       ctx.beginPath();
       ctx.moveTo(ML - 4, py);
       ctx.lineTo(ML, py);
       ctx.stroke();
-      ctx.fillText(y.toFixed(1), ML - 7, py);
+      ctx.fillText(z.toFixed(1), ML - 7, py);
     }
 
     ctx.textAlign = "center";
@@ -176,10 +137,7 @@ export function PseudoSectionCanvas({
       ctx.fillText(p.toFixed(1), x, MT + PLOT_H + 6);
     }
 
-    // color legend — rendered through an offscreen image + drawImage (like
-    // the pcolormesh columns above) rather than per-row fillRect, since
-    // tiling many 1px fillRects leaves visible seams once the canvas is
-    // rasterized at a non-integer scale (fractional container widths).
+    // color legend
     const legendX = ML + PLOT_W + 20;
     const legendW = 14;
     const legendRes = 256;
@@ -191,7 +149,7 @@ export function PseudoSectionCanvas({
       const legendImg = legendOctx.createImageData(1, legendRes);
       for (let py = 0; py < legendRes; py++) {
         const t = 1 - py / (legendRes - 1);
-        const [r, g, b] = cividis(t);
+        const [r, g, b] = colormap(t);
         const idx = py * 4;
         legendImg.data[idx] = r;
         legendImg.data[idx + 1] = g;
@@ -220,15 +178,15 @@ export function PseudoSectionCanvas({
     ctx.save();
     ctx.translate(16, MT + PLOT_H / 2);
     ctx.rotate(-Math.PI / 2);
-    ctx.fillText(yLabel, 0, 0);
+    ctx.fillText("Elevation [m]", 0, 0);
     ctx.restore();
     ctx.save();
     ctx.translate(TOTAL_W - 14, MT + PLOT_H / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.textAlign = "center";
-    ctx.fillText("Phase velocity [m/s]", 0, 0);
+    ctx.fillText(colorLabel, 0, 0);
     ctx.restore();
-  }, [section, mode, height, theme, scale]);
+  }, [positions, elevations, values, colorLabel, colormap, height, theme, scale]);
 
   return (
     <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W }}>

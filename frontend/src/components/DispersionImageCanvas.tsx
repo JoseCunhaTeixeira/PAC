@@ -16,8 +16,8 @@ export interface DispersionImage {
   vs: number[];
   type: string;
   curves: DispersionCurve[];
-  lambda_min: number;
-  lambda_max: number;
+  lambda_min: number | null;
+  lambda_max: number | null;
 }
 
 const ML = 60, MR = 16, MT = 16, MB = 38;
@@ -108,8 +108,8 @@ export function DispersionImageCanvas({
     // array resolution bounds: v = f * lambda, clipped to the velocity axis.
     // Below lambda_min picks are spatially aliased; above lambda_max they
     // aren't resolvable by the array's aperture.
-    function drawLambdaBound(lambda: number, labelText: string) {
-      if (!ctx) return;
+    function drawLambdaBound(lambda: number | null, labelText: string) {
+      if (!ctx || lambda === null) return;
       ctx.save();
       ctx.strokeStyle = "#999999";
       ctx.lineWidth = 1.5;

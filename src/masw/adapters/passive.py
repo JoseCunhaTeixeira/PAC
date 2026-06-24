@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from sigproc.base import Pipeline
 from sigproc.transformers import (
@@ -29,7 +30,7 @@ def build_passive_pipeline(
     output_folder: Path,
 ) -> Pipeline:
 
-    load_kwargs = {
+    load_kwargs: dict[str, Any] = {
         "file_paths": window.selected_files,
         "acquisitions": window.acquisitions,
         "data_type": "segd",
