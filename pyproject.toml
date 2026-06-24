@@ -11,6 +11,7 @@ dependencies = [
     "pyyaml",
     "fastapi[standard]",
     "sigproc @ git+https://github.com/JoseCunhaTeixeira/sigproc",
+    "disba>=0.7.0",
 ]
 
 [build-system]
