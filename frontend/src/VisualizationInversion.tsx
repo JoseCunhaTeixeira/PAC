@@ -184,7 +184,7 @@ export function VisualizationInversion({ folder }: { folder: string }) {
     <>
       <h2>Shear wave velocity profile</h2>
       <h4>Display settings</h4>
-      <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 12, display: "flex", gap: 140, flexWrap: "wrap" }}>
+      <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 12, display: "flex", gap: 120, flexWrap: "wrap" }}>
         <div>
           <strong>Model</strong>
           {MODEL_OPTIONS.map((opt) => (

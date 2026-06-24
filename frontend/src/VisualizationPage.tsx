@@ -36,7 +36,7 @@ export default function VisualizationPage() {
 
       <div style={{ marginBottom: 32 }}>
         <label>
-          <h2>Data selection</h2>
+          <h2>Loading</h2>
           Visualization mode:{" "}
           <select value={mode} onChange={(e) => setMode(e.target.value as Mode | "")}>
             <option value="">— choose —</option>

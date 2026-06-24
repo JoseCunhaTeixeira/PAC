@@ -4,7 +4,7 @@ from itertools import pairwise
 from pathlib import Path
 
 from pydantic import BaseModel
-from sigproc.base.acquisition import UNKNOWN_ACQUISITION, Acquisition
+from sigproc.base.acquisition import LinearAcquisition
 from sigproc.base.coordinate import Coordinate
 
 from masw.models.acquisition import AcquisitionParameters, PositionXZ
@@ -17,7 +17,7 @@ class MASWWindow(BaseModel):
     xmid: float
     selected_files: list[Path]
     receiver_indices: list[int]
-    acquisitions: list[Acquisition]
+    acquisitions: list[LinearAcquisition]
 
 
 def _arc_midpoint_x(positions: list[PositionXZ]) -> float:
@@ -102,20 +102,25 @@ def build_windows(
                 selected_files.append(acquisition_params.folder_path / file)
 
                 acquisitions.append(
-                    Acquisition(
+                    LinearAcquisition(
                         source=Coordinate(x=source_x, y=0.0, z=source_z),
                         receivers=receiver_coords,
                     )
                 )
         else:
             # passive data has no real source: every shot is kept for every
-            # window (there is no source-distance geometry to filter by),
-            # using sigproc's sentinel to mark the source as unknown while
-            # keeping the real receiver geometry
+            # window (there is no source-distance geometry to filter by).
+            # LinearAcquisition requires a known source position (an
+            # unknown one would silently poison offsets/mid_position with
+            # NaN -- e.g. velocity-based muting would zero every trace
+            # outright), so the first receiver stands in for it. offsets
+            # then read as distance-from-receiver-0 rather than a real
+            # source distance, an arbitrary but at least defined choice.
+            # Source will be redifined anyway during cross-correlation.
             for file in acquisition_params.files:
                 selected_files.append(acquisition_params.folder_path / file)
                 acquisitions.append(
-                    Acquisition(source=UNKNOWN_ACQUISITION.source, receivers=receiver_coords)
+                    LinearAcquisition(source=receiver_coords[0], receivers=receiver_coords)
                 )
 
         if not selected_files:

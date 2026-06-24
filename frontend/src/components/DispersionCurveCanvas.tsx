@@ -1,5 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { HoverTooltip } from "./HoverTooltip";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
+import { useCanvasHover } from "./useCanvasHover";
 
 export interface CurveSeries {
   label: string;
@@ -10,8 +12,6 @@ export interface CurveSeries {
   predictedFs: number[] | null;
   predictedVs: number[] | null;
 }
-
-const ERROR_BAR_STRIDE = 5;
 
 const ML = 48, MR = 8, MT = 8, MB = 36;
 const PLOT_W = 150, PLOT_H = 110;
@@ -33,6 +33,46 @@ export function DispersionCurveCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
   const palette = canvasPalette(theme);
+  const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(1);
+
+  const axisRange = useMemo(() => {
+    const allFs = series.flatMap((s) => [...(s.observedFs ?? []), ...(s.predictedFs ?? [])]);
+    const allVs = series.flatMap((s) => [
+      ...(s.observedVs ?? []),
+      ...(s.predictedVs ?? []),
+      ...(s.observedVs && s.observedVsErr
+        ? s.observedVs.flatMap((v, i) => {
+            const err = s.observedVsErr![i];
+            return err == null ? [] : [v - err, v + err];
+          })
+        : []),
+    ]);
+    if (allFs.length === 0 || allVs.length === 0) return null;
+
+    const fMin = Math.min(...allFs);
+    const fMax = Math.max(...allFs);
+    const vMin = Math.min(...allVs);
+    const vMax = Math.max(...allVs);
+    return { fMin, fMax, fSpan: fMax - fMin || 1, vMin, vMax, vSpan: vMax - vMin || 1 };
+  }, [series]);
+
+  const hover = useMemo(() => {
+    if (!hoverPos || !axisRange) return null;
+    if (
+      hoverPos.x < ML || hoverPos.x > ML + PLOT_W ||
+      hoverPos.y < MT || hoverPos.y > MT + PLOT_H
+    ) {
+      return null;
+    }
+    const { fMin, fSpan, vMin, vSpan } = axisRange;
+    const freq = fMin + ((hoverPos.x - ML) / PLOT_W) * fSpan;
+    const vel = vMin + ((MT + PLOT_H - hoverPos.y) / PLOT_H) * vSpan;
+    return {
+      px: hoverPos.x,
+      py: hoverPos.y,
+      lines: [`Frequency: ${freq.toFixed(1)} Hz`, `Velocity: ${vel.toFixed(1)} m/s`],
+    };
+  }, [hoverPos, axisRange]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -47,18 +87,6 @@ export function DispersionCurveCanvas({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, TOTAL_W, TOTAL_H);
 
-    const allFs = series.flatMap((s) => [...(s.observedFs ?? []), ...(s.predictedFs ?? [])]);
-    const allVs = series.flatMap((s) => [
-      ...(s.observedVs ?? []),
-      ...(s.predictedVs ?? []),
-      ...(s.observedVs && s.observedVsErr
-        ? s.observedVs.flatMap((v, i) => {
-            const err = s.observedVsErr![i];
-            return err == null ? [] : [v - err, v + err];
-          })
-        : []),
-    ]);
-
     ctx.strokeStyle = palette.axis;
     ctx.lineWidth = 1;
     ctx.strokeRect(ML, MT, PLOT_W, PLOT_H);
@@ -69,7 +97,7 @@ export function DispersionCurveCanvas({
     ctx.textBaseline = "alphabetic";
     ctx.fillText(title, ML + PLOT_W / 2, MT - 2 + 10);
 
-    if (allFs.length === 0 || allVs.length === 0) {
+    if (!axisRange) {
       ctx.fillStyle = palette.tick;
       ctx.font = FONT;
       ctx.textAlign = "center";
@@ -78,12 +106,7 @@ export function DispersionCurveCanvas({
       return;
     }
 
-    const fMin = Math.min(...allFs);
-    const fMax = Math.max(...allFs);
-    const vMin = Math.min(...allVs);
-    const vMax = Math.max(...allVs);
-    const fSpan = fMax - fMin || 1;
-    const vSpan = vMax - vMin || 1;
+    const { fMin, fMax, vMin, vMax, fSpan, vSpan } = axisRange;
 
     const xOf = (f: number) => ML + ((f - fMin) / fSpan) * PLOT_W;
     const yOf = (v: number) => MT + PLOT_H - ((v - vMin) / vSpan) * PLOT_H;
@@ -110,7 +133,7 @@ export function DispersionCurveCanvas({
 
       if (s.observedVsErr) {
         ctx.lineWidth = 1;
-        for (let i = 0; i < s.observedFs.length; i += ERROR_BAR_STRIDE) {
+        for (let i = 0; i < s.observedFs.length; i++) {
           const err = s.observedVsErr[i];
           if (err == null) continue;
           const v = s.observedVs[i];
@@ -170,7 +193,17 @@ export function DispersionCurveCanvas({
       ctx.fillText(yLabel, 0, 0);
       ctx.restore();
     }
-  }, [series, title, xLabel, yLabel, theme, palette]);
+  }, [series, axisRange, title, xLabel, yLabel, theme, palette]);
 
-  return <canvas ref={canvasRef} style={{ display: "block" }} />;
+  return (
+    <div style={{ position: "relative", width: TOTAL_W, height: TOTAL_H }}>
+      <canvas
+        ref={canvasRef}
+        style={{ display: "block" }}
+        onMouseMove={onMouseMove}
+        onMouseLeave={onMouseLeave}
+      />
+      {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
+    </div>
+  );
 }

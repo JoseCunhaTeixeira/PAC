@@ -1,12 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { API, type Acquisition, type Muting } from "../api";
+import { HoverTooltip } from "./HoverTooltip";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
+import { useCanvasHover } from "./useCanvasHover";
 
 interface Gather {
   dt: number;
   n_samples: number;
   traces: number[][];
 }
+
+// layout in logical pixels -- shared between the draw effect and the hover
+// hit-testing below, so they always agree on where the plot area is.
+const ML = 50, MR = 12, MT = 12, MB = 34;
+const plotW = 686, plotH = 320;
+const totalW = ML + plotW + MR;
+const totalH = MT + plotH + MB;
 
 // round-number step for axis ticks
 function niceStep(raw: number) {
@@ -46,6 +55,40 @@ export function MuteGather({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
   const palette = canvasPalette(theme);
+  const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(1);
+
+  // true offset along the (x, z) topography profile (matches sigproc's
+  // Coordinate.distance_to with y=0), so a sloped line between source and
+  // receiver gives a longer offset than the flat horizontal distance would.
+  const offsets = useMemo(() => {
+    const fi = acquisition.files.indexOf(file);
+    const src = acquisition.source_positions[fi] ?? [0, 0];
+    return acquisition.receiver_positions.map((rp) =>
+      Math.sqrt((rp[0] - src[0]) ** 2 + (rp[1] - src[1]) ** 2)
+    );
+  }, [acquisition, file]);
+
+  const hover = useMemo(() => {
+    if (!hoverPos || !gather) return null;
+    if (
+      hoverPos.x < ML || hoverPos.x > ML + plotW ||
+      hoverPos.y < MT || hoverPos.y > MT + plotH
+    ) {
+      return null;
+    }
+
+    const nt = gather.traces.length;
+    const Tmax = gather.n_samples * gather.dt;
+    const spacing = plotW / nt;
+    const c = Math.max(0, Math.min(nt - 1, Math.floor((hoverPos.x - ML) / spacing)));
+    const time = ((hoverPos.y - MT) / plotH) * Tmax;
+
+    return {
+      px: hoverPos.x,
+      py: hoverPos.y,
+      lines: [`Offset: ${offsets[c].toFixed(2)} m`, `Time: ${time.toFixed(3)} s`],
+    };
+  }, [hoverPos, gather, offsets]);
 
   useEffect(() => {
     if (fileProp === undefined) setInternalFile(acquisition.files[0] ?? "");
@@ -72,12 +115,6 @@ export function MuteGather({
     const dt = gather.dt;
     const Tmax = ns * dt;
 
-    // layout in logical pixels
-    const ML = 50, MR = 12, MT = 12, MB = 34;
-    const plotW = 686, plotH = 320;
-    const totalW = ML + plotW + MR;
-    const totalH = MT + plotH + MB;
-
     // crisp on high-DPI screens
     const dpr = window.devicePixelRatio || 1;
     canvas.width = totalW * dpr;
@@ -95,15 +132,6 @@ export function MuteGather({
     const spacing = plotW / nt;
     const xOf = (c: number) => ML + (c + 0.5) * spacing;
     const amp = spacing * 0.45; // wiggle excursion
-
-    const fi = acquisition.files.indexOf(file);
-    const src = acquisition.source_positions[fi] ?? [0, 0];
-    // true offset along the (x, z) topography profile (matches sigproc's
-    // Coordinate.distance_to with y=0), so a sloped line between source and
-    // receiver gives a longer offset than the flat horizontal distance would.
-    const offsets = acquisition.receiver_positions.map((rp) =>
-      Math.sqrt((rp[0] - src[0]) ** 2 + (rp[1] - src[1]) ** 2)
-    );
 
     // white plot background
     ctx.fillStyle = "#fff";
@@ -215,7 +243,7 @@ export function MuteGather({
     ctx.rotate(-Math.PI / 2);
     ctx.fillText("Time [s]", 0, 0);
     ctx.restore();
-  }, [gather, muting, acquisition, file, theme]);
+  }, [gather, muting, offsets, theme]);
 
   return (
     <div>
@@ -231,7 +259,14 @@ export function MuteGather({
       )}
       {error && <p style={{ color: "var(--accent)" }}>Error: {error}</p>}
       <div style={{ marginTop: 8, overflowX: "auto" }}>
-        <canvas ref={canvasRef} />
+        <div style={{ position: "relative", display: "inline-block" }}>
+          <canvas
+            ref={canvasRef}
+            onMouseMove={onMouseMove}
+            onMouseLeave={onMouseLeave}
+          />
+          {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
+        </div>
       </div>
     </div>
   );
