@@ -10,11 +10,8 @@ dependencies = [
     "pydantic",
     "pyyaml",
     "fastapi[standard]",
-    "sigproc",
+    "sigproc @ git+https://github.com/JoseCunhaTeixeira/sigproc",
 ]
-
-[tool.uv.sources]
-sigproc = { path = "../sigproc", editable = true }
 
 [build-system]
 requires = ["setuptools>=61"]
@@ -31,10 +28,5 @@ python_version = "3.14"
 strict = true
 
 [[tool.mypy.overrides]]
-module = [
-    "scipy.*",
-    "obspy.*",
-    "disba.*",
-    "yaml.*",
-]
+module = ["scipy.*", "obspy.*", "disba.*", "yaml.*"]
 ignore_missing_imports = true
