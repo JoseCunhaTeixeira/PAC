@@ -1,5 +1,7 @@
 # PAC - Passive and Active Computation of MASW
 
+New faster version of PAC using a Spark frontend and a new cleaned backend !
+
 PAC is an app designed for processing 2D Multichannel Analysis of Surface Waves (MASW).
 It can handle both passive and active seismic data to automatically optimize and extract dispersion images.
 Dispersion curves can be semi-automatically picked on an interactive interface and then be inverted into shear wave velocity profiles.
@@ -12,15 +14,13 @@ Dispersion curves can be semi-automatically picked on an interactive interface a
 - **User-Friendly Interface:** Streamlined workflow with visualization capabilities.
 - **Python-Based:** Lightweight and extensible for custom modifications.
 
-## Overview
+## Overview (to be updated)
 https://github.com/user-attachments/assets/983d6761-53d0-4f0a-9dff-7742f1432696
 
 ## Installation
 ### Requirements
-- Python 3.10+
-- Required libraries: `numpy`, `pandas`, `scipy`, `matplotlib`, `plotly`, `bayesbay`, `streamlit`, `obspy`, `arviz`, `disba`
+- Python 3.14+
 - On Mac OS, BayesBay needs to be installed from source with no architecture target specified on the Makefile.
-- Developed on Linux Ubuntu 22.04.5 LTS under Streamlit 1.41.1 and Python 3.10.12.
 
 ### Clone Repository
 ```sh
@@ -28,36 +28,16 @@ git clone https://github.com/JoseCunhaTeixeira/PAC.git
 cd PAC/
 ```
 
-## Usage
-### Running the app
-```sh
-streamlit run Home.py
-```
-if it doesn't work, try
-```sh
-streamlit run Home.py --server.enableXsrfProtection false
-```
-
 Content:
-- `Home.py`: App home
-- `home_images/`: Images for app home
-- `pages/`: App tabs (Computing, Dispersion Picking, Inversion, and Visualization)
-- `scripts/`: MASW and inversion scripts
-- `modules/`: Surface wave signal processing functions
-- `Paths.py`: Paths to the PAC main folder, and output and input directories
-- **`input/`: Contains one folder per profile with your raw seismic records**
-    - **`profile_1/`: seismic files for profile 1**
-    - **`profile_2/`: seismic files for profile 2**
-    - **...**
-- `output/`: Contains one folder per profile with dispersion images, picked dispersion curves and inversion results
-    - `profile_1/`: results from computing, picking and inversion for profile 1
-    - `profile_2/`: results from computing, picking and inversion for profile 2
-    - ...
-- (`input/` and `output/` are created automatically at app launching if do not exist)
-
-## Contributors
-- **José Cunha Teixeira**
-- **Benjamin Decker** for phase-shift algorithm optimization
+- **`data/`:**
+    - `input/`: Contains one folder per profile with your raw seismic records
+        - `profile_1/`: seismic files for profile 1
+        - `profile_2/`: seismic files for profile 2
+        - ...
+    - `output/`: Contains one folder per profile with dispersion images, picked dispersion curves and inversion results
+        - `profile_1/`: results from computing, picking and inversion for profile 1
+        - `profile_2/`: results from computing, picking and inversion for profile 2
+        - ...
   
 ## License
 This project is under Creative Commons Attribution 4.0 International license, allowing re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited.
