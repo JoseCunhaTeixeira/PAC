@@ -541,6 +541,7 @@ export default function InversionPage() {
             values={velocitySection.vs_grid}
             colorLabel="Vs [m/s]"
             colormap={terrain}
+            height={200}
           />
           <VelocitySectionCanvas
             positions={velocitySection.positions}
@@ -548,6 +549,7 @@ export default function InversionPage() {
             values={velocitySection.vs_std_grid}
             colorLabel="Vs std [m/s]"
             colormap={afmhotR}
+            height={200}
           />
         </>
       )}

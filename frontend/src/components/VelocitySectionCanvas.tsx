@@ -1,6 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { cividis } from "./colormaps";
+import { HoverTooltip } from "./HoverTooltip";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
+import { nearestIndex, useCanvasHover } from "./useCanvasHover";
 import { useContainerWidth } from "./useContainerWidth";
 
 const ML = 60, MR = 120, MT = 16, MB = 40;
@@ -30,6 +32,42 @@ export function VelocitySectionCanvas({
   const scale = containerWidth > 0 ? Math.min(containerWidth / TOTAL_W, 1) : 1;
   const PLOT_H = height;
   const TOTAL_H = MT + PLOT_H + MB;
+  const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(scale);
+
+  const hover = useMemo(() => {
+    if (!hoverPos) return null;
+    if (
+      hoverPos.x < ML || hoverPos.x > ML + PLOT_W ||
+      hoverPos.y < MT || hoverPos.y > MT + PLOT_H
+    ) {
+      return null;
+    }
+
+    const np = positions.length;
+    const xMin = positions[0];
+    const xMax = positions[np - 1];
+    const xSpan = xMax - xMin || 1;
+    const position = xMin + ((hoverPos.x - ML) / PLOT_W) * xSpan;
+
+    const zMin = elevations[elevations.length - 1];
+    const zMax = elevations[0];
+    const zSpan = zMax - zMin || 1;
+    const elevation = zMax - ((hoverPos.y - MT) / PLOT_H) * zSpan;
+
+    const posIdx = nearestIndex(positions, position);
+    const zIdx = nearestIndex(elevations, elevation);
+    const value = values[posIdx]?.[zIdx] ?? null;
+
+    return {
+      px: hoverPos.x * scale,
+      py: hoverPos.y * scale,
+      lines: [
+        `Position: ${positions[posIdx].toFixed(2)} m`,
+        `Elevation: ${elevations[zIdx].toFixed(2)} m`,
+        `${colorLabel}: ${value === null ? "—" : value.toFixed(1)}`,
+      ],
+    };
+  }, [hoverPos, positions, elevations, values, colorLabel, scale, PLOT_H]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -68,18 +106,27 @@ export function VelocitySectionCanvas({
     if (!Number.isFinite(vMin)) { vMin = 0; vMax = 1; }
     const vSpan = vMax - vMin || 1;
 
+    // Plot exactly between min(position) and max(position), like
+    // PseudoSectionCanvas/PseudoSectionComparisonCanvas.
+    const xMin = positions[0];
+    const xMax = positions[np - 1];
+    const xSpan = xMax - xMin || 1;
+    const xOf = (p: number) => ML + ((p - xMin) / xSpan) * PLOT_W;
+
+    // Midpoint boundaries, clipped to plot limits
     const cellEdges: number[] = new Array(np + 1);
+    cellEdges[0] = xMin;
+    cellEdges[np] = xMax;
     for (let i = 1; i < np; i++) cellEdges[i] = (positions[i - 1] + positions[i]) / 2;
-    cellEdges[0] = np > 1 ? positions[0] - (cellEdges[1] - positions[0]) : positions[0] - 0.5;
-    cellEdges[np] = np > 1 ? positions[np - 1] + (positions[np - 1] - cellEdges[np - 1]) : positions[0] + 0.5;
 
-    const domainMin = cellEdges[0];
-    const domainSpan = cellEdges[np] - cellEdges[0] || 1;
-    const xOf = (p: number) => ML + ((p - domainMin) / domainSpan) * PLOT_W;
-
+    ctx.imageSmoothingEnabled = false;
     for (let i = 0; i < np; i++) {
-      const xLeft = xOf(cellEdges[i]);
-      const xRight = xOf(cellEdges[i + 1]);
+      // Rounded to whole pixels so adjacent columns share an exact integer
+      // boundary -- left as floats, each column's edge gets anti-aliased
+      // against the background independently, leaving a thin seam of
+      // blended color between every pair of columns.
+      const xLeft = Math.round(xOf(cellEdges[i]));
+      const xRight = Math.round(xOf(cellEdges[i + 1]));
       const off = document.createElement("canvas");
       off.width = 1;
       off.height = nz;
@@ -102,6 +149,7 @@ export function VelocitySectionCanvas({
       octx.putImageData(imgData, 0, 0);
       ctx.drawImage(off, 0, 0, 1, nz, xLeft, MT, Math.max(1, xRight - xLeft), PLOT_H);
     }
+    ctx.imageSmoothingEnabled = true;
 
     // axes
     ctx.strokeStyle = palette.axis;
@@ -189,8 +237,14 @@ export function VelocitySectionCanvas({
   }, [positions, elevations, values, colorLabel, colormap, height, theme, scale]);
 
   return (
-    <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W }}>
-      <canvas ref={canvasRef} style={{ display: "block" }} />
+    <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W, position: "relative" }}>
+      <canvas
+        ref={canvasRef}
+        style={{ display: "block" }}
+        onMouseMove={onMouseMove}
+        onMouseLeave={onMouseLeave}
+      />
+      {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
     </div>
   );
 }

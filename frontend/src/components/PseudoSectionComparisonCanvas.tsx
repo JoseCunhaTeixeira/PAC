@@ -1,6 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { viridis, bwr } from "./colormaps";
+import { HoverTooltip } from "./HoverTooltip";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
+import { nearestIndex, useCanvasHover } from "./useCanvasHover";
 import { useContainerWidth } from "./useContainerWidth";
 
 export interface PseudoSectionComparisonData {
@@ -32,6 +34,62 @@ export function PseudoSectionComparisonCanvas({
   const palette = canvasPalette(theme);
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
   const scale = containerWidth > 0 ? Math.min(containerWidth / TOTAL_W, 1) : 1;
+  const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(scale);
+
+  const hover = useMemo(() => {
+    if (!hoverPos) return null;
+    if (hoverPos.x < ML || hoverPos.x > ML + PLOT_W) return null;
+
+    const { positions, fs, observed_grid, predicted_grid, residual_grid } = comparison;
+    const np = positions.length;
+
+    const top1 = MT;
+    const top2 = top1 + PLOT_H + PANEL_GAP;
+    const top3 = top2 + PLOT_H + PANEL_GAP;
+
+    let top: number;
+    let grid: (number | null)[][];
+    let label: string;
+    if (hoverPos.y >= top1 && hoverPos.y <= top1 + PLOT_H) {
+      top = top1;
+      grid = observed_grid;
+      label = `Obs ${velocityLabel}`;
+    } else if (hoverPos.y >= top2 && hoverPos.y <= top2 + PLOT_H) {
+      top = top2;
+      grid = predicted_grid;
+      label = `Pred ${velocityLabel}`;
+    } else if (hoverPos.y >= top3 && hoverPos.y <= top3 + PLOT_H) {
+      top = top3;
+      grid = residual_grid;
+      label = "Residuals [%]";
+    } else {
+      return null;
+    }
+
+    const xMin = positions[0];
+    const xMax = positions[np - 1];
+    const xSpan = xMax - xMin || 1;
+    const position = xMin + ((hoverPos.x - ML) / PLOT_W) * xSpan;
+
+    const fMin = fs[0];
+    const fMax = fs[fs.length - 1];
+    const fSpan = fMax - fMin || 1;
+    const freq = fMin + ((top + PLOT_H - hoverPos.y) / PLOT_H) * fSpan;
+
+    const posIdx = nearestIndex(positions, position);
+    const fIdx = nearestIndex(fs, freq);
+    const value = grid[posIdx]?.[fIdx] ?? null;
+
+    return {
+      px: hoverPos.x * scale,
+      py: hoverPos.y * scale,
+      lines: [
+        `Position: ${positions[posIdx].toFixed(2)} m`,
+        `Frequency: ${fs[fIdx].toFixed(2)} Hz`,
+        `${label}: ${value === null ? "—" : value.toFixed(1)}`,
+      ],
+    };
+  }, [hoverPos, comparison, velocityLabel, scale]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -231,8 +289,14 @@ export function PseudoSectionComparisonCanvas({
   }, [comparison, velocityLabel, theme, scale]);
 
   return (
-    <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W }}>
-      <canvas ref={canvasRef} style={{ display: "block" }} />
+    <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W, position: "relative" }}>
+      <canvas
+        ref={canvasRef}
+        style={{ display: "block" }}
+        onMouseMove={onMouseMove}
+        onMouseLeave={onMouseLeave}
+      />
+      {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
     </div>
   );
 }

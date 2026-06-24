@@ -1,6 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { cividis } from "./colormaps";
+import { HoverTooltip } from "./HoverTooltip";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
+import { nearestIndex, useCanvasHover } from "./useCanvasHover";
 import { useContainerWidth } from "./useContainerWidth";
 
 export interface PseudoSection {
@@ -32,6 +34,51 @@ export function PseudoSectionCanvas({
   const scale = containerWidth > 0 ? Math.min(containerWidth / TOTAL_W, 1) : 1;
   const PLOT_H = height;
   const TOTAL_H = MT + PLOT_H + MB;
+  const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(scale);
+
+  const hover = useMemo(() => {
+    if (!hoverPos) return null;
+    if (
+      hoverPos.x < ML || hoverPos.x > ML + PLOT_W ||
+      hoverPos.y < MT || hoverPos.y > MT + PLOT_H
+    ) {
+      return null;
+    }
+
+    const yGrid = mode === "frequency" ? section.fs_grid : section.lambdas_grid;
+    const velocities = mode === "frequency" ? section.velocities_by_frequency : section.velocities_by_wavelength;
+    const yLabel = mode === "frequency" ? "Frequency" : "Wavelength";
+    const yUnit = mode === "frequency" ? "Hz" : "m";
+    const invertY = mode === "wavelength";
+    const positions = section.positions;
+    const np = positions.length;
+
+    const xMin = positions[0];
+    const xMax = positions[np - 1];
+    const xSpan = xMax - xMin || 1;
+    const position = xMin + ((hoverPos.x - ML) / PLOT_W) * xSpan;
+
+    const yMin = yGrid[0];
+    const yMax = yGrid[yGrid.length - 1];
+    const ySpan = yMax - yMin || 1;
+    const yValue = invertY
+      ? yMin + ((hoverPos.y - MT) / PLOT_H) * ySpan
+      : yMin + ((MT + PLOT_H - hoverPos.y) / PLOT_H) * ySpan;
+
+    const posIdx = nearestIndex(positions, position);
+    const yIdx = nearestIndex(yGrid, yValue);
+    const value = velocities[posIdx]?.[yIdx] ?? null;
+
+    return {
+      px: hoverPos.x * scale,
+      py: hoverPos.y * scale,
+      lines: [
+        `Position: ${positions[posIdx].toFixed(2)} m`,
+        `${yLabel}: ${yGrid[yIdx].toFixed(2)} ${yUnit}`,
+        `Velocity: ${value === null ? "—" : value.toFixed(1)} m/s`,
+      ],
+    };
+  }, [hoverPos, section, mode, scale, PLOT_H]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -231,8 +278,14 @@ export function PseudoSectionCanvas({
   }, [section, mode, height, theme, scale]);
 
   return (
-    <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W }}>
-      <canvas ref={canvasRef} style={{ display: "block" }} />
+    <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W, position: "relative" }}>
+      <canvas
+        ref={canvasRef}
+        style={{ display: "block" }}
+        onMouseMove={onMouseMove}
+        onMouseLeave={onMouseLeave}
+      />
+      {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
     </div>
   );
 }
