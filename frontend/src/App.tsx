@@ -9,7 +9,9 @@ import InversionPage from "./InversionPage";
 import VisualizationPage from "./VisualizationPage";
 import { API } from "./api";
 import { applyTheme, getInitialTheme, ThemeContext, type Theme } from "./theme";
-import { CrosshairIcon, DepthIcon, EyeIcon, HomeIcon, LayersIcon, LogoMark, MoonIcon, SunIcon, WavesIcon, ZapIcon } from "./components/icons";
+import { CrosshairIcon, DepthIcon, EyeIcon, HomeIcon, LayersIcon, MoonIcon, SunIcon, WavesIcon, ZapIcon } from "./components/icons";
+import logoDeepWaveLight from "./assets/logo_DeepWave_lightmode.png";
+import logoDeepWaveDark from "./assets/logo_DeepWave_darkmode.png";
 
 const NAV_ITEMS = [
   { to: "/", end: true, label: "Home", icon: <HomeIcon /> },
@@ -55,7 +57,11 @@ export default function App() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", marginBottom: 28 }}>
-            <LogoMark />
+            <img
+              src={theme === "dark" ? logoDeepWaveDark : logoDeepWaveLight}
+              alt="DeepWave logo"
+              style={{ height: 24, width: "auto" }}
+            />
             <span style={{ fontWeight: 700, fontSize: "1.05rem", letterSpacing: "-0.01em", color: "var(--text)" }}>
               PAC
             </span>
