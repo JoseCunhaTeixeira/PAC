@@ -24,14 +24,16 @@ https://github.com/user-attachments/assets/983d6761-53d0-4f0a-9dff-7742f1432696
 ### Requirements
 - Requires [Docker](https://www.docker.com/) installed in your machine.
 
-### Clone the repo
+### Option 2: Build and run docker image
+
+Clone the repo.
+
 ```sh
 git clone https://github.com/JoseCunhaTeixeira/PAC.git
 cd PAC/
 ```
 
-### Run docker image
-The app can also be run fully containerized (backend + frontend), with no local Python/Node setup required.
+The app can be run fully containerized (backend + frontend), with no local Python/Node setup required.
 
 ```sh
 docker compose up --build -d
