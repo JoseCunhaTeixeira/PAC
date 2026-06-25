@@ -48,14 +48,14 @@ docker compose down                # stop (data/ untouched)
 - `data/`
     - `input/`: Contains one folder per profile with your raw seismic records
         - `active_profile_1/`
-            - file1.segy
-            - file2.segy
-            - receive_positions.yaml
-            - source_positions.yaml
+            - `file1.segy`
+            - `file2.segy`
+            - `receive_positions.yaml`
+            - `source_positions.yaml`
         - `passive_profile_2/`
-            - file1.segy
-            - file2.segy
-            - receive_positions.yaml
+            - `file1.segy`
+            - `file2.segy`
+            - `receive_positions.yaml`
     - `output/`: Contains one folder per profile with dispersion and inversion results
         - `active_profile_1/`
         - `passive_profile_2/`
