@@ -10,7 +10,7 @@ dependencies = [
     "pydantic",
     "pyyaml",
     "fastapi[standard]",
-    "sigproc @ git+https://github.com/JoseCunhaTeixeira/sigproc",
+    "sigpipe @ git+https://github.com/JoseCunhaTeixeira/sigpipe",
     "disba>=0.7.0",
     "torch",
 ]

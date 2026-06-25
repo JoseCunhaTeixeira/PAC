@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import Any
 
-from sigproc.base import Pipeline
-from sigproc.transformers import (
+from sigpipe.base import Pipeline
+from sigpipe.transformers import (
     Apodize,
     BidirectionalCorrelate,
     Detrend,

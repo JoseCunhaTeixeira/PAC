@@ -4,8 +4,8 @@ from itertools import pairwise
 from pathlib import Path
 
 from pydantic import BaseModel
-from sigproc.base.acquisition import LinearAcquisition
-from sigproc.base.coordinate import Coordinate
+from sigpipe.base.acquisition import LinearAcquisition
+from sigpipe.base.coordinate import Coordinate
 
 from masw.models.acquisition import AcquisitionParameters, PositionXZ
 from masw.models.masw import MASWParameters
@@ -75,7 +75,7 @@ def build_windows(
         selected_files = []
         acquisitions = []
 
-        # y is not tracked in MASW's own position data (always 0 for sigproc's
+        # y is not tracked in MASW's own position data (always 0 for sigpipe's
         # 3D Coordinate), so it is hardcoded here rather than read from disk
         receiver_coords = tuple(Coordinate(x=x, y=0.0, z=z) for x, z in receiver_positions)
 

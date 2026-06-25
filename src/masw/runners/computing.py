@@ -7,7 +7,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from typing import cast
 
-from sigproc.base import Pipeline
+from sigpipe.base import Pipeline
 
 from masw.adapters.registry import PIPELINE_BUILDERS
 from masw.adapters.windows import MASWWindow, build_windows
@@ -62,9 +62,7 @@ def run_compute(
             try:
                 duration_s = future.result()
                 logger.info("Finished xmid=%.2f", window.xmid)
-                results.append(
-                    {"xmid": window.xmid, "status": "success", "duration_s": duration_s}
-                )
+                results.append({"xmid": window.xmid, "status": "success", "duration_s": duration_s})
             except Exception as exc:
                 logger.exception("Processing failed for xmid=%.2f", window.xmid)
                 win_err = WindowError(

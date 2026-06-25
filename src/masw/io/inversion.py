@@ -7,29 +7,29 @@ from typing import Literal, get_args
 import matplotlib.pyplot as plt
 import numpy as np
 from disba import DispersionError
-from sigproc.algorithms.inversion.dispersion_curve.rayleigh.forward import (
+from sigpipe.algorithms.inversion.dispersion_curve.rayleigh.forward import (
     fwd_rayleigh_all_modes,
     fwd_rayleigh_phase,
 )
-from sigproc.algorithms.picking.dispersion.curve import min_resolvable_wavelength
-from sigproc.base.dispersion_curve import DispersionCurve, DispersionCurves, DispersionCurvesSection
-from sigproc.base.inversion import InversionResult
-from sigproc.base.velocity_model import VelocityModel, VelocityModelsSection
-from sigproc.dataio.dispersion.plotting import plot_dispersion_image
-from sigproc.dataio.dispersion.saving import save_dispersion_curves
-from sigproc.dataio.dispersion.section import (
+from sigpipe.algorithms.picking.dispersion.curve import min_resolvable_wavelength
+from sigpipe.base.dispersion_curve import DispersionCurve, DispersionCurves, DispersionCurvesSection
+from sigpipe.base.inversion import InversionResult
+from sigpipe.base.velocity_model import VelocityModel, VelocityModelsSection
+from sigpipe.dataio.dispersion.plotting import plot_dispersion_image
+from sigpipe.dataio.dispersion.saving import save_dispersion_curves
+from sigpipe.dataio.dispersion.section import (
     plot_pseudo_section_comparison,
     pseudo_section_comparison_grids,
 )
-from sigproc.dataio.inversion.forward import MODEL_NAMES, forward_model_all
-from sigproc.dataio.inversion.plotting import plot_density_curves, plot_posterior_marginals
-from sigproc.dataio.velocity_model.loading import load_velocity_models
-from sigproc.dataio.velocity_model.section import (
+from sigpipe.dataio.inversion.forward import MODEL_NAMES, forward_model_all
+from sigpipe.dataio.inversion.plotting import plot_density_curves, plot_posterior_marginals
+from sigpipe.dataio.velocity_model.loading import load_velocity_models
+from sigpipe.dataio.velocity_model.section import (
     plot_velocity_and_std_section,
     save_velocity_models_sections,
     smooth_laterally,
 )
-from sigproc.transformers import Plot
+from sigpipe.transformers import Plot
 
 from masw.adapters.inversion import DZ, VP_VS_RATIO, build_inversion_pipeline
 from masw.algorithms.dispersion_picking import label_to_mode
@@ -40,7 +40,7 @@ from masw.models.inversion import InversionParameters
 
 logger = logging.getLogger(__name__)
 
-# Mirrors sigproc's MODEL_NAMES tuple -- spelled out as a Literal so FastAPI can
+# Mirrors sigpipe's MODEL_NAMES tuple -- spelled out as a Literal so FastAPI can
 # validate/document it as an enum at the API boundary.
 ModelName = Literal["best", "smooth_best", "median", "smooth_median", "ensemble"]
 

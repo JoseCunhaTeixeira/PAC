@@ -5,7 +5,7 @@ from itertools import pairwise
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from sigproc.base.dispersion_image import DispersionImage
+from sigpipe.base.dispersion_image import DispersionImage
 
 from masw.algorithms.dispersion_picking import mode_to_label
 from masw.io import dispersion_images as io

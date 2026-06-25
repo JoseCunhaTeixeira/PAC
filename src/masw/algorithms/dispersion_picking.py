@@ -3,9 +3,9 @@ from collections.abc import Sequence
 import numpy as np
 from matplotlib.path import Path
 from scipy.signal import medfilt, savgol_filter
-from sigproc.algorithms.picking.dispersion.curve import lorentzian_uncertainty, resample_wavelength
-from sigproc.base.dispersion_curve import DispersionCurve, DispersionCurvesImage, Mode
-from sigproc.base.dispersion_image import DispersionImage
+from sigpipe.algorithms.picking.dispersion.curve import lorentzian_uncertainty, resample_wavelength
+from sigpipe.base.dispersion_curve import DispersionCurve, DispersionCurvesImage, Mode
+from sigpipe.base.dispersion_image import DispersionImage
 
 
 def label_to_mode(label: str) -> Mode:

@@ -20,7 +20,7 @@ const TOTAL_W = ML + PLOT_W + MR;
 const TOTAL_H = MT + 3 * PLOT_H + 2 * PANEL_GAP + MB;
 
 // Observed/predicted/residual pseudo-sections stacked vertically, mirroring
-// sigproc's `plot_pseudo_section_comparison` (obs+pred share one viridis
+// sigpipe's `plot_pseudo_section_comparison` (obs+pred share one viridis
 // scale so they're directly comparable; residual uses a symmetric bwr scale).
 export function PseudoSectionComparisonCanvas({
   comparison,
