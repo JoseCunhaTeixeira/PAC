@@ -24,6 +24,19 @@ https://github.com/user-attachments/assets/983d6761-53d0-4f0a-9dff-7742f1432696
 ### Requirements
 - Requires [Docker](https://www.docker.com/) installed in your machine.
 
+### Option 1: Run the published image (no clone needed)
+A backend image and a frontend image are built and published to GitHub Container Registry on every push to `main` ([`ghcr.io/josecunhateixeira/pac-backend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-backend), [`ghcr.io/josecunhateixeira/pac-frontend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-frontend), tagged `latest` plus a `sha-<short-sha>` per commit for pinning/rollback). You can run the app from these without cloning the repo at all:
+
+```sh
+mkdir -p data/input data/output
+curl -O https://raw.githubusercontent.com/JoseCunhaTeixeira/PAC/main/docker-compose.prod.yml
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Then open http://localhost:5173 in a browser.
+
+This assumes you're opening the browser on the same machine running Docker — the published frontend image is built with the API URL baked in as `http://localhost:8000`. Deploying backend and frontend on a separate remote server reachable by its own domain/IP would need the frontend image rebuilt locally with a different `VITE_API_URL` build arg (see "Option 2" below).
+
 ### Option 2: Build and run docker image
 
 Clone the repo.
@@ -61,6 +74,8 @@ docker compose down                # stop (data/ untouched)
     - `output/`: Contains one folder per profile with dispersion and inversion results
         - `active_profile_1/`
         - `passive_profile_2/`
+
+If you don't bind-mount anything over `data/input`, the backend image ships with two demo profiles (`active_p1`, `passive_p1`) baked in to try the app immediately. Mounting your own `data/input` (as in both run methods above) hides them in favor of your own folders. Results only persist across container restarts/removal if `data/output` is bind-mounted — otherwise they live only in the container's layer and are lost with it.
 
 
 ## License
