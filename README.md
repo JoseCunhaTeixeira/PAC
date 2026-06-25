@@ -18,32 +18,19 @@ Dispersion curves can be semi-automatically picked on an interactive interface a
 
 ## Overview (to be updated)
 https://github.com/user-attachments/assets/983d6761-53d0-4f0a-9dff-7742f1432696
-
-
-## Installation
-### Requirements
-- Requires [Docker](https://www.docker.com/) installed in your machine.
   
 
-### Clone Repository
+## Runing app
+### Requirements
+- Requires [Docker](https://www.docker.com/) installed in your machine.
+
+### Clone the repo
 ```sh
 git clone https://github.com/JoseCunhaTeixeira/PAC.git
 cd PAC/
 ```
 
-Data:
-- **`data/`:**
-    - `input/`: Contains one folder per profile with your raw seismic records (examples in git repo)
-        - `profile_1/`: seismic files for profile 1
-        - `profile_2/`: seismic files for profile 2
-        - ...
-    - `output/`: Contains one folder per profile with dispersion images, picked dispersion curves and inversion results
-        - `profile_1/`: results from computing, picking and inversion for profile 1
-        - `profile_2/`: results from computing, picking and inversion for profile 2
-        - ...
-
-
-## Run docker app
+### Run docker image
 The app can also be run fully containerized (backend + frontend), with no local Python/Node setup required.
 
 ```sh
@@ -57,6 +44,22 @@ docker compose logs -f             # tail both services
 docker compose down                # stop (data/ untouched)
 docker compose up --build -d       # rebuild after a code change
 ```
+
+### Data volumes
+- **`data/`:**
+    - `input/`: Contains one folder per profile with your raw seismic records
+        - `active_profile_1/`
+            - file1.segy
+            - file2.segy
+            - receive_positions.yaml
+            - source_positions.yaml
+        - `passive_profile_2/`
+            - file1.segy
+            - file2.segy
+            - receive_positions.yaml
+    - `output/`: Contains one folder per profile with dispersion images, picked dispersion curves and inversion results
+        - `active_profile_1/`
+        - `passive_profile_2/`
 
 
 ## License
