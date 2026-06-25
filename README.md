@@ -27,7 +27,7 @@ https://github.com/user-attachments/assets/983d6761-53d0-4f0a-9dff-7742f1432696
 
 There are two ways to run PAC: pull the published images (fastest, no clone), or clone the repo and build them yourself (lets you inspect or modify the source).
 
-### Option 1: Run the published image (no clone needed)
+### Option 1: Run the published docker image (no clone needed)
 A backend image and a frontend image are built and published to GitHub Container Registry on every push to `main` ([`ghcr.io/josecunhateixeira/pac-backend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-backend), [`ghcr.io/josecunhateixeira/pac-frontend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-frontend)), tagged `latest` plus a `sha-<short-sha>` per commit if you want to pin to (or roll back to) a specific version instead of always tracking the newest one. You can run the app from these without cloning the repo at all:
 
 ```sh
