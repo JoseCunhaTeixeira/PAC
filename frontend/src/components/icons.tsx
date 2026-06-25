@@ -102,13 +102,3 @@ export function MoonIcon({ size = 18 }: IconProps) {
     </svg>
   );
 }
-
-export function LogoMark({ size = 22 }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth={2.5} strokeLinecap="round">
-      <line x1="5" y1="19" x2="5" y2="9" />
-      <line x1="12" y1="19" x2="12" y2="3" />
-      <line x1="19" y1="19" x2="19" y2="13" />
-    </svg>
-  );
-}
