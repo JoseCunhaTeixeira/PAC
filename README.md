@@ -47,15 +47,15 @@ docker compose down                # stop (data/ untouched)
 ### Data volumes
 - `data/`
     - `input/`: Contains one folder per profile with your raw seismic records
-        - `active_profile_1/`
+        - `active_profile_1/`: one shot per seimic file, requires receiver and source positions
             - `file1.segy`
             - `file2.segy`
-            - `receive_positions.yaml`
+            - `receiver_positions.yaml`
             - `source_positions.yaml`
-        - `passive_profile_2/`
+        - `passive_profile_2/`: passive recordings, only requires receiver positions
             - `file1.segy`
             - `file2.segy`
-            - `receive_positions.yaml`
+            - `receiver_positions.yaml`
     - `output/`: Contains one folder per profile with dispersion and inversion results
         - `active_profile_1/`
         - `passive_profile_2/`
