@@ -42,11 +42,10 @@ Then open http://localhost:5173 in a browser. `data/input/` and `data/output/` a
 ```sh
 docker compose logs -f             # tail both services
 docker compose down                # stop (data/ untouched)
-docker compose up --build -d       # rebuild after a code change
 ```
 
 ### Data volumes
-- **`data/`:**
+- `data/`
     - `input/`: Contains one folder per profile with your raw seismic records
         - `active_profile_1/`
             - file1.segy
@@ -57,7 +56,7 @@ docker compose up --build -d       # rebuild after a code change
             - file1.segy
             - file2.segy
             - receive_positions.yaml
-    - `output/`: Contains one folder per profile with dispersion images, picked dispersion curves and inversion results
+    - `output/`: Contains one folder per profile with dispersion and inversion results
         - `active_profile_1/`
         - `passive_profile_2/`
 
