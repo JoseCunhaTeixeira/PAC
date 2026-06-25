@@ -79,13 +79,13 @@ docker compose up --build -d
 - `data/`
     - `input/`: Contains one folder per profile with your raw seismic records
         - `active_profile_1/`: one shot per seismic file, requires receiver and source positions
-            - `file1.segy`
-            - `file2.segy`
+            - `file1.segd`
+            - `file2.segd`
             - `receiver_positions.yaml`
             - `source_positions.yaml`
         - `passive_profile_2/`: passive recordings, only requires receiver positions
-            - `file1.segy`
-            - `file2.segy`
+            - `file1.segd`
+            - `file2.segd`
             - `receiver_positions.yaml`
     - `output/`: Contains one folder per profile with dispersion and inversion results
         - `active_profile_1/`
