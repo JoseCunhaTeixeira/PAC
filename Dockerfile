@@ -16,6 +16,7 @@ RUN uv sync --frozen --no-install-project --no-dev
 
 COPY src ./src
 COPY data ./data
+RUN cp -r data/input data_demo_input
 RUN uv sync --frozen --no-dev
 
 FROM python:3.14-slim-bookworm AS runtime
@@ -38,6 +39,7 @@ COPY --from=builder --chown=app:app /app /app
 # writes a relative "logs" dir from the current working directory at
 # runtime, which needs the cwd itself to be writable by `app`.
 RUN chown app:app /app
+COPY --chown=app:app docker-entrypoint.sh ./docker-entrypoint.sh
 ENV PATH="/app/.venv/bin:$PATH"
 USER app
 
@@ -45,4 +47,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
+ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["uvicorn", "masw.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
