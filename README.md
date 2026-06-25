@@ -2,8 +2,9 @@
 
 New faster version of PAC using a Spark frontend and a new cleaned backend !
 
-PAC is an app designed for processing 2D Multichannel Analysis of Surface Waves (MASW).
+PAC is an app designed for processing Multichannel Analysis of Surface Waves (MASW) on linear arrays.
 It can handle both passive and active seismic data to automatically optimize and extract dispersion images.
+It is also possible to apply cross-correlation to active data to sometimes improve discpersion retreival quality.
 Dispersion curves can be semi-automatically picked on an interactive interface and then be inverted into shear wave velocity profiles.
 
 
@@ -20,12 +21,14 @@ Dispersion curves can be semi-automatically picked on an interactive interface a
 https://github.com/user-attachments/assets/983d6761-53d0-4f0a-9dff-7742f1432696
   
 
-## Runing app
+## Running app
 ### Requirements
-- Requires [Docker](https://www.docker.com/) installed in your machine.
+- [Docker](https://www.docker.com/) installed on your machine, with the Compose plugin (`docker compose`, not the older standalone `docker-compose`) — included by default in current Docker Desktop / Docker Engine installs.
+
+There are two ways to run PAC: pull the published images (fastest, no clone), or clone the repo and build them yourself (lets you inspect or modify the source).
 
 ### Option 1: Run the published image (no clone needed)
-A backend image and a frontend image are built and published to GitHub Container Registry on every push to `main` ([`ghcr.io/josecunhateixeira/pac-backend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-backend), [`ghcr.io/josecunhateixeira/pac-frontend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-frontend), tagged `latest` plus a `sha-<short-sha>` per commit for pinning/rollback). You can run the app from these without cloning the repo at all:
+A backend image and a frontend image are built and published to GitHub Container Registry on every push to `main` ([`ghcr.io/josecunhateixeira/pac-backend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-backend), [`ghcr.io/josecunhateixeira/pac-frontend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-frontend)), tagged `latest` plus a `sha-<short-sha>` per commit if you want to pin to (or roll back to) a specific version instead of always tracking the newest one. You can run the app from these without cloning the repo at all:
 
 ```sh
 mkdir -p data/input data/output
@@ -33,9 +36,16 @@ curl -O https://raw.githubusercontent.com/JoseCunhaTeixeira/PAC/main/docker-comp
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Then open http://localhost:5173 in a browser.
+Then open http://localhost:5173 in a browser — `active_p1`/`passive_p1` demo profiles are there to try immediately (see [Data volumes](#data-volumes)).
 
-This assumes you're opening the browser on the same machine running Docker — the published frontend image is built with the API URL baked in as `http://localhost:8000`. Deploying backend and frontend on a separate remote server reachable by its own domain/IP would need the frontend image rebuilt locally with a different `VITE_API_URL` build arg (see "Option 2" below).
+```sh
+docker compose -f docker-compose.prod.yml logs -f        # tail both services
+docker compose -f docker-compose.prod.yml pull           # fetch the newest published images
+docker compose -f docker-compose.prod.yml up -d          # restart with whatever was just pulled
+docker compose -f docker-compose.prod.yml down           # stop (data/ untouched)
+```
+
+This assumes you're opening the browser on the same machine running Docker — the published frontend image is built with the API URL baked in as `http://localhost:8000`. Deploying backend and frontend on a separate remote server reachable by its own domain/IP would need the frontend image rebuilt locally with a different `VITE_API_URL` build arg (see Option 2 below).
 
 ### Option 2: Build and run docker image
 
@@ -59,10 +69,16 @@ docker compose logs -f             # tail both services
 docker compose down                # stop (data/ untouched)
 ```
 
+To update after pulling new commits, rebuild and restart:
+```sh
+git pull
+docker compose up --build -d
+```
+
 ### Data volumes
 - `data/`
     - `input/`: Contains one folder per profile with your raw seismic records
-        - `active_profile_1/`: one shot per seimic file, requires receiver and source positions
+        - `active_profile_1/`: one shot per seismic file, requires receiver and source positions
             - `file1.segy`
             - `file2.segy`
             - `receiver_positions.yaml`
@@ -75,7 +91,7 @@ docker compose down                # stop (data/ untouched)
         - `active_profile_1/`
         - `passive_profile_2/`
 
-If you don't bind-mount anything over `data/input`, the backend image ships with two demo profiles (`active_p1`, `passive_p1`) baked in to try the app immediately. Mounting your own `data/input` (as in both run methods above) hides them in favor of your own folders. Results only persist across container restarts/removal if `data/output` is bind-mounted — otherwise they live only in the container's layer and are lost with it.
+An empty `data/input` (a freshly `mkdir`'d folder, as in Option 1 above) gets seeded on first start with two demo profiles, `active_p1` and `passive_p1`, so there's something to try immediately. A `data/input` that already has content — your own profile folders, or a clone's committed demo data in Option 2 — is left untouched; just drop your own profile folders in alongside or instead of the demo ones. Results only persist across container restarts/removal because `data/output` is bind-mounted — removing that mount (or running the image directly without `-v`) would lose results when the container is removed.
 
 
 ## License
