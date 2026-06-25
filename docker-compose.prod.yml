@@ -1,0 +1,17 @@
+services:
+  backend:
+    image: ghcr.io/josecunhateixeira/pac-backend:latest
+    ports:
+      - "8000:8000"
+    environment:
+      CORS_ORIGINS: "http://localhost:5173"
+    volumes:
+      - ./data/input:/app/data/input
+      - ./data/output:/app/data/output
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/josecunhateixeira/pac-frontend:latest
+    ports:
+      - "5173:80"
+    restart: unless-stopped
