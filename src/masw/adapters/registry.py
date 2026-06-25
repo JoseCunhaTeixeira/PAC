@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from sigproc.base import Pipeline
+from sigpipe.base import Pipeline
 
 from masw.adapters.active import build_active_pipeline
 from masw.adapters.passive import build_passive_pipeline

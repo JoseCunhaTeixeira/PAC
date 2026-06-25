@@ -3,9 +3,9 @@
 FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS builder
 WORKDIR /app
 
-# git: needed by `uv sync` to clone the sigproc dependency
-# (sigproc @ git+https://github.com/JoseCunhaTeixeira/sigproc).
-# build-essential: bayesbay (sigproc's MCMC dependency) ships no prebuilt
+# git: needed by `uv sync` to clone the sigpipe dependency
+# (sigpipe @ git+https://github.com/JoseCunhaTeixeira/sigpipe).
+# build-essential: bayesbay (sigpipe's MCMC dependency) ships no prebuilt
 # wheel for Python 3.14 yet -- uv compiles its bayesbay._utils_1d C++
 # extension from source on install, which needs g++.
 RUN apt-get update && apt-get install -y --no-install-recommends git build-essential \
@@ -34,7 +34,7 @@ RUN groupadd -g "${APP_GID}" app && useradd -u "${APP_UID}" -g app -M app
 WORKDIR /app
 COPY --from=builder --chown=app:app /app /app
 # WORKDIR above creates /app as root before the COPY runs, so --chown only
-# covers the copied contents, not the /app directory entry itself -- sigproc
+# covers the copied contents, not the /app directory entry itself -- sigpipe
 # writes a relative "logs" dir from the current working directory at
 # runtime, which needs the cwd itself to be writable by `app`.
 RUN chown app:app /app

@@ -57,7 +57,7 @@ export function MuteGather({
   const palette = canvasPalette(theme);
   const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(1);
 
-  // true offset along the (x, z) topography profile (matches sigproc's
+  // true offset along the (x, z) topography profile (matches sigpipe's
   // Coordinate.distance_to with y=0), so a sloped line between source and
   // receiver gives a longer offset than the flat horizontal distance would.
   const offsets = useMemo(() => {

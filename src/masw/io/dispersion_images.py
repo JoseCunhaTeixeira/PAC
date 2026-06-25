@@ -4,14 +4,14 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from sigproc.algorithms.picking.dispersion.curve import min_resolvable_wavelength, pick_curves
-from sigproc.base.dispersion_curve import DispersionCurve, DispersionCurvesImage, Mode
-from sigproc.base.dispersion_image import DispersionImage
-from sigproc.dataio.dispersion.loading import load_dispersion_curves
-from sigproc.dataio.dispersion.loading import load_dispersion_image as _load_dispersion_image
-from sigproc.dataio.dispersion.plotting import plot_dispersion_image
-from sigproc.dataio.dispersion.saving import save_dispersion_curves
-from sigproc.transformers import Plot
+from sigpipe.algorithms.picking.dispersion.curve import min_resolvable_wavelength, pick_curves
+from sigpipe.base.dispersion_curve import DispersionCurve, DispersionCurvesImage, Mode
+from sigpipe.base.dispersion_image import DispersionImage
+from sigpipe.dataio.dispersion.loading import load_dispersion_curves
+from sigpipe.dataio.dispersion.loading import load_dispersion_image as _load_dispersion_image
+from sigpipe.dataio.dispersion.plotting import plot_dispersion_image
+from sigpipe.dataio.dispersion.saving import save_dispersion_curves
+from sigpipe.transformers import Plot
 
 from masw.algorithms.dispersion_picking import label_to_mode, mode_to_label, pick_curve_lasso
 from masw.io.folders import get_xmid_folders
@@ -63,7 +63,7 @@ def pick_lasso(
 
 
 def _dedupe_curves_by_mode(curves: Iterable[DispersionCurve]) -> DispersionCurvesImage:
-    # sigproc's pick_curves appends the new pick without checking for an
+    # sigpipe's pick_curves appends the new pick without checking for an
     # existing curve with the same mode; keep only the latest curve per
     # mode so re-picking a label replaces it instead of duplicating it.
     by_mode: dict[Mode, DispersionCurve] = {}

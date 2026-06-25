@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from sigproc.base import Pipeline
-from sigproc.transformers import Invert, Save
+from sigpipe.base import Pipeline
+from sigpipe.transformers import Invert, Save
 
 from masw.models.inversion import InversionParameters
 
