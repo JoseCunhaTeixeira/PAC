@@ -1,6 +1,6 @@
 # PAC - Passive and Active Computation of MASW
 
-New faster version of PAC using a Spark frontend and a new cleaned backend !
+New faster version of PAC using a React frontend and a new cleaned backend !
 
 PAC is an app designed for processing Multichannel Analysis of Surface Waves (MASW) on linear arrays.
 It can handle both passive and active seismic data to automatically optimize and extract dispersion images.
