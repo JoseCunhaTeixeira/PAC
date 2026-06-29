@@ -27,7 +27,7 @@ def build_active_pipeline(
     load_kwargs: dict[str, Any] = {
         "file_paths": window.selected_files,
         "acquisitions": window.acquisitions,
-        "data_type": "segd",
+        "data_type": "seismic",
         "receivers_to_load": window.receiver_indices,
     }
 
