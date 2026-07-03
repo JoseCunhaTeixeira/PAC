@@ -117,7 +117,7 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
 
       <h2>Slicing</h2>
       <NumberField label="Segment length [s]" value={slicing.segment_duration} onChange={(v) => setSlicing({ ...slicing, segment_duration: v })} min={0.1} max={maxTime} step={0.05} />
-      <NumberField label="Segment step [s]" value={slicing.segment_step} onChange={(v) => setSlicing({ ...slicing, segment_step: v })} min={0.01} max={maxTime} step={0.05} />
+      <NumberField label="Segment step [s]" value={slicing.segment_step} onChange={(v) => setSlicing({ ...slicing, segment_step: v })} min={0.01} max={maxTime} step={0.01} />
 
       <h2>Slice selection</h2>
       <label style={{ display: "block", margin: "4px 0" }}>

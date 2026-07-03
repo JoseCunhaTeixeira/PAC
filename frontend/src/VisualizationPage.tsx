@@ -13,12 +13,14 @@ export default function VisualizationPage() {
   const [folders, setFolders] = useState<string[]>([]);
   const [folder, setFolder] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loadingFolders, setLoadingFolders] = useState(false);
 
   useEffect(() => {
     setFolder("");
     setFolders([]);
     setError(null);
     if (!mode) return;
+    setLoadingFolders(true);
     const endpoint = mode === "Signal" ? "input_folders" : "output_folders";
     fetch(`${API}/${endpoint}`)
       .then(async (res) => {
@@ -29,7 +31,8 @@ export default function VisualizationPage() {
         return res.json();
       })
       .then((data: string[]) => setFolders(data))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoadingFolders(false));
   }, [mode]);
 
   return (
@@ -41,7 +44,18 @@ export default function VisualizationPage() {
         <label>
           <h2>Loading</h2>
           Visualization mode:{" "}
-          <select value={mode} onChange={(e) => setMode(e.target.value as Mode | "")}>
+          <select
+            value={mode}
+            onChange={(e) => {
+              // Clear folder and flag folders as loading synchronously (not in
+              // the effect below), so a mode switch never briefly mounts a
+              // visualization with a stale folder, or flashes "No folders
+              // found" before the fetch for the new mode has even started.
+              setFolder("");
+              setLoadingFolders(true);
+              setMode(e.target.value as Mode | "");
+            }}
+          >
             <option value="">— choose —</option>
             {MODES.map((m) => (
               <option key={m} value={m}>{m}</option>
@@ -60,6 +74,7 @@ export default function VisualizationPage() {
                 ))}
               </select>
             </label>
+            {!loadingFolders && folders.length === 0 && <p>❌ No folders found.</p>}
           </div>
         )}
       </div>

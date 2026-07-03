@@ -1229,7 +1229,7 @@ wheels = [
 [[package]]
 name = "sigpipe"
 version = "1.0.0"
-source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#b30e5191b3c745aebab1f223c0df710871e16db8" }
+source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#d89941f5d596b00970c9d7c6025e1ebb22be03ab" }
 dependencies = [
     { name = "bayesbay" },
     { name = "disba" },

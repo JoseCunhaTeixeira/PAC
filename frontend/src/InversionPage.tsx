@@ -106,17 +106,24 @@ export default function InversionPage() {
   const [resultLabels, setResultLabels] = useState<string[]>([]);
 
   const [error, setError] = useState<string | null>(null);
+  const [loadingFolders, setLoadingFolders] = useState(true);
+  // Starts true so the first render after picking a folder doesn't flash
+  // "No picked dispersion data found" before the effect below runs.
+  const [loadingLabels, setLoadingLabels] = useState(true);
 
   const nCpus = navigator.hardwareConcurrency || 1;
 
   useEffect(() => {
+    setLoadingFolders(true);
     fetch(`${API}/output_folders`)
       .then((res) => res.json())
       .then((data: string[]) => setFolders(data))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoadingFolders(false));
   }, []);
 
   function refreshLabels(folderName: string) {
+    setLoadingLabels(true);
     fetch(`${API}/dispersion_image_labels/${encodeURIComponent(folderName)}`)
       .then(async (res) => {
         if (!res.ok) {
@@ -126,7 +133,8 @@ export default function InversionPage() {
         return res.json();
       })
       .then((data: Record<string, number>) => setLabelCounts(data))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoadingLabels(false));
   }
 
   function refreshPositionPicks(folderName: string) {
@@ -292,12 +300,13 @@ export default function InversionPage() {
             ))}
           </select>
         </label>
+        {!loadingFolders && folders.length === 0 && <p>❌ No folders found.</p>}
       </div>
 
       {error && <p style={{ color: "var(--accent)" }}>Error: {error}</p>}
 
-      {folder && Object.keys(labelCounts).length === 0 && (
-        <p>No picked dispersion data found. Select another folder.</p>
+      {folder && !loadingLabels && Object.keys(labelCounts).length === 0 && (
+        <p>❌ No picked dispersion data found.</p>
       )}
 
       {folder && Object.keys(labelCounts).length > 0 && (

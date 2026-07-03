@@ -45,6 +45,8 @@ export function VisualizationInversion({ folder }: { folder: string }) {
   const [vsMin, setVsMin] = useState<number | "">("");
   const [vsMax, setVsMax] = useState<number | "">("");
 
+  const [xmids, setXmids] = useState<number[]>([]);
+  const [hasInversionResults, setHasInversionResults] = useState(false);
   const [labels, setLabels] = useState<string[]>([]);
   const [velocitySection, setVelocitySection] = useState<VelocitySection | null>(null);
   const [positionCurves, setPositionCurves] = useState<Record<string, PositionCurves[]>>({});
@@ -54,14 +56,47 @@ export function VisualizationInversion({ folder }: { folder: string }) {
   const [error, setError] = useState<string | null>(null);
   const [saveResult, setSaveResult] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Starts true (not false) so the first render of a freshly-selected folder
+  // shows "Loading…" instead of flashing "No positions found" for one frame
+  // before the mount effect below gets a chance to run.
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setXmids([]);
+    setHasInversionResults(false);
     setLabels([]);
     setVelocitySection(null);
     setPositionCurves({});
     setPseudoComparisons({});
     setError(null);
     setSaveResult(null);
+    setLoading(true);
+
+    const xmidsDone = fetch(`${API}/xmids/${encodeURIComponent(folder)}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data: number[]) => setXmids(data))
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+
+    const statusDone = fetch(`${API}/inversion/status/${encodeURIComponent(folder)}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data: { xmid: number; has_result: boolean }[]) =>
+        setHasInversionResults(data.some((s) => s.has_result)),
+      )
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+
+    Promise.allSettled([xmidsDone, statusDone]).finally(() => setLoading(false));
 
     fetch(`${API}/dispersion_image_labels/${encodeURIComponent(folder)}`)
       .then(async (res) => {
@@ -78,6 +113,12 @@ export function VisualizationInversion({ folder }: { folder: string }) {
   useEffect(() => {
     if (!folder) return;
     setError(null);
+    // Guards against a stale race on folder change: this effect can fire once
+    // more with the previous folder's `labels` array before the labels-reset
+    // effect's state update has propagated, requesting a label that doesn't
+    // apply to the new folder and 404ing. Drop such stale responses instead
+    // of surfacing that as a page-wide error.
+    let cancelled = false;
 
     fetch(
       `${API}/inversion/velocity_section/${encodeURIComponent(folder)}?model=${model}&lateral_smoothing=${lateralSmoothing}`,
@@ -89,8 +130,14 @@ export function VisualizationInversion({ folder }: { folder: string }) {
         }
         return res.json();
       })
-      .then((data: VelocitySection) => setVelocitySection(data))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .then((data: VelocitySection) => {
+        if (!cancelled) setVelocitySection(data);
+      })
+      // Best-effort: a folder with too few inverted positions just skips the
+      // section instead of blocking the rest of the page (curves, etc.).
+      .catch(() => {
+        if (!cancelled) setVelocitySection(null);
+      });
 
     labels.forEach((labelValue) => {
       fetch(
@@ -103,15 +150,22 @@ export function VisualizationInversion({ folder }: { folder: string }) {
           }
           return res.json();
         })
-        .then((data: PositionCurves[]) =>
-          setPositionCurves((prev) => ({ ...prev, [labelValue]: data })),
-        )
-        .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+        .then((data: PositionCurves[]) => {
+          if (!cancelled) setPositionCurves((prev) => ({ ...prev, [labelValue]: data }));
+        })
+        .catch((err) => {
+          if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        });
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [folder, model, lateralSmoothing, labels]);
 
   useEffect(() => {
     if (!folder) return;
+    let cancelled = false;
 
     // Independent of lateralSmoothing: the comparison is built from picked
     // curves vs. the model's forward-modeled curves, not the Vs(x,z) grid.
@@ -123,13 +177,19 @@ export function VisualizationInversion({ folder }: { folder: string }) {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           return res.json();
         })
-        .then((data: PseudoSectionComparisonData) =>
-          setPseudoComparisons((prev) => ({ ...prev, [labelValue]: data })),
-        )
+        .then((data: PseudoSectionComparisonData) => {
+          if (!cancelled) setPseudoComparisons((prev) => ({ ...prev, [labelValue]: data }));
+        })
         // Best-effort per label: a label with too few positions just shows
         // nothing instead of blocking the rest of the page.
-        .catch(() => setPseudoComparisons((prev) => ({ ...prev, [labelValue]: null })));
+        .catch(() => {
+          if (!cancelled) setPseudoComparisons((prev) => ({ ...prev, [labelValue]: null }));
+        });
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [folder, model, labels]);
 
   useEffect(() => {
@@ -177,11 +237,13 @@ export function VisualizationInversion({ folder }: { folder: string }) {
   }
 
   if (error) return <p style={{ color: "var(--accent)" }}>Error: {error}</p>;
+  if (loading) return <p>Loading…</p>;
+  if (xmids.length === 0) return <p>❌ No positions found.</p>;
+  if (!hasInversionResults) return <p>❌ No inversion results found.</p>;
 
-  if (!velocitySection) return null;
-
-  const clippedVsGrid =
-    vsMin === "" && vsMax === ""
+  const clippedVsGrid = !velocitySection
+    ? null
+    : vsMin === "" && vsMax === ""
       ? velocitySection.vs_grid
       : velocitySection.vs_grid.map((row) =>
         row.map((v) => {
@@ -244,32 +306,40 @@ export function VisualizationInversion({ folder }: { folder: string }) {
         </div>
       </div>
 
-      <h2>Inverted Vs section</h2>
-      <VelocitySectionCanvas
-        positions={velocitySection.positions}
-        elevations={velocitySection.elevations}
-        values={clippedVsGrid}
-        colorLabel="Vs [m/s]"
-        colormap={terrain}
-        height={200}
-      />
-      <VelocitySectionCanvas
-        positions={velocitySection.positions}
-        elevations={velocitySection.elevations}
-        values={velocitySection.vs_std_grid}
-        height={200}
-        colorLabel="Vs std [m/s]"
-        colormap={afmhotR}
-      />
+      {velocitySection && clippedVsGrid ? (
+        <>
+          <h2>Inverted Vs section</h2>
+          <VelocitySectionCanvas
+            positions={velocitySection.positions}
+            elevations={velocitySection.elevations}
+            values={clippedVsGrid}
+            colorLabel="Vs [m/s]"
+            colormap={terrain}
+            height={200}
+          />
+          <VelocitySectionCanvas
+            positions={velocitySection.positions}
+            elevations={velocitySection.elevations}
+            values={velocitySection.vs_std_grid}
+            height={200}
+            colorLabel="Vs std [m/s]"
+            colormap={afmhotR}
+          />
 
-      <button onClick={handleSaveImages} disabled={saving} style={{ marginTop: 12 }}>
-        {saving ? "Saving…" : "Save images"}
-      </button>
-      <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-        🛈 Will save the above Vs and standard deviation sections, and the corresponding
-        pseudo-sections, into the profile's output folder.
-      </p>
-      {saveResult && <p style={{ fontSize: 12 }}>{saveResult}</p>}
+          <button onClick={handleSaveImages} disabled={saving} style={{ marginTop: 12 }}>
+            {saving ? "Saving…" : "Save images"}
+          </button>
+          <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
+            🛈 Will save the above Vs and standard deviation sections, and the corresponding
+            pseudo-sections, into the profile's output folder.
+          </p>
+          {saveResult && <p style={{ fontSize: 12 }}>{saveResult}</p>}
+        </>
+      ) : (
+        <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
+          🛈 At least 2 inverted positions are required to build a Vs section.
+        </p>
+      )}
 
       {labels.length > 0 && (
         <>
@@ -333,7 +403,8 @@ export function VisualizationInversion({ folder }: { folder: string }) {
                 {comparison === undefined && <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading…</p>}
                 {comparison === null && (
                   <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                    Not enough positions with both a pick and an inversion result for this label.
+                    🛈 At least 2 positions with both a pick and an inversion result are required to
+                    build a pseudo-section comparison.
                   </p>
                 )}
                 {comparison && (
