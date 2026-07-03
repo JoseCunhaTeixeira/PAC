@@ -1229,7 +1229,7 @@ wheels = [
 [[package]]
 name = "sigpipe"
 version = "1.0.0"
-source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#d89941f5d596b00970c9d7c6025e1ebb22be03ab" }
+source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#9885b31aab3ba877611506010c7beecfb31f84c6" }
 dependencies = [
     { name = "bayesbay" },
     { name = "disba" },
@@ -1240,8 +1240,6 @@ dependencies = [
     { name = "pandas" },
     { name = "pyyaml" },
     { name = "scipy" },
-    { name = "torch", version = "2.12.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
-    { name = "torch", version = "2.12.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
     { name = "tqdm" },
 ]
 
