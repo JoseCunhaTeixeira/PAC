@@ -51,9 +51,6 @@ def build_passive_active_pipeline(
         >> Save(folder_path=output_folder)
         >> Pad(n=1_000, taper=25)
         >> Dispersion(method="phase", **dispersion_kwargs)
-        >> Plot(
-            folder_path=output_folder,
-            normalize=True,
-        )
+        >> Plot(folder_path=output_folder, normalize=True)
         >> Save(folder_path=output_folder)
     )

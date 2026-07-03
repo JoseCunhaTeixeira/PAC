@@ -45,9 +45,6 @@ def build_active_pipeline(
         >> Pad(n=1_000, taper=25)
         >> Dispersion(method="phase", **dispersion_kwargs)
         >> Stack(method="linear")
-        >> Plot(
-            folder_path=output_folder,
-            normalize=True,
-        )
+        >> Plot(folder_path=output_folder, normalize=True)
         >> Save(folder_path=output_folder)
     )

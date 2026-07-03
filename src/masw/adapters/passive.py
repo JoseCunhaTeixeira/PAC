@@ -4,7 +4,7 @@ from typing import Any
 from sigpipe.base import Pipeline
 from sigpipe.transformers import (
     Apodize,
-    BidirectionalCorrelate,
+    Correlate,
     Detrend,
     Dispersion,
     Filter,
@@ -57,15 +57,12 @@ def build_passive_pipeline(
         >> Whiten(**whitening_kwargs)
         >> Normalize(**normalization_kwargs)
         >> Apodize(method="hanning", frac=0.1)
-        >> BidirectionalCorrelate(method="cross")
+        >> Correlate(method="cross", virtual_source_index=0, part="causal")
         >> Stack(**stacking_kwargs)
         >> Plot(folder_path=output_folder)
         >> Save(folder_path=output_folder)
         >> Pad(n=1_000, taper=25)
         >> Dispersion(method="phase", **dispersion_kwargs)
-        >> Plot(
-            folder_path=output_folder,
-            normalize=True,
-        )
+        >> Plot(folder_path=output_folder, normalize=True)
         >> Save(folder_path=output_folder)
     )

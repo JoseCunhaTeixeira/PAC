@@ -9,12 +9,15 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [missingSource, setMissingSource] = useState(false);
+  const [loadingFolders, setLoadingFolders] = useState(true);
 
   useEffect(() => {
+    setLoadingFolders(true);
     fetch(`${API}/input_folders`)
       .then((res) => res.json())
       .then((data: string[]) => setFolders(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(String(err)))
+      .finally(() => setLoadingFolders(false));
   }, []);
 
   useEffect(() => {
@@ -64,6 +67,7 @@ export default function App() {
           ))}
         </select>
       </label>
+      {!loadingFolders && folders.length === 0 && <p>❌ No folders found.</p>}
 
       {loading && <p>Loading acquisition…</p>}
       {error && <p style={{ color: "crimson" }}>Error: {error}</p>}
@@ -76,11 +80,15 @@ export default function App() {
             borderRadius: "var(--radius-sm)",
           }}
         >
-          ⚠️ source_positions.yaml is missing for this folder — required for active computing
+          ❌ source_positions.yaml is missing for this folder — required for active computing
         </p>
       )}
 
-      {acquisition && (
+      {acquisition && acquisition.files.length === 0 && (
+        <p>❌ Selected input data folder empty.</p>
+      )}
+
+      {acquisition && acquisition.files.length > 0 && (
         <>
           <table>
             <thead>

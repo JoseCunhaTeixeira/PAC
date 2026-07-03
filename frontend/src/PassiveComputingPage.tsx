@@ -8,12 +8,15 @@ export default function App() {
   const [acquisition, setAcquisition] = useState<Acquisition | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingFolders, setLoadingFolders] = useState(true);
 
   useEffect(() => {
+    setLoadingFolders(true);
     fetch(`${API}/input_folders`)
       .then((res) => res.json())
       .then((data: string[]) => setFolders(data))
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(String(err)))
+      .finally(() => setLoadingFolders(false));
   }, []);
 
   useEffect(() => {
@@ -55,11 +58,15 @@ export default function App() {
           ))}
         </select>
       </label>
+      {!loadingFolders && folders.length === 0 && <p>❌ No folders found.</p>}
 
       {loading && <p>Loading acquisition…</p>}
       {error && <p style={{ color: "crimson" }}>Error: {error}</p>}
+      {acquisition && acquisition.files.length === 0 && (
+        <p>❌ Selected input data folder empty.</p>
+      )}
 
-      {acquisition && (
+      {acquisition && acquisition.files.length > 0 && (
         <>
           <table>
             <thead>

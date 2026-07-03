@@ -43,12 +43,18 @@ export default function DispersionPickingPage() {
   const [positionPicks, setPositionPicks] = useState<{ xmid: number; labels: string[] }[]>([]);
 
   const [error, setError] = useState<string | null>(null);
+  const [loadingFolders, setLoadingFolders] = useState(true);
+  // Starts true so the first render after picking a folder shows "Loading…"
+  // instead of flashing "No positions found" before the effect below runs.
+  const [loadingXmids, setLoadingXmids] = useState(true);
 
   useEffect(() => {
+    setLoadingFolders(true);
     fetch(`${API}/output_folders`)
       .then((res) => res.json())
       .then((data: string[]) => setFolders(data))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoadingFolders(false));
   }, []);
 
   useEffect(() => {
@@ -61,6 +67,7 @@ export default function DispersionPickingPage() {
       setXmids([]);
       return;
     }
+    setLoadingXmids(true);
     fetch(`${API}/xmids/${encodeURIComponent(folder)}`)
       .then(async (res) => {
         if (!res.ok) {
@@ -70,7 +77,8 @@ export default function DispersionPickingPage() {
         return res.json();
       })
       .then((data: number[]) => setXmids(data))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoadingXmids(false));
     refreshLabels(folder);
     refreshPositionPicks(folder);
   }, [folder]);
@@ -112,7 +120,9 @@ export default function DispersionPickingPage() {
         setPseudoSections((prev) =>
           Object.fromEntries(Object.entries(prev).filter(([lbl]) => lbl in data))
         );
-        Object.keys(data).forEach((labelValue) => loadPseudoSection(folderName, labelValue));
+        Object.entries(data)
+          .filter(([, count]) => count >= 2)
+          .forEach(([labelValue]) => loadPseudoSection(folderName, labelValue));
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }
@@ -131,7 +141,6 @@ export default function DispersionPickingPage() {
   }
 
   function loadPseudoSection(folderName: string, labelValue: string) {
-    setError(null);
     fetch(`${API}/dispersion_pseudo_section/${encodeURIComponent(folderName)}/${encodeURIComponent(labelValue)}`)
       .then(async (res) => {
         if (!res.ok) {
@@ -141,7 +150,9 @@ export default function DispersionPickingPage() {
         return res.json();
       })
       .then((data: PseudoSection) => setPseudoSections((prev) => ({ ...prev, [labelValue]: data })))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      // Best-effort per label: a failure here shouldn't blank out the rest
+      // of the page (picking, other labels).
+      .catch(() => {});
   }
 
   function handlePick() {
@@ -214,9 +225,10 @@ export default function DispersionPickingPage() {
             ))}
           </select>
         </label>
+        {!loadingFolders && folders.length === 0 && <p>❌ No folders found.</p>}
       </div>
 
-      {folder && xmids.length === 0 && <p>No positions found.</p>}
+      {folder && !loadingXmids && xmids.length === 0 && <p>❌ No positions found.</p>}
 
       {folder && positionPicks.length > 0 && (
         <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -332,8 +344,14 @@ export default function DispersionPickingPage() {
             >
               <h3 style={{ marginTop: 0 }}>{lbl}</h3>
               <p>{count}/{xmids.length} positions picked</p>
-              {pseudoSections[lbl] && (
-                <PseudoSectionCanvas section={pseudoSections[lbl]} mode={pseudoMode} height={200} />
+              {count < 2 ? (
+                <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  🛈 At least 2 picked positions are required to build a pseudo-section.
+                </p>
+              ) : (
+                pseudoSections[lbl] && (
+                  <PseudoSectionCanvas section={pseudoSections[lbl]} mode={pseudoMode} height={200} />
+                )
               )}
             </div>
           ))}
