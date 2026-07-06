@@ -28,21 +28,54 @@ Dispersion curves can be semi-automatically picked on an interactive interface a
 There are two ways to run PAC: pull the published images (fastest, no clone), or clone the repo and build them yourself (lets you inspect or modify the source).
 
 ### Option 1: Run the published docker image (no clone needed)
-A backend image and a frontend image are built and published to GitHub Container Registry on every push to `main` ([`ghcr.io/josecunhateixeira/pac-backend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-backend), [`ghcr.io/josecunhateixeira/pac-frontend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-frontend)), tagged `latest` plus a `sha-<short-sha>` per commit if you want to pin to (or roll back to) a specific version instead of always tracking the newest one. You can run the app from these without cloning the repo at all:
+A backend image and a frontend image are built and published to GitHub Container Registry on every push to `main` ([`ghcr.io/josecunhateixeira/pac-backend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-backend), [`ghcr.io/josecunhateixeira/pac-frontend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-frontend)), tagged `latest` plus a `sha-<short-sha>` per commit if you want to pin to (or roll back to) a specific version instead of always tracking the newest one. You can run the app from these without cloning the repo at all.
 
+**Required — start the app (3 commands):**
 ```sh
+# Create the two host folders that docker-compose.prod.yml bind-mounts into the
+# backend container (./data/input → /app/data/input, ./data/output → /app/data/output).
+# -p creates missing parents and does nothing if the folders already exist.
 mkdir -p data/input data/output
+
+# Download the production compose file from the repo's main branch into the
+# current directory; -O saves it under its original name (docker-compose.prod.yml).
 curl -O https://raw.githubusercontent.com/JoseCunhaTeixeira/PAC/main/docker-compose.prod.yml
+
+# Pull both images from GHCR (first run only) and start the backend (port 8000)
+# and frontend (port 5173) containers. -f points Compose at the downloaded file
+# instead of the default docker-compose.yml; -d runs them detached in the
+# background (and `restart: unless-stopped` brings them back after a reboot).
+docker compose -f docker-compose.prod.yml up -d
+```
+Then open http://localhost:5173 in a browser — `active_p1`/`passive_p1` demo profiles are there to try immediately (see [Data volumes](#data-volumes)).
+
+**Optional — day-to-day management.** Nothing below is needed to run the app; use these only when you want to inspect, update, or stop it.
+
+*Watch the logs:*
+```sh
+# Stream the combined live logs of both services; Ctrl-C stops following without
+# stopping the containers. Add a service name to follow just one,
+# e.g. `docker compose -f docker-compose.prod.yml logs -f backend`.
+docker compose -f docker-compose.prod.yml logs -f
+```
+
+*Update to the newest published images (run both, in this order):*
+```sh
+# 1. Check GHCR for newer versions of the two images (the :latest tags) and
+#    download them. Running containers are not touched — nothing restarts yet.
+docker compose -f docker-compose.prod.yml pull
+
+# 2. Recreate only the containers whose image (or config) changed, switching them
+#    to the freshly downloaded version; unchanged services keep running as-is.
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Then open http://localhost:5173 in a browser — `active_p1`/`passive_p1` demo profiles are there to try immediately (see [Data volumes](#data-volumes)).
-
+*Stop the app:*
 ```sh
-docker compose -f docker-compose.prod.yml logs -f        # tail both services
-docker compose -f docker-compose.prod.yml pull           # fetch the newest published images
-docker compose -f docker-compose.prod.yml up -d          # restart with whatever was just pulled
-docker compose -f docker-compose.prod.yml down           # stop (data/ untouched)
+# Stop and remove both containers and the network Compose created for them.
+# ./data is a bind mount on the host, so its contents are untouched, and the
+# pulled images stay in the local cache for a fast next `up -d`.
+docker compose -f docker-compose.prod.yml down
 ```
 
 This assumes you're opening the browser on the same machine running Docker — the published frontend image is built with the API URL baked in as `http://localhost:8000`. Deploying backend and frontend on a separate remote server reachable by its own domain/IP would need the frontend image rebuilt locally with a different `VITE_API_URL` build arg (see Option 2 below).
