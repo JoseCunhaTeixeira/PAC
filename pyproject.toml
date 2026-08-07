@@ -24,10 +24,69 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.mypy]
-python_version = "3.14"
-strict = true
 
-[[tool.mypy.overrides]]
-module = ["scipy.*", "obspy.*", "disba.*", "yaml.*"]
-ignore_missing_imports = true
+# -------------------------
+# Pyright configuration
+# -------------------------
+[tool.pyright]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+
+include = ["src", "experiments"]
+
+exclude = [
+    "**/__pycache__",
+    ".venv",
+    "build",
+    "dist",
+    "**/node_modules",
+    "**/.*",
+]
+
+reportMissingTypeStubs = false
+
+
+# -------------------------
+# Ruff configuration
+# -------------------------
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort (import sorting)
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "C4",  # flake8-comprehensions
+    "PIE", # flake8-pie
+    "RET", # flake8-return
+    "PTH", # pathlib usage
+    "NPY", # NumPy rules
+    "RUF", # Ruff-specific rules
+    "ANN", # annotations
+    "ARG", # unused arguments
+    "ERA", # commented-out code
+]
+
+ignore = [
+    "E501", # line length handled by formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["sigpipe"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+docstring-code-format = true
+
