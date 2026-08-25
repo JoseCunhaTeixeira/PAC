@@ -1,7 +1,7 @@
 # PAC — Passive and Active Computation of MASW
 
 [![Python](https://img.shields.io/badge/python-3.14-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: CC BY 4.0](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey.svg)](LICENSE)
 
 New faster version of PAC, rebuilt with a React frontend and a cleaned-up backend!
 
