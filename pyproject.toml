@@ -2,6 +2,9 @@
 name = "PAC"
 version = "2.0.0"
 requires-python = ">=3.14,<3.15"
+authors = [
+    { name = "J. Cunha Teixeira", email = "jose.cunha-teixeira@protonmail.com" },
+]
 dependencies = [
     "numpy",
     "scipy",
@@ -89,4 +92,3 @@ quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
 docstring-code-format = true
-
