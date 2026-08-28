@@ -4,6 +4,10 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+from masw.algorithms.dispersion_picking import label_to_mode, mode_to_label, pick_curve_lasso
+from masw.io.folders import get_xmid_folders
+from masw.io.paths import OUTPUT_DIR
 from sigpipe.algorithms.picking.dispersion.curve import min_resolvable_wavelength, pick_curves
 from sigpipe.base.dispersion_curve import DispersionCurve, DispersionCurvesImage, Mode
 from sigpipe.base.dispersion_image import DispersionImage
@@ -12,10 +16,6 @@ from sigpipe.dataio.dispersion.loading import load_dispersion_image as _load_dis
 from sigpipe.dataio.dispersion.plotting import plot_dispersion_image
 from sigpipe.dataio.dispersion.saving import save_dispersion_curves
 from sigpipe.transformers import Plot
-
-from masw.algorithms.dispersion_picking import label_to_mode, mode_to_label, pick_curve_lasso
-from masw.io.folders import get_xmid_folders
-from masw.io.paths import OUTPUT_DIR
 
 PSEUDO_SECTION_POINTS = 200
 

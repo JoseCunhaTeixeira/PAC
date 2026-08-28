@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { API } from "./api";
 import { DispersionImageCanvas, type DispersionImage } from "./components/DispersionImageCanvas";
 import { PseudoSectionCanvas, type PseudoSection } from "./components/PseudoSectionCanvas";
@@ -49,7 +49,6 @@ export default function DispersionPickingPage() {
   const [loadingXmids, setLoadingXmids] = useState(true);
 
   useEffect(() => {
-    setLoadingFolders(true);
     fetch(`${API}/output_folders`)
       .then((res) => res.json())
       .then((data: string[]) => setFolders(data))
@@ -57,17 +56,71 @@ export default function DispersionPickingPage() {
       .finally(() => setLoadingFolders(false));
   }, []);
 
+  const loadPseudoSection = useCallback((folderName: string, labelValue: string) => {
+    fetch(`${API}/dispersion_pseudo_section/${encodeURIComponent(folderName)}/${encodeURIComponent(labelValue)}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data: PseudoSection) => setPseudoSections((prev) => ({ ...prev, [labelValue]: data })))
+      // Best-effort per label: a failure here shouldn't blank out the rest
+      // of the page (picking, other labels).
+      .catch(() => {});
+  }, []);
+
+  const refreshLabels = useCallback(
+    (folderName: string) => {
+      fetch(`${API}/dispersion_image_labels/${encodeURIComponent(folderName)}`)
+        .then(async (res) => {
+          if (!res.ok) {
+            const body = await res.json().catch(() => null);
+            throw new Error(body?.detail ?? `HTTP ${res.status}`);
+          }
+          return res.json();
+        })
+        .then((data: Record<string, number>) => {
+          setLabelCounts(data);
+          setPseudoSections((prev) =>
+            Object.fromEntries(Object.entries(prev).filter(([lbl]) => lbl in data))
+          );
+          Object.entries(data)
+            .filter(([, count]) => count >= 2)
+            .forEach(([labelValue]) => loadPseudoSection(folderName, labelValue));
+        })
+        .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+    },
+    [loadPseudoSection]
+  );
+
+  const refreshPositionPicks = useCallback((folderName: string) => {
+    fetch(`${API}/dispersion_picks_by_position/${encodeURIComponent(folderName)}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data: { xmid: number; labels: string[] }[]) => setPositionPicks(data))
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+  }, []);
+
   useEffect(() => {
-    setXmid(null);
-    setImage(null);
-    setLabelCounts({});
-    setPseudoSections({});
-    setPositionPicks([]);
+    Promise.resolve().then(() => {
+      setXmid(null);
+      setImage(null);
+      setLabelCounts({});
+      setPseudoSections({});
+      setPositionPicks([]);
+    });
     if (!folder) {
-      setXmids([]);
+      Promise.resolve().then(() => setXmids([]));
       return;
     }
-    setLoadingXmids(true);
+    Promise.resolve().then(() => setLoadingXmids(true));
     fetch(`${API}/xmids/${encodeURIComponent(folder)}`)
       .then(async (res) => {
         if (!res.ok) {
@@ -81,10 +134,10 @@ export default function DispersionPickingPage() {
       .finally(() => setLoadingXmids(false));
     refreshLabels(folder);
     refreshPositionPicks(folder);
-  }, [folder]);
+  }, [folder, refreshLabels, refreshPositionPicks]);
 
   function loadImage(folderName: string, xmidValue: number) {
-    setError(null);
+    Promise.resolve().then(() => setError(null));
     fetch(`${API}/dispersion_images/${encodeURIComponent(folderName)}/${xmidValue}`)
       .then(async (res) => {
         if (!res.ok) {
@@ -103,57 +156,7 @@ export default function DispersionPickingPage() {
 
   useEffect(() => {
     if (folder && xmid !== null) loadImage(folder, xmid);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folder, xmid]);
-
-  function refreshLabels(folderName: string) {
-    fetch(`${API}/dispersion_image_labels/${encodeURIComponent(folderName)}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => null);
-          throw new Error(body?.detail ?? `HTTP ${res.status}`);
-        }
-        return res.json();
-      })
-      .then((data: Record<string, number>) => {
-        setLabelCounts(data);
-        setPseudoSections((prev) =>
-          Object.fromEntries(Object.entries(prev).filter(([lbl]) => lbl in data))
-        );
-        Object.entries(data)
-          .filter(([, count]) => count >= 2)
-          .forEach(([labelValue]) => loadPseudoSection(folderName, labelValue));
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
-  }
-
-  function refreshPositionPicks(folderName: string) {
-    fetch(`${API}/dispersion_picks_by_position/${encodeURIComponent(folderName)}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => null);
-          throw new Error(body?.detail ?? `HTTP ${res.status}`);
-        }
-        return res.json();
-      })
-      .then((data: { xmid: number; labels: string[] }[]) => setPositionPicks(data))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
-  }
-
-  function loadPseudoSection(folderName: string, labelValue: string) {
-    fetch(`${API}/dispersion_pseudo_section/${encodeURIComponent(folderName)}/${encodeURIComponent(labelValue)}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => null);
-          throw new Error(body?.detail ?? `HTTP ${res.status}`);
-        }
-        return res.json();
-      })
-      .then((data: PseudoSection) => setPseudoSections((prev) => ({ ...prev, [labelValue]: data })))
-      // Best-effort per label: a failure here shouldn't blank out the rest
-      // of the page (picking, other labels).
-      .catch(() => {});
-  }
 
   function handlePick() {
     if (!pendingPolygon || folder === "" || xmid === null) return;

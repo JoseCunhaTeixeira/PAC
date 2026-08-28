@@ -1,12 +1,13 @@
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import lru_cache
+from itertools import pairwise
 from pathlib import Path
 from typing import Literal, get_args
 
 import matplotlib.pyplot as plt
 import numpy as np
-from disba import DispersionError
 
 from masw.adapters.inversion import DZ, VP_VS_RATIO, build_inversion_pipeline
 from masw.algorithms.dispersion_picking import label_to_mode
@@ -19,9 +20,15 @@ from sigpipe.algorithms.inversion.rayleigh.seismic.forward import (
     fwd_seismic_phase,
 )
 from sigpipe.algorithms.picking.dispersion.curve import min_resolvable_wavelength
-from sigpipe.base.dispersion_curve import DispersionCurve, DispersionCurves, DispersionCurvesSection
+from sigpipe.base.dispersion_curve import (
+    DispersionCurve,
+    DispersionCurves,
+    DispersionCurvesSection,
+    Mode,
+)
 from sigpipe.base.inversion import InversionResult
 from sigpipe.base.velocity_model import VelocityModel, VelocityModelsSection
+from sigpipe.dataio.dispersion.loading import load_dispersion_curves
 from sigpipe.dataio.dispersion.plotting import plot_dispersion_image
 from sigpipe.dataio.dispersion.saving import save_dispersion_curves
 from sigpipe.dataio.dispersion.section import (
@@ -169,7 +176,14 @@ class InversionModels:
     ensemble: VelocityModel
 
 
+@lru_cache(maxsize=4096)
 def load_inversion_result(folder: str, xmid: float) -> InversionModels | None:
+    # Every viz endpoint (status, velocity section, per-label curves, per-label
+    # pseudo-section comparison) calls this once per position, so an
+    # uncached profile with dozens of positions re-parses the same 5 CSVs
+    # per position on every single one of those requests. Results are
+    # immutable once written, and the cache is cleared in run_inversion once
+    # a run finishes, so this can't serve stale data.
     paths = _result_paths(folder, xmid)
     if not all(path.exists() for path in paths):
         return None
@@ -188,9 +202,40 @@ def load_inversion_result(folder: str, xmid: float) -> InversionModels | None:
     )
 
 
+def clear_inversion_cache() -> None:
+    """Drop cached `load_inversion_result`/`_saved_predicted_curve` entries.
+
+    Call once a run has finished writing its results, so the viz endpoints
+    pick up the new files instead of serving what was cached before it.
+    """
+    load_inversion_result.cache_clear()
+    _saved_predicted_curve.cache_clear()
+
+
 def list_inversion_status(folder: str) -> list[tuple[float, bool]]:
     xmids = get_xmid_folders(folder)
     return [(xmid, load_inversion_result(folder, xmid) is not None) for xmid in xmids]
+
+
+@lru_cache(maxsize=4096)
+def _saved_predicted_curve(
+    folder: str, xmid: float, model: ModelName, mode: Mode
+) -> DispersionCurve | None:
+    """The forward-modeled curve invert_position already computed and saved
+    for `mode` during the inversion run, if `mode`'s label was part of that
+    run's selection -- avoids redoing disba's forward-modeling (the actual
+    expensive part) on every viz request. None if the run didn't cover this
+    mode (e.g. a label picked after the run, or left out of it), in which
+    case the caller should fall back to computing it live."""
+    path = _modeled_curves_path(folder, xmid, model)
+    if not path.exists():
+        return None
+    (curves,) = load_dispersion_curves([path])
+    # fwd_seismic_phase always tags its output with the physical wave type
+    # ("R" for Rayleigh -- this whole pipeline is Rayleigh-only), whereas
+    # `mode.wave` here comes from the picking label's own lettering
+    # convention (e.g. "M0" -> wave "M"). Match on mode number alone.
+    return next((c for c in curves if c.mode.number == mode.number), None)
 
 
 @dataclass(slots=True, frozen=True)
@@ -215,6 +260,29 @@ def _model_section(folder: str, model: ModelName = "smooth_median") -> VelocityM
     return VelocityModelsSection(velocity_models=tuple(models_by_position))
 
 
+# z cell budget for the live velocity-section grid, sized for the canvas
+# that actually renders it (~640 x 200-320px, see VelocitySectionCanvas.tsx)
+# -- not for scientific export. Reusing the MCMC inversion's own DZ=0.01 m
+# here was returning ~4000 z-samples (part of a 1.6M-cell, ~60MB-as-JSON
+# grid) for a modest profile with no visible difference on screen.
+# save_velocity_xzv/save_velocity_section_plot still use DZ, since those are
+# write-once and may be consumed outside the app.
+_VIZ_GRID_NZ = 200
+
+
+def _smooth_laterally_symmetric(grid: np.ndarray) -> np.ndarray:
+    """smooth_laterally's own median-filter cascade is directionally biased:
+    on a step from A to B, it blurs only the B side (2 positions past the
+    edge), leaving the A side crisp right up to it -- confirmed against a
+    synthetic step. Averaging one pass over the grid as-is with one pass
+    over the position-reversed grid (un-reversed after) cancels that bias
+    into a symmetric blur straddling each edge instead of trailing off to
+    one side of it."""
+    forward = smooth_laterally(grid)
+    backward = smooth_laterally(grid[::-1])[::-1]
+    return (forward + backward) / 2
+
+
 def _section_suffix(model: ModelName, lateral_smoothing: bool) -> str:
     """Filename suffix disambiguating non-default model/smoothing choices.
 
@@ -232,12 +300,48 @@ def _section_suffix(model: ModelName, lateral_smoothing: bool) -> str:
 def get_velocity_section(
     folder: str, model: ModelName = "smooth_median", lateral_smoothing: bool = False
 ) -> VelocitySection:
+    """Unsmoothed: one column per actually-inverted xmid -- not to_grid's own
+    regular x-grid, whose nearest-neighbor lookup ties break toward the
+    lower-x position (numpy argmin picks the first match), shifting every
+    position's band off-center instead of straddling it.
+
+    Smoothed: resampled first onto dx = half the smallest gap between
+    adjacent positions (2 columns across the tightest gap), then
+    smooth_laterally's median-filter cascade (windows 4, 3, 2) runs on that.
+    The nearest-neighbor tie bias applies here too, but at this resolution
+    it's a small fraction of one position's own span.
+
+    Either way z stays at DZ while sampling (needed so thin layers in
+    "smooth" model variants aren't skipped, same constraint to_grid itself
+    enforces) and is downsampled afterward -- the display doesn't need
+    ~4000 z-samples."""
     section = _model_section(folder, model)
-    xs, zs, vs_s_grid, _vs_p_grid, _rhos_grid, vs_s_std_grid = section.to_grid(dz=DZ)
+    models = section.velocity_models  # sorted by x: get_xmid_folders sorts xmids
 
     if lateral_smoothing:
-        vs_s_grid = smooth_laterally(vs_s_grid)
-        vs_s_std_grid = smooth_laterally(vs_s_std_grid)
+        xs_sorted = sorted(vm.position.x for vm in models)
+        min_offset = min(b - a for a, b in pairwise(xs_sorted))
+        dx = max(min_offset / 2, 1e-6)
+        xs, zs_fine, vs_s_grid, _vs_p_grid, _rhos_grid, vs_s_std_grid = section.to_grid(
+            dz=DZ, dx=dx
+        )
+    else:
+        tops = [vm.position.z for vm in models]
+        bottoms = [vm.position.z - sum(vm.thicknesses) for vm in models]
+        nz = int(np.floor((max(tops) - min(bottoms)) / DZ)) + 1
+        zs_fine = (max(tops) - np.arange(nz, dtype=np.float32) * DZ).astype(np.float32)
+        xs = np.array([vm.position.x for vm in models], dtype=np.float32)
+        vs_s_grid = np.array([vm.sample_vs(zs_fine) for vm in models], dtype=np.float32)
+        vs_s_std_grid = np.array([vm.sample_vs_std(zs_fine) for vm in models], dtype=np.float32)
+
+    z_stride = max(len(zs_fine) // _VIZ_GRID_NZ, 1)
+    zs = zs_fine[::z_stride]
+    vs_s_grid = vs_s_grid[:, ::z_stride]
+    vs_s_std_grid = vs_s_std_grid[:, ::z_stride]
+
+    if lateral_smoothing:
+        vs_s_grid = _smooth_laterally_symmetric(vs_s_grid)
+        vs_s_std_grid = _smooth_laterally_symmetric(vs_s_std_grid)
 
     return VelocitySection(
         positions=xs,
@@ -286,6 +390,33 @@ def save_velocity_xzv(folder: str) -> Path:
     return path
 
 
+def _predicted_curve(
+    folder: str,
+    xmid: float,
+    label: str,
+    model: ModelName,
+    observed: DispersionCurve,
+) -> DispersionCurve | None:
+    """The forward-modeled curve for `label` against `model`'s velocity
+    layers, as already computed and saved by invert_position during the
+    run. Viz reads only -- if the run didn't cover this label (picked after
+    the run, or left out of it), there's nothing to show; it does not
+    forward-model on the fly."""
+    predicted = _saved_predicted_curve(folder, xmid, model, label_to_mode(label))
+    if predicted is None:
+        return None
+    # fwd_seismic_phase doesn't know the real position; carry over the
+    # observed curve's acquisition so the predicted curve sorts/groups by
+    # the same xmid downstream.
+    return DispersionCurve(
+        fs=predicted.fs,
+        vs=predicted.vs,
+        mode=predicted.mode,
+        acquisition=observed.acquisition,
+        type=predicted.type,
+    )
+
+
 def _observed_predicted_sections(
     folder: str, label: str, model: ModelName
 ) -> tuple[DispersionCurvesSection, DispersionCurvesSection]:
@@ -293,7 +424,6 @@ def _observed_predicted_sections(
     per position, for every position with both a pick and an inversion
     result for `label`."""
     xmids = get_xmid_folders(folder)
-    mode = label_to_mode(label)
 
     observed_curves: list[DispersionCurve] = []
     predicted_curves: list[DispersionCurve] = []
@@ -303,39 +433,9 @@ def _observed_predicted_sections(
         except ValueError:
             continue
 
-        models = load_inversion_result(folder, xmid)
-        if models is None:
+        predicted = _predicted_curve(folder, xmid, label, model, observed)
+        if predicted is None:
             continue
-
-        predicted_model = getattr(models, model)
-        try:
-            predicted = fwd_seismic_phase(
-                thickness_per_layer=list(predicted_model.thicknesses),
-                Vs_per_layer=list(predicted_model.vs_s),
-                mode=mode.number,
-                fs=observed.fs,
-                Vp_Vs_ratio=VP_VS_RATIO,
-            )
-        except DispersionError:
-            logger.warning(
-                "Could not forward-model %s for folder=%s, xmid=%.2f, label=%s;"
-                " omitting it from the pseudo-section comparison.",
-                model,
-                folder,
-                xmid,
-                label,
-            )
-            continue
-        # fwd_seismic_phase doesn't know the real position; carry over the
-        # observed curve's acquisition so the predicted curve sorts/groups by
-        # the same xmid in the section below.
-        predicted = DispersionCurve(
-            fs=predicted.fs,
-            vs=predicted.vs,
-            mode=predicted.mode,
-            acquisition=observed.acquisition,
-            type=predicted.type,
-        )
         observed_curves.append(observed)
         predicted_curves.append(predicted)
 
@@ -410,7 +510,6 @@ def get_curves_by_position(
     if not xmids:
         raise ValueError(f"No xmid positions found in folder={folder}")
 
-    mode = label_to_mode(label)
     result: list[PositionCurves] = []
     for xmid in xmids:
         try:
@@ -418,26 +517,9 @@ def get_curves_by_position(
         except ValueError:
             observed = None
 
-        models = load_inversion_result(folder, xmid)
         predicted = None
-        if models is not None and observed is not None:
-            predicted_model = getattr(models, model)
-            try:
-                predicted = fwd_seismic_phase(
-                    thickness_per_layer=list(predicted_model.thicknesses),
-                    Vs_per_layer=list(predicted_model.vs_s),
-                    mode=mode.number,
-                    fs=observed.fs,
-                    Vp_Vs_ratio=VP_VS_RATIO,
-                )
-            except DispersionError:
-                logger.warning(
-                    "Could not forward-model %s for folder=%s, xmid=%.2f, label=%s.",
-                    model,
-                    folder,
-                    xmid,
-                    label,
-                )
+        if observed is not None:
+            predicted = _predicted_curve(folder, xmid, label, model, observed)
 
         result.append(
             PositionCurves(

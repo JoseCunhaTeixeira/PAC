@@ -28,8 +28,8 @@ def load_acquisition(
     if not files:
         raise ValueError(f"No seismic files found in {folder_path}")
 
-    durations = []
-    sampling_frequencies = []
+    durations: list[float] = []
+    sampling_frequencies: list[float] = []
     stream = None
 
     for file in files:

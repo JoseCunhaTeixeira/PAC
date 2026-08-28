@@ -5,11 +5,11 @@ from itertools import pairwise
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from sigpipe.base.dispersion_image import DispersionImage
 
 from masw.algorithms.dispersion_picking import mode_to_label
 from masw.io import dispersion_images as io
 from masw.io.folders import get_output_folders, get_xmid_folders
+from sigpipe.base.dispersion_image import DispersionImage
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,16 @@ class PseudoSectionOut(BaseModel):
 
 
 def nan_to_none(rows: np.ndarray) -> list[list[float | None]]:
-    return [[None if math.isnan(v) else float(v) for v in row] for row in rows]
+    # A per-cell Python loop (math.isnan + float() on every element) is fine
+    # for a small dispersion-image map but multi-second for a fine-grained
+    # velocity section (hundreds of thousands to millions of cells) --
+    # astype(object) + boolean-mask assignment does the same NaN->None swap
+    # in vectorized C instead.
+    arr = np.asarray(rows, dtype=np.float64)
+    out = arr.astype(object)
+    out[np.isnan(arr)] = None
+    result: list[list[float | None]] = out.tolist()
+    return result
 
 
 def _to_image_out(image: DispersionImage) -> DispersionImageOut:

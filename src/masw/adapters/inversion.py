@@ -1,9 +1,8 @@
 from pathlib import Path
 
+from masw.models.inversion import InversionParameters
 from sigpipe.base import Pipeline
 from sigpipe.transformers import Invert, Save
-
-from masw.models.inversion import InversionParameters
 
 DZ = 0.01
 VP_VS_RATIO = 1.77

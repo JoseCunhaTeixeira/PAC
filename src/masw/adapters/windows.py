@@ -4,11 +4,11 @@ from itertools import pairwise
 from pathlib import Path
 
 from pydantic import BaseModel
-from sigpipe.base.acquisition import LinearAcquisition
-from sigpipe.base.coordinate import Coordinate
 
 from masw.models.acquisition import AcquisitionParameters, PositionXZ
 from masw.models.masw import MASWParameters
+from sigpipe.base.acquisition import LinearAcquisition
+from sigpipe.base.coordinate import Coordinate
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +72,8 @@ def build_windows(
 
         xmid = _arc_midpoint_x(receiver_positions)
 
-        selected_files = []
-        acquisitions = []
+        selected_files: list[Path] = []
+        acquisitions: list[LinearAcquisition] = []
 
         # y is not tracked in MASW's own position data (always 0 for sigpipe's
         # 3D Coordinate), so it is hardcoded here rather than read from disk

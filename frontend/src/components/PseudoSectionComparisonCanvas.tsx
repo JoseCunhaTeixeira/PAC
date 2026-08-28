@@ -31,7 +31,7 @@ export function PseudoSectionComparisonCanvas({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
-  const palette = canvasPalette(theme);
+  const palette = useMemo(() => canvasPalette(theme), [theme]);
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
   const scale = containerWidth > 0 ? Math.min(containerWidth / TOTAL_W, 1) : 1;
   const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(scale);
@@ -287,7 +287,7 @@ export function PseudoSectionComparisonCanvas({
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
     ctx.fillText("Position [m]", ML + PLOT_W / 2, TOTAL_H - 4);
-  }, [comparison, velocityLabel, theme, scale]);
+  }, [comparison, velocityLabel, palette, scale]);
 
   return (
     <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W, position: "relative" }}>

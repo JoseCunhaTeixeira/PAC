@@ -7,12 +7,11 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from typing import cast
 
-from sigpipe.base import Pipeline
-
 from masw.adapters.registry import PIPELINE_BUILDERS
 from masw.adapters.windows import MASWWindow, build_windows
 from masw.logging_config import setup_logging
 from masw.models.computing import AnyComputingConfig
+from sigpipe.base import Pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +41,14 @@ def run_compute(
         total,
         config.execution_params.n_workers,
     )
+
+    profile = config.acquisition_params.folder_path.name
+    out_dir = config.execution_params.output_folder / profile
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # Written once here, in the main process -- every window shares this same
+    # config, so writing it per-window from worker processes raced on this
+    # path and hit sharing-violation PermissionErrors on Windows.
+    (out_dir / "computing_config.json").write_text(config.model_dump_json(indent=2))
 
     errors: list[WindowError] = []
     results: list[dict[str, object]] = []
@@ -80,10 +87,6 @@ def run_compute(
                 if on_progress is not None:
                     on_progress(completed, total, win_err)
 
-    profile = config.acquisition_params.folder_path.name
-    out_dir = config.execution_params.output_folder / profile
-    out_dir.mkdir(parents=True, exist_ok=True)
-
     results.sort(key=lambda r: cast(float, r["xmid"]))
     (out_dir / "computing_outcome.json").write_text(json.dumps(results, indent=2))
 
@@ -101,7 +104,6 @@ def process_window(
     profile = config.acquisition_params.folder_path.name
     base = config.execution_params.output_folder / profile
     base.mkdir(parents=True, exist_ok=True)
-    (base / "computing_config.json").write_text(config.model_dump_json(indent=2))
 
     output_folder = base / f"xmid_{window.xmid:.2f}"
     output_folder.mkdir(parents=True, exist_ok=True)  # <-- was missing

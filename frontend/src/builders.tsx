@@ -1,4 +1,4 @@
-export function buildFilteringParams(m: { method: any; fmin: any; fmax: any; order: any; }) {
+export function buildFilteringParams(m: { method: string; fmin: number; fmax: number; order: number; }) {
   switch (m.method) {
     case "iir":
       return { method: "iir", fmin: m.fmin, fmax: m.fmax, order: m.order };
@@ -8,7 +8,7 @@ export function buildFilteringParams(m: { method: any; fmin: any; fmax: any; ord
 }
 
 
-export function buildMutingParams(m: { method: any; tmin: any; tmax: any; vmin: any; vmax: any; taper: any; }) {
+export function buildMutingParams(m: { method: string; tmin: number; tmax: number; vmin: number; vmax: number; taper: number; }) {
   switch (m.method) {
     case "mute":
       return { method: "mute", tmin: m.tmin, tmax: m.tmax, vmin: m.vmin, vmax: m.vmax, taper: m.taper };
@@ -18,7 +18,7 @@ export function buildMutingParams(m: { method: any; tmin: any; tmax: any; vmin: 
 }
 
 
-export function buildNormalizationParams(m: { method: any; }) {
+export function buildNormalizationParams(m: { method: string; }) {
   switch (m.method) {
     case "onebit":
       return { method : "onebit"};
@@ -28,7 +28,7 @@ export function buildNormalizationParams(m: { method: any; }) {
 }
 
 
-export function buildSelectionParams(m: { method: any; threshold?: number; vmin?: number; vmax?: number; }) {
+export function buildSelectionParams(m: { method: string; threshold?: number; vmin?: number; vmax?: number; }) {
   switch (m.method) {
     case "fk":
       return { method : "fk", threshold : m.threshold, vmin: m.vmin, vmax: m.vmax };
@@ -37,7 +37,7 @@ export function buildSelectionParams(m: { method: any; threshold?: number; vmin?
   }
 }
 
-export function buildStackingParams(m: { method: any; nu?: number; n?: number; }) {
+export function buildStackingParams(m: { method: string; nu?: number; n?: number; }) {
   switch (m.method) {
     case "linear":
       return { method : "linear"}
@@ -51,7 +51,7 @@ export function buildStackingParams(m: { method: any; nu?: number; n?: number; }
 }
 
 
-export function buildWhiteningParams(m: { method: any; fmin?: number; fmax?: number; taper_width_Hz?: number; }) {
+export function buildWhiteningParams(m: { method: string; fmin?: number; fmax?: number; taper_width_Hz?: number; }) {
   switch (m.method) {
     case "onebit":
       return { method : "onebit"};

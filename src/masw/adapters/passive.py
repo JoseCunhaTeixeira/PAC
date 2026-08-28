@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Any
 
+from masw.adapters.windows import MASWWindow
+from masw.models.computing import PassiveComputingConfig
 from sigpipe.base import Pipeline
 from sigpipe.transformers import (
     Apodize,
@@ -19,9 +21,6 @@ from sigpipe.transformers import (
     Stack,
     Whiten,
 )
-
-from masw.adapters.windows import MASWWindow
-from masw.models.computing import PassiveComputingConfig
 
 
 def build_passive_pipeline(

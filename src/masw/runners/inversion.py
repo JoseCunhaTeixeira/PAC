@@ -85,6 +85,11 @@ def run_inversion(
     results.sort(key=lambda r: cast(float, r["xmid"]))
     (out_dir / "inversion_outcome.json").write_text(json.dumps(results, indent=2))
 
+    # Positions just got new (or first) results on disk -- drop the cached
+    # reads/forward-models so the viz endpoints pick them up instead of
+    # serving what was cached before this run.
+    io.clear_inversion_cache()
+
     n_failed = len(errors)
     logger.info("%d/%d succeeded, %d failed", total - n_failed, total, n_failed)
 

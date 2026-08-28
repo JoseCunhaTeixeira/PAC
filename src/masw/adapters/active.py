@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Any
 
+from masw.adapters.windows import MASWWindow
+from masw.models.computing import ActiveComputingConfig
 from sigpipe.base import Pipeline
 from sigpipe.transformers import (
     Detrend,
@@ -13,9 +15,6 @@ from sigpipe.transformers import (
     Save,
     Stack,
 )
-
-from masw.adapters.windows import MASWWindow
-from masw.models.computing import ActiveComputingConfig
 
 
 def build_active_pipeline(

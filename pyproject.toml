@@ -18,6 +18,14 @@ dependencies = [
     "disba>=0.7.0",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.14",
+    "pyright>=1.1",
+    "pre-commit>=4",
+]
+
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
@@ -36,7 +44,7 @@ where = ["src"]
 pythonVersion = "3.14"
 typeCheckingMode = "strict"
 
-include = ["src", "experiments"]
+include = ["src"]
 
 exclude = [
     "**/__pycache__",
@@ -93,3 +101,10 @@ quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
 docstring-code-format = true
+
+
+# -------------------------
+# Pytest configuration
+# -------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]

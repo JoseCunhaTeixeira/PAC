@@ -16,11 +16,13 @@ export default function VisualizationPage() {
   const [loadingFolders, setLoadingFolders] = useState(false);
 
   useEffect(() => {
-    setFolder("");
-    setFolders([]);
-    setError(null);
+    Promise.resolve().then(() => {
+      setFolder("");
+      setFolders([]);
+      setError(null);
+    });
     if (!mode) return;
-    setLoadingFolders(true);
+    Promise.resolve().then(() => setLoadingFolders(true));
     const endpoint = mode === "Signal" ? "input_folders" : "output_folders";
     fetch(`${API}/${endpoint}`)
       .then(async (res) => {

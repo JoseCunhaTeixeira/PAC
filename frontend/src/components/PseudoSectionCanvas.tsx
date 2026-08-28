@@ -29,7 +29,7 @@ export function PseudoSectionCanvas({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
-  const palette = canvasPalette(theme);
+  const palette = useMemo(() => canvasPalette(theme), [theme]);
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
   const scale = containerWidth > 0 ? Math.min(containerWidth / TOTAL_W, 1) : 1;
   const PLOT_H = height;
@@ -275,7 +275,7 @@ export function PseudoSectionCanvas({
     ctx.textAlign = "center";
     ctx.fillText("Phase velocity [m/s]", 0, 0);
     ctx.restore();
-  }, [section, mode, height, theme, scale]);
+  }, [section, mode, PLOT_H, TOTAL_H, palette, scale]);
 
   return (
     <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W, position: "relative" }}>

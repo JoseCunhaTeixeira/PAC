@@ -20,6 +20,10 @@ export default function HomePage() {
         <a href="https://doi.org/10.26443/seismica.v4i1.1150" target="_blank" rel="noreferrer">
           Cunha Teixeira et al. (2024)
         </a>
+        , and its signal processing and dispersion algorithms are powered by{" "}
+        <a href="https://github.com/JoseCunhaTeixeira/sigpipe" target="_blank" rel="noreferrer">
+          sigpipe
+        </a>
         . The inversion of the dispersion curves is performed using the MCMC package{" "}
         <a href="https://bayes-bay.readthedocs.io/en/latest/#" target="_blank" rel="noreferrer">
           BayesBay

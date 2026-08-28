@@ -1,11 +1,10 @@
 from collections.abc import Callable
 
-from sigpipe.base import Pipeline
-
 from masw.adapters.active import build_active_pipeline
 from masw.adapters.passive import build_passive_pipeline
 from masw.adapters.passive_active import build_passive_active_pipeline
 from masw.models.modes import ProcessingMode
+from sigpipe.base import Pipeline
 
 PIPELINE_BUILDERS: dict[ProcessingMode, Callable[..., Pipeline]] = {
     ProcessingMode.ACTIVE: build_active_pipeline,

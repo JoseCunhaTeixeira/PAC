@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { API } from "./api";
 import { VelocitySectionCanvas } from "./components/VelocitySectionCanvas";
 import { DispersionCurveCanvas } from "./components/DispersionCurveCanvas";
@@ -114,7 +114,6 @@ export default function InversionPage() {
   const nCpus = navigator.hardwareConcurrency || 1;
 
   useEffect(() => {
-    setLoadingFolders(true);
     fetch(`${API}/output_folders`)
       .then((res) => res.json())
       .then((data: string[]) => setFolders(data))
@@ -122,8 +121,8 @@ export default function InversionPage() {
       .finally(() => setLoadingFolders(false));
   }, []);
 
-  function refreshLabels(folderName: string) {
-    setLoadingLabels(true);
+  const refreshLabels = useCallback((folderName: string) => {
+    Promise.resolve().then(() => setLoadingLabels(true));
     fetch(`${API}/dispersion_image_labels/${encodeURIComponent(folderName)}`)
       .then(async (res) => {
         if (!res.ok) {
@@ -135,9 +134,9 @@ export default function InversionPage() {
       .then((data: Record<string, number>) => setLabelCounts(data))
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoadingLabels(false));
-  }
+  }, []);
 
-  function refreshPositionPicks(folderName: string) {
+  const refreshPositionPicks = useCallback((folderName: string) => {
     fetch(`${API}/dispersion_picks_by_position/${encodeURIComponent(folderName)}`)
       .then(async (res) => {
         if (!res.ok) {
@@ -148,17 +147,19 @@ export default function InversionPage() {
       })
       .then((data: { xmid: number; labels: string[] }[]) => setPositionPicks(data))
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
-  }
+  }, []);
 
   useEffect(() => {
-    setXmids([]);
-    setLabelCounts({});
-    setPositionPicks([]);
-    setSelectedLabels([]);
-    setSelectedPositions({});
-    setVelocitySection(null);
-    setPositionCurves({});
-    setResultLabels([]);
+    Promise.resolve().then(() => {
+      setXmids([]);
+      setLabelCounts({});
+      setPositionPicks([]);
+      setSelectedLabels([]);
+      setSelectedPositions({});
+      setVelocitySection(null);
+      setPositionCurves({});
+      setResultLabels([]);
+    });
     if (!folder) return;
 
     fetch(`${API}/xmids/${encodeURIComponent(folder)}`)
@@ -174,23 +175,25 @@ export default function InversionPage() {
 
     refreshLabels(folder);
     refreshPositionPicks(folder);
-  }, [folder]);
+  }, [folder, refreshLabels, refreshPositionPicks]);
 
   useEffect(() => {
-    setSelectedPositions({});
+    Promise.resolve().then(() => setSelectedPositions({}));
   }, [selectedLabels]);
 
   useEffect(() => {
-    setVsLayers((prev) => {
-      const next = prev.slice(0, nLayers);
-      while (next.length < nLayers) next.push(defaultVsLayer());
-      return next;
-    });
-    setThicknessLayers((prev) => {
-      const n = Math.max(0, nLayers - 1);
-      const next = prev.slice(0, n);
-      while (next.length < n) next.push(defaultThicknessLayer());
-      return next;
+    Promise.resolve().then(() => {
+      setVsLayers((prev) => {
+        const next = prev.slice(0, nLayers);
+        while (next.length < nLayers) next.push(defaultVsLayer());
+        return next;
+      });
+      setThicknessLayers((prev) => {
+        const n = Math.max(0, nLayers - 1);
+        const next = prev.slice(0, n);
+        while (next.length < n) next.push(defaultThicknessLayer());
+        return next;
+      });
     });
   }, [nLayers]);
 

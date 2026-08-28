@@ -11,7 +11,6 @@ export default function App() {
   const [loadingFolders, setLoadingFolders] = useState(true);
 
   useEffect(() => {
-    setLoadingFolders(true);
     fetch(`${API}/input_folders`)
       .then((res) => res.json())
       .then((data: string[]) => setFolders(data))
@@ -21,11 +20,13 @@ export default function App() {
 
   useEffect(() => {
     if (!selected) {
-      setAcquisition(null);
+      Promise.resolve().then(() => setAcquisition(null));
       return;
     }
-    setLoading(true);
-    setError(null);
+    Promise.resolve().then(() => {
+      setLoading(true);
+      setError(null);
+    });
     fetch(`${API}/acquisitions/${selected}`)
       .then(async (res) => {
         if (!res.ok) {
