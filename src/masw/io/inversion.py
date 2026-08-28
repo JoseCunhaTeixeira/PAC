@@ -7,9 +7,16 @@ from typing import Literal, get_args
 import matplotlib.pyplot as plt
 import numpy as np
 from disba import DispersionError
-from sigpipe.algorithms.inversion.dispersion_curve.rayleigh.forward import (
-    fwd_rayleigh_all_modes,
-    fwd_rayleigh_phase,
+
+from masw.adapters.inversion import DZ, VP_VS_RATIO, build_inversion_pipeline
+from masw.algorithms.dispersion_picking import label_to_mode
+from masw.io.dispersion_images import load_dispersion_image, xmid_folder
+from masw.io.folders import get_xmid_folders
+from masw.io.paths import OUTPUT_DIR
+from masw.models.inversion import InversionParameters
+from sigpipe.algorithms.inversion.rayleigh.seismic.forward import (
+    fwd_seismic_all_modes,
+    fwd_seismic_phase,
 )
 from sigpipe.algorithms.picking.dispersion.curve import min_resolvable_wavelength
 from sigpipe.base.dispersion_curve import DispersionCurve, DispersionCurves, DispersionCurvesSection
@@ -30,13 +37,6 @@ from sigpipe.dataio.velocity_model.section import (
     smooth_laterally,
 )
 from sigpipe.transformers import Plot
-
-from masw.adapters.inversion import DZ, VP_VS_RATIO, build_inversion_pipeline
-from masw.algorithms.dispersion_picking import label_to_mode
-from masw.io.dispersion_images import load_dispersion_image, xmid_folder
-from masw.io.folders import get_xmid_folders
-from masw.io.paths import OUTPUT_DIR
-from masw.models.inversion import InversionParameters
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ def invert_position(
     # (blocky) median model -- matches the old Streamlit app's `pred_modes`.
     modeled_curves = DispersionCurves(
         dispersion_curves=tuple(
-            fwd_rayleigh_phase(
+            fwd_seismic_phase(
                 thickness_per_layer=list(result.median.thicknesses),
                 Vs_per_layer=list(result.median.vs_s),
                 mode=curve.mode.number,
@@ -108,7 +108,7 @@ def invert_position(
     )
     # Every superior mode the median model supports, across the image's full
     # frequency axis -- matches the old Streamlit app's `full_pred_modes`.
-    full_modeled_curves = fwd_rayleigh_all_modes(
+    full_modeled_curves = fwd_seismic_all_modes(
         thickness_per_layer=list(result.median.thicknesses),
         Vs_per_layer=list(result.median.vs_s),
         fs=image.fs,
@@ -309,7 +309,7 @@ def _observed_predicted_sections(
 
         predicted_model = getattr(models, model)
         try:
-            predicted = fwd_rayleigh_phase(
+            predicted = fwd_seismic_phase(
                 thickness_per_layer=list(predicted_model.thicknesses),
                 Vs_per_layer=list(predicted_model.vs_s),
                 mode=mode.number,
@@ -326,7 +326,7 @@ def _observed_predicted_sections(
                 label,
             )
             continue
-        # fwd_rayleigh_phase doesn't know the real position; carry over the
+        # fwd_seismic_phase doesn't know the real position; carry over the
         # observed curve's acquisition so the predicted curve sorts/groups by
         # the same xmid in the section below.
         predicted = DispersionCurve(
@@ -423,7 +423,7 @@ def get_curves_by_position(
         if models is not None and observed is not None:
             predicted_model = getattr(models, model)
             try:
-                predicted = fwd_rayleigh_phase(
+                predicted = fwd_seismic_phase(
                     thickness_per_layer=list(predicted_model.thicknesses),
                     Vs_per_layer=list(predicted_model.vs_s),
                     mode=mode.number,
