@@ -19,12 +19,14 @@ export function VisualizationDispersion({ folder }: { folder: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setXmids([]);
-    setImages({});
-    setLabelCounts({});
-    setPseudoSections({});
-    setError(null);
-    setLoading(true);
+    Promise.resolve().then(() => {
+      setXmids([]);
+      setImages({});
+      setLabelCounts({});
+      setPseudoSections({});
+      setError(null);
+      setLoading(true);
+    });
 
     fetch(`${API}/xmids/${encodeURIComponent(folder)}`)
       .then(async (res) => {

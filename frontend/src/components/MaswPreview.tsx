@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { API, type Acquisition, type Masw } from "../api";
 
 interface WindowSummary {
@@ -71,6 +71,14 @@ export function MaswPreview({
   const [hover, setHover] = useState<Hover | null>(null);
   const [zoom, setZoom] = useState(1);
 
+  // Read via a ref so this effect doesn't need onCount in its deps -- it's
+  // often passed as a fresh inline callback, which would otherwise retrigger
+  // the debounced fetch below on every parent render.
+  const onCountRef = useRef(onCount);
+  useEffect(() => {
+    onCountRef.current = onCount;
+  }, [onCount]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setError(null);
@@ -94,7 +102,7 @@ export function MaswPreview({
           if (data) {
             setWindows(data);
             setInvalid(false);
-            onCount?.(data.length);
+            onCountRef.current?.(data.length);
           }
         })
         .catch((err) => setError(err instanceof Error ? err.message : String(err)));

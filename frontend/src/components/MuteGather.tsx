@@ -54,7 +54,7 @@ export function MuteGather({
   const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
-  const palette = canvasPalette(theme);
+  const palette = useMemo(() => canvasPalette(theme), [theme]);
   const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(1);
 
   // true offset along the (x, z) topography profile (matches sigpipe's
@@ -91,12 +91,14 @@ export function MuteGather({
   }, [hoverPos, gather, offsets]);
 
   useEffect(() => {
-    if (fileProp === undefined) setInternalFile(acquisition.files[0] ?? "");
+    if (fileProp === undefined) {
+      Promise.resolve().then(() => setInternalFile(acquisition.files[0] ?? ""));
+    }
   }, [acquisition, fileProp]);
 
   useEffect(() => {
     if (!file) return;
-    setError(null);
+    Promise.resolve().then(() => setError(null));
     fetch(`${API}/gather/${encodeURIComponent(folder)}/${encodeURIComponent(file)}?norm=${norm}`)
       .then(async (res) => {
         if (!res.ok) {
@@ -246,7 +248,7 @@ export function MuteGather({
     ctx.rotate(-Math.PI / 2);
     ctx.fillText("Time [s]", 0, 0);
     ctx.restore();
-  }, [gather, muting, offsets, theme]);
+  }, [gather, muting, offsets, palette]);
 
   return (
     <div>

@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Any
 
+from masw.adapters.windows import MASWWindow
+from masw.models.computing import PassiveActiveComputingConfig
 from sigpipe.base import Pipeline
 from sigpipe.transformers import (
     ActiveShotCorrelation,
@@ -15,9 +17,6 @@ from sigpipe.transformers import (
     Save,
     Stack,
 )
-
-from masw.adapters.windows import MASWWindow
-from masw.models.computing import PassiveActiveComputingConfig
 
 
 def build_passive_active_pipeline(

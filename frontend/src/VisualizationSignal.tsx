@@ -8,8 +8,10 @@ export function VisualizationSignal({ folder }: { folder: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setAcquisition(null);
-    setError(null);
+    Promise.resolve().then(() => {
+      setAcquisition(null);
+      setError(null);
+    });
     fetch(`${API}/acquisitions/${encodeURIComponent(folder)}`)
       .then(async (res) => {
         if (!res.ok) {

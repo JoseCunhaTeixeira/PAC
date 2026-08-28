@@ -62,8 +62,7 @@ def write_source_positions(
 ) -> None:
 
     raw = {
-        filename: _position_to_mapping(position)
-        for filename, position in source_positions.items()
+        filename: _position_to_mapping(position) for filename, position in source_positions.items()
     }
 
     with file_path.open(

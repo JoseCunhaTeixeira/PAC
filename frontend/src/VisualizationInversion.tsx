@@ -62,15 +62,17 @@ export function VisualizationInversion({ folder }: { folder: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setXmids([]);
-    setHasInversionResults(false);
-    setLabels([]);
-    setVelocitySection(null);
-    setPositionCurves({});
-    setPseudoComparisons({});
-    setError(null);
-    setSaveResult(null);
-    setLoading(true);
+    Promise.resolve().then(() => {
+      setXmids([]);
+      setHasInversionResults(false);
+      setLabels([]);
+      setVelocitySection(null);
+      setPositionCurves({});
+      setPseudoComparisons({});
+      setError(null);
+      setSaveResult(null);
+      setLoading(true);
+    });
 
     const xmidsDone = fetch(`${API}/xmids/${encodeURIComponent(folder)}`)
       .then(async (res) => {
@@ -112,7 +114,7 @@ export function VisualizationInversion({ folder }: { folder: string }) {
 
   useEffect(() => {
     if (!folder) return;
-    setError(null);
+    Promise.resolve().then(() => setError(null));
     // Guards against a stale race on folder change: this effect can fire once
     // more with the previous folder's `labels` array before the labels-reset
     // effect's state update has propagated, requesting a label that doesn't
@@ -206,8 +208,10 @@ export function VisualizationInversion({ folder }: { folder: string }) {
       }
     }
     if (Number.isFinite(min)) {
-      setVsMin(Math.floor(min));
-      setVsMax(Math.ceil(max));
+      Promise.resolve().then(() => {
+        setVsMin(Math.floor(min));
+        setVsMax(Math.ceil(max));
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [velocitySection]);

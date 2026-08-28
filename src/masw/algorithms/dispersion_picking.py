@@ -1,8 +1,11 @@
 from collections.abc import Sequence
+from typing import cast
 
 import numpy as np
+import numpy.typing as npt
 from matplotlib.path import Path
-from scipy.signal import medfilt, savgol_filter
+from scipy.signal import medfilt, savgol_filter  # pyright: ignore[reportUnknownVariableType]
+
 from sigpipe.algorithms.picking.dispersion.curve import lorentzian_uncertainty, resample_wavelength
 from sigpipe.base.dispersion_curve import DispersionCurve, DispersionCurvesImage, Mode
 from sigpipe.base.dispersion_image import DispersionImage
@@ -73,7 +76,7 @@ def pick_curve_lasso(
         raise ValueError("lasso selection did not cover enough frequency rows to pick a curve")
 
     if len(v_picked_arr) >= 5:
-        median_vs = medfilt(v_picked_arr, kernel_size=5)
+        median_vs = cast(npt.NDArray[np.float32], medfilt(v_picked_arr, kernel_size=5))
         residual = np.abs(v_picked_arr - median_vs)
         threshold = 2.5 * np.median(residual)
         outliers = residual > threshold
@@ -87,7 +90,10 @@ def pick_curve_lasso(
             len(v_picked_arr) // 2 + 1 if len(v_picked_arr) / 2 % 2 == 0 else len(v_picked_arr) // 2
         )
         v_picked_arr = np.asarray(
-            savgol_filter(v_picked_arr, window_length=wl, polyorder=3),
+            cast(
+                npt.NDArray[np.float32],
+                savgol_filter(v_picked_arr, window_length=wl, polyorder=3),
+            ),
             dtype=np.float32,
         )
 
