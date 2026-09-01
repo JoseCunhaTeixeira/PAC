@@ -18,7 +18,8 @@ PAC runs entirely **on your own computer**. You start it once, then use it throu
 - **Python-based:** lightweight and extensible for custom modifications.
 
 ## Overview
-<img width="2186" height="1992" alt="image" src="https://github.com/user-attachments/assets/fcd8642e-970d-411c-8d52-441b75cb72e5" />
+<img width="1261" height="1253" alt="image" src="https://github.com/user-attachments/assets/492b28af-60dd-426c-91e9-45c8c61063e1" />
+
 
 ## Running the app
 
