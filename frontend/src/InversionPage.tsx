@@ -287,7 +287,7 @@ export default function InversionPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h1>Inversion</h1>
+      <h1>Seismic Inversion</h1>
       {/* <p>🛈 Surface wave dispersion inversion.</p> */}
 
       <div style={{ marginBottom: 32 }}>

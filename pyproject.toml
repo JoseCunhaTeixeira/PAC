@@ -14,17 +14,12 @@ dependencies = [
     "pydantic",
     "pyyaml",
     "fastapi[standard]",
-    "sigpipe @ git+https://github.com/JoseCunhaTeixeira/sigpipe",
+    "sigpipe[silex,santiludo] @ git+https://github.com/JoseCunhaTeixeira/sigpipe",
     "disba>=0.7.0",
 ]
 
 [dependency-groups]
-dev = [
-    "pytest>=8",
-    "ruff>=0.14",
-    "pyright>=1.1",
-    "pre-commit>=4",
-]
+dev = ["pytest>=8", "ruff>=0.14", "pyright>=1.1", "pre-commit>=4"]
 
 [build-system]
 requires = ["setuptools>=61"]

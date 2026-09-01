@@ -25,6 +25,7 @@ from masw.api.routers import (
     dispersion_images,
     gather,
     inversion,
+    petro_inversion,
     run,
     windows,
 )
@@ -67,6 +68,7 @@ app.include_router(windows.router)
 app.include_router(gather.router)
 app.include_router(dispersion_images.router)
 app.include_router(inversion.router)
+app.include_router(petro_inversion.router)
 
 
 @app.get("/health")

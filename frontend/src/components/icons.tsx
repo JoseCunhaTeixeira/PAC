@@ -70,6 +70,16 @@ export function DepthIcon({ size = 18 }: IconProps) {
   );
 }
 
+export function FlaskIcon({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <path d="M9 2v6.5L4.5 18a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L15 8.5V2" />
+      <path d="M8 2h8" />
+      <path d="M6.5 15h11" />
+    </svg>
+  );
+}
+
 export function EyeIcon({ size = 18 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
