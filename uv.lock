@@ -1957,7 +1957,7 @@ wheels = [
 [[package]]
 name = "sigpipe"
 version = "1.0.0"
-source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#1a72423c5a586a706625e6e599bbc8066cd2a4b1" }
+source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#31274d851f6573a306176be4130b2dffd8220e41" }
 dependencies = [
     { name = "bayesbay" },
     { name = "disba" },
