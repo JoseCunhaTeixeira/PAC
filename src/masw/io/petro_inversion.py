@@ -77,9 +77,12 @@ def _modeled_curve_path(folder: str, xmid: float) -> Path:
 
 def invert_position(folder: str, xmid: float, model_name: str) -> PetroModel:
     observed = _fundamental_curve(folder, xmid)
+    model_dir = bundled_silex_model_dir(model_name)
+    # sigpipe's own SilexModel._preprocess raises ValueError if `observed`
+    # doesn't cover this checkpoint's trained frequency/velocity range --
+    # no separate check needed here.
     curves = DispersionCurves(dispersion_curves=(observed,))
     output_folder = xmid_folder(folder, xmid)
-    model_dir = bundled_silex_model_dir(model_name)
 
     pipeline = build_petro_inversion_pipeline(model_dir, output_folder=output_folder)
     result: PetroModel = pipeline.run(data=[curves], show_log=False)[0]
