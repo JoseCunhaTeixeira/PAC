@@ -53,7 +53,7 @@ ModelName = Literal["best", "smooth_best", "median", "smooth_median", "ensemble"
 
 
 def _inversion_path(folder: str, xmid: float) -> Path:
-    return xmid_folder(folder, xmid) / "InversionResult_0000.csv"
+    return xmid_folder(folder, xmid) / "SeismicInversion_Model_0000.csv"
 
 
 def _result_paths(folder: str, xmid: float) -> tuple[Path, Path, Path, Path, Path]:
@@ -68,7 +68,7 @@ def _result_paths(folder: str, xmid: float) -> tuple[Path, Path, Path, Path, Pat
 
 
 def _modeled_curves_path(folder: str, xmid: float, model_name: str) -> Path:
-    return xmid_folder(folder, xmid) / f"InversionDispersionCurves_0000_{model_name}.csv"
+    return xmid_folder(folder, xmid) / f"SeismicInversion_DispersionCurves_0000_{model_name}.csv"
 
 
 def curves_for_labels(folder: str, xmid: float, labels: Sequence[str]) -> DispersionCurves:
@@ -97,7 +97,7 @@ def invert_position(
     pipeline = build_inversion_pipeline(parameters, output_folder=output_folder)
     result: InversionResult = pipeline.run(data=[curves], show_log=False)[0]
 
-    (output_folder / "InversionLog_0000.log").write_text(result.log)
+    (output_folder / "SeismicInversion_Log_0000.log").write_text(result.log)
 
     # Single mode at each picked curve's own frequencies, forward-modeled from the
     # (blocky) median model -- matches the old Streamlit app's `pred_modes`.
@@ -130,7 +130,9 @@ def invert_position(
         normalize=True,
         show_errorbars=True,
     )
-    Plot.savefig(path=output_folder / "InversionDispersion_0000.png", figure=dispersion_fig)
+    Plot.savefig(
+        path=output_folder / "SeismicInversion_DispersionImage_0000.png", figure=dispersion_fig
+    )
     plt.close(dispersion_fig)
 
     forward_modeled = forward_model_all(result, curves, VP_VS_RATIO)
@@ -148,7 +150,7 @@ def invert_position(
         save_dispersion_curves(modeled, path=_modeled_curves_path(folder, xmid, model_name))
 
     density_fig = plot_density_curves(result, curves, VP_VS_RATIO)
-    Plot.savefig(path=output_folder / "InversionDensityCurves_0000.png", figure=density_fig)
+    Plot.savefig(path=output_folder / "SeismicInversion_DensityCurves_0000.png", figure=density_fig)
     plt.close(density_fig)
 
     try:
@@ -157,7 +159,9 @@ def invert_position(
             {f"H{i + 1} [m]": result.samples[f"thick{i + 1}"] for i in range(result.n_layers - 1)}
         )
         marginals_fig = plot_posterior_marginals(samples)
-        Plot.savefig(path=output_folder / "InversionMarginals_0000.png", figure=marginals_fig)
+        Plot.savefig(
+            path=output_folder / "SeismicInversion_Marginals_0000.png", figure=marginals_fig
+        )
         plt.close(marginals_fig)
     except Exception:
         logger.exception(
@@ -358,7 +362,7 @@ def save_velocity_section_plot(
     section = _model_section(folder, model)
     fig = plot_velocity_and_std_section(section, dz=DZ, lateral_smoothing=lateral_smoothing)
     suffix = _section_suffix(model, lateral_smoothing)
-    path = OUTPUT_DIR / folder / f"VelocitySection_0000{suffix}.png"
+    path = OUTPUT_DIR / folder / f"SeismicInversion_VelocitySection_0000{suffix}.png"
     Plot.savefig(path=path, figure=fig)
     plt.close(fig)
     return path
@@ -385,7 +389,7 @@ def save_velocity_xzv(folder: str) -> Path:
             )
     if not sections:
         raise ValueError(f"No model variant has at least two inverted positions in folder={folder}")
-    path = OUTPUT_DIR / folder / "VelocitySection_0000.hdf5"
+    path = OUTPUT_DIR / folder / "SeismicInversion_VelocitySection_0000.hdf5"
     save_velocity_models_sections(sections, path, dz=DZ)
     return path
 
@@ -459,7 +463,9 @@ def save_pseudo_section_comparison_plot(
     observed, predicted = _observed_predicted_sections(folder, label, model)
     fig = plot_pseudo_section_comparison(observed, predicted)
     suffix = _section_suffix(model, lateral_smoothing=False)
-    path = OUTPUT_DIR / folder / f"PseudoSectionComparison_0000{suffix}_{label}.png"
+    path = (
+        OUTPUT_DIR / folder / f"SeismicInversion_PseudoSectionComparison_0000{suffix}_{label}.png"
+    )
     Plot.savefig(path=path, figure=fig)
     plt.close(fig)
     return path

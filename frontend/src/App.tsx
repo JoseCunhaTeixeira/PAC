@@ -6,10 +6,11 @@ import PassiveComputingPage from "./PassiveComputingPage";
 import PassiveActiveComputingPage from "./PassiveActiveComputingPage";
 import DispersionPickingPage from "./DispersionPickingPage";
 import InversionPage from "./InversionPage";
+import PetroInversionPage from "./PetroInversionPage";
 import VisualizationPage from "./VisualizationPage";
 import { API } from "./api";
 import { applyTheme, getInitialTheme, ThemeContext, type Theme } from "./theme";
-import { CrosshairIcon, DepthIcon, EyeIcon, HomeIcon, LayersIcon, MoonIcon, SunIcon, WavesIcon, ZapIcon } from "./components/icons";
+import { CrosshairIcon, DepthIcon, EyeIcon, FlaskIcon, HomeIcon, LayersIcon, MoonIcon, SunIcon, WavesIcon, ZapIcon } from "./components/icons";
 import logoDeepWaveLight from "./assets/logo_DeepWave_lightmode.png";
 import logoDeepWaveDark from "./assets/logo_DeepWave_darkmode.png";
 
@@ -19,7 +20,8 @@ const NAV_ITEMS = [
   { to: "/passive", end: false, label: "Passive Computing", icon: <WavesIcon /> },
   { to: "/passive-active", end: false, label: "Passive-Active Computing", icon: <LayersIcon /> },
   { to: "/dispersion_picking", end: false, label: "Dispersion Picking", icon: <CrosshairIcon /> },
-  { to: "/inversion", end: false, label: "Inversion", icon: <DepthIcon /> },
+  { to: "/seismic_inversion", end: false, label: "Seismic Inversion", icon: <DepthIcon /> },
+  { to: "/petro_inversion", end: false, label: "Petrophysical Inversion", icon: <FlaskIcon /> },
   { to: "/visualization", end: false, label: "Visualization", icon: <EyeIcon /> },
 ];
 
@@ -100,7 +102,8 @@ export default function App() {
             <Route path="/passive" element={<PassiveComputingPage />} />
             <Route path="/passive-active" element={<PassiveActiveComputingPage />} />
             <Route path="/dispersion_picking" element={<DispersionPickingPage />} />
-            <Route path="/inversion" element={<InversionPage />} />
+            <Route path="/seismic_inversion" element={<InversionPage />} />
+            <Route path="/petro_inversion" element={<PetroInversionPage />} />
             <Route path="/visualization" element={<VisualizationPage />} />
           </Routes>
         </main>

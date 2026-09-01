@@ -10,6 +10,12 @@ const PLOT_W = 640;
 const FONT = CANVAS_FONT;
 const TOTAL_W = ML + PLOT_W + MR;
 
+// Module-level (not inline) so it's referentially stable across renders when
+// callers don't override it, matching `colormap`'s default (cividis) --
+// an inline arrow default would be a new function every render, forcing the
+// hover/draw effects below to always see a "changed" dependency.
+const DEFAULT_FORMAT_VALUE = (v: number) => v.toFixed(1);
+
 export function VelocitySectionCanvas({
   positions,
   elevations,
@@ -17,6 +23,7 @@ export function VelocitySectionCanvas({
   colorLabel,
   colormap = cividis,
   height = 320,
+  formatValue = DEFAULT_FORMAT_VALUE,
 }: {
   positions: number[];
   elevations: number[];
@@ -24,6 +31,12 @@ export function VelocitySectionCanvas({
   colorLabel: string;
   colormap?: (t: number) => [number, number, number];
   height?: number;
+  // Values are typically Vs-scale (tens to thousands) but this canvas is
+  // reused for other continuous fields too (e.g. shear modulus in GPa,
+  // ~0.05-0.5) where the default 1-decimal formatting would round
+  // everything to "0.0" -- callers with a different value scale should
+  // override this.
+  formatValue?: (v: number) => string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
@@ -64,10 +77,10 @@ export function VelocitySectionCanvas({
       lines: [
         `Position: ${positions[posIdx].toFixed(2)} m`,
         `Elevation: ${elevations[zIdx].toFixed(2)} m`,
-        `${colorLabel}: ${value === null ? "—" : value.toFixed(1)}`,
+        `${colorLabel}: ${value === null ? "—" : formatValue(value)}`,
       ],
     };
-  }, [hoverPos, positions, elevations, values, colorLabel, scale, PLOT_H]);
+  }, [hoverPos, positions, elevations, values, colorLabel, scale, PLOT_H, formatValue]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -216,7 +229,7 @@ export function VelocitySectionCanvas({
     for (let i = 0; i <= nLegendTicks; i++) {
       const v = vMin + (i / nLegendTicks) * vSpan;
       const py = MT + PLOT_H - (i / nLegendTicks) * PLOT_H;
-      ctx.fillText(v.toFixed(0), legendX + legendW + 6, py);
+      ctx.fillText(formatValue(v), legendX + legendW + 6, py);
     }
 
     ctx.fillStyle = palette.title;
@@ -234,7 +247,7 @@ export function VelocitySectionCanvas({
     ctx.textAlign = "center";
     ctx.fillText(colorLabel, 0, 0);
     ctx.restore();
-  }, [positions, elevations, values, colorLabel, colormap, PLOT_H, TOTAL_H, palette, scale]);
+  }, [positions, elevations, values, colorLabel, colormap, PLOT_H, TOTAL_H, palette, scale, formatValue]);
 
   return (
     <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W, position: "relative" }}>

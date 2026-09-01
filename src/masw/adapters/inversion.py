@@ -30,4 +30,6 @@ def build_inversion_pipeline(
         "dz": DZ,
     }
 
-    return Invert(method="mcmc", **invert_kwargs) >> Save(folder_path=output_folder)
+    return Invert(method="mcmc", **invert_kwargs) >> Save(
+        folder_path=output_folder, file_name="SeismicInversion_Model"
+    )

@@ -3,10 +3,11 @@ import { API } from "./api";
 import { VisualizationSignal } from "./VisualizationSignal";
 import { VisualizationDispersion } from "./VisualizationDispersion";
 import { VisualizationInversion } from "./VisualizationInversion";
+import { VisualizationPetroInversion } from "./VisualizationPetroInversion";
 
-type Mode = "Signal" | "Dispersion" | "Inversion";
+type Mode = "Signal" | "Dispersion" | "Seismic inversion" | "Petrophysical inversion";
 
-const MODES: Mode[] = ["Signal", "Dispersion", "Inversion"];
+const MODES: Mode[] = ["Signal", "Dispersion", "Seismic inversion", "Petrophysical inversion"];
 
 export default function VisualizationPage() {
   const [mode, setMode] = useState<Mode | "">("");
@@ -85,7 +86,10 @@ export default function VisualizationPage() {
 
       {mode === "Signal" && folder && <VisualizationSignal folder={folder} />}
       {mode === "Dispersion" && folder && <VisualizationDispersion folder={folder} />}
-      {mode === "Inversion" && folder && <VisualizationInversion folder={folder} />}
+      {mode === "Seismic inversion" && folder && <VisualizationInversion folder={folder} />}
+      {mode === "Petrophysical inversion" && folder && (
+        <VisualizationPetroInversion folder={folder} />
+      )}
     </div>
   );
 }

@@ -24,7 +24,8 @@ export default function HomePage() {
         <a href="https://github.com/JoseCunhaTeixeira/sigpipe" target="_blank" rel="noreferrer">
           sigpipe
         </a>
-        . The inversion of the dispersion curves is performed using the MCMC package{" "}
+        . Seismic inversion of the dispersion curves into Vs models is performed using the
+        MCMC package{" "}
         <a href="https://bayes-bay.readthedocs.io/en/latest/#" target="_blank" rel="noreferrer">
           BayesBay
         </a>
@@ -32,7 +33,9 @@ export default function HomePage() {
         <a href="https://github.com/keurfonluu/disba" target="_blank" rel="noreferrer">
           Disba
         </a>
-        .
+        . Petrophysical inversion of the fundamental-mode dispersion curve into soil-type
+        and SPT N-value models is performed using Silex, a deep-learning model also
+        provided by sigpipe.
       </p>
 
       <div
