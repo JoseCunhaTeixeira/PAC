@@ -14,7 +14,7 @@ PAC runs entirely **on your own computer**. You start it once, then use it throu
 - **Signal processing tools:** uses an automatic source detection algorithm combined with seismic interferometry.
 - **Automated dispersion analysis:** extracts and visualizes dispersion images and curves.
 - **Seismic inversion:** computes shear-wave velocity profiles from dispersion data using the MCMC package [BayesBay](https://github.com/fmagrini/bayes-bay) and the forward modeling package [Disba](https://github.com/keurfonluu/disba).
-- **Petrophysical inversion:** computes soil profiles from dispersion data using the AI inverison model from [Silex](https://github.com/JoseCunhaTeixeira/silex).
+- **Petrophysical inversion:** computes soil profiles from dispersion data using the AI inverison model from [silex](https://github.com/JoseCunhaTeixeira/silex).
 - **User-friendly interface:** streamlined workflow with visualization capabilities.
 - **Python-based:** lightweight and extensible for custom modifications.
 
