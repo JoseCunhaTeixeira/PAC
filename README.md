@@ -157,15 +157,15 @@ docker compose down
 PAC looks for your recordings in `data/input/` and writes its results to `data/output/`, with **one folder per profile**:
 
 - `data/`
-    - `input/`: contains one folder per profile with your raw seismic records
+    - `input/`: contains one folder per profile with your raw seismic records in SEG-2 format (e.g. `.dat` files)
         - `active_profile_1/`: one shot per seismic file, requires receiver **and** source positions
-            - `file1.segd`
-            - `file2.segd`
+            - `file1.dat`
+            - `file2.dat`
             - `receiver_positions.yaml`
             - `source_positions.yaml`
         - `passive_profile_2/`: passive recordings, only requires receiver positions
-            - `file1.segd`
-            - `file2.segd`
+            - `file1.dat`
+            - `file2.dat`
             - `receiver_positions.yaml`
     - `output/`: contains one folder per profile with dispersion and inversion results
         - `active_profile_1/`
