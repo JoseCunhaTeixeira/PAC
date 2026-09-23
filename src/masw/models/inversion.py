@@ -2,6 +2,10 @@ from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
 
+# sigpipe's MCMC keeps one model every 150 iterations after the burn-in (save_every in its
+# inversion_mcmc): a shorter run keeps none, and every position fails with KeyError: 'space.vs1'.
+SAVE_EVERY = 150
+
 
 class VsLayerParameters(BaseModel):
     vs_min: float = Field(gt=0)
@@ -42,6 +46,12 @@ class InversionParameters(BaseModel):
         if len(self.thickness_layers) != self.n_layers - 1:
             raise ValueError(
                 f"thickness_layers must have length n_layers - 1 ({self.n_layers - 1})"
+            )
+        if self.n_iterations - self.n_burnin_iterations < SAVE_EVERY:
+            raise ValueError(
+                f"n_iterations ({self.n_iterations}) must exceed n_burnin_iterations "
+                f"({self.n_burnin_iterations}) by at least {SAVE_EVERY}: each chain keeps one "
+                f"model every {SAVE_EVERY} iterations after the burn-in"
             )
         return self
 
