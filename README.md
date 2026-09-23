@@ -157,7 +157,7 @@ docker compose down
 PAC looks for your recordings in `data/input/` and writes its results to `data/output/`, with **one folder per profile**:
 
 - `data/`
-    - `input/`: contains one folder per profile with your raw seismic records in SEG-2 format (e.g. `.dat` files)
+    - `input/`: contains one folder per profile with your raw seismic records in any format ObsPy can read (e.g. SEG-2 `.dat` files)
         - `active_profile_1/`: one shot per seismic file, requires receiver **and** source positions
             - `file1.dat`
             - `file2.dat`
