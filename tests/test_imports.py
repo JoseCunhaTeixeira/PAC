@@ -11,12 +11,12 @@ import pytest
 
 MODULES = [
     "masw.io.inversion",
-    "masw.io.acquisition",
+    "masw.io.profiles",
     "masw.io.dispersion_images",
-    "masw.adapters.inversion",
-    "masw.adapters.windows",
-    "masw.algorithms.dispersion_picking",
+    "masw.io.petro_inversion",
     "masw.runners.computing",
+    "masw.runners.inversion",
+    "masw.runners.petro_inversion",
 ]
 
 

@@ -1,12 +1,42 @@
+# PAC: the API and the web app, at http://localhost:5173.
+#
+#   docker compose up -d                                   # PAC alone
+#   PAC_EXTRAS=agent docker compose --profile agent up -d --build
+#                                                          # with the assistant and its model
+#
+# The assistant page runs PACo, PAC's agent, in the backend (built with PAC_EXTRAS=agent), and
+# asks a model served apart: the `model` service runs vLLM on this machine's NVIDIA GPU (for an
+# AMD one, add -f docker-compose.rocm.yml). `python3 install_assistant.py` checks the GPU and
+# writes .env accordingly.
+#
+# The model on a GPU machine (in the cloud, say) and PAC on this one, with CPUs only:
+#   on the GPU machine:  python3 install_assistant.py --with && docker compose up -d model
+#   here:                python3 install_assistant.py --tunnel user@gpu-machine
+#                        docker compose up -d --build
+# The `tunnel` service then carries the assistant's requests to the model over SSH.
+# Without a model, the page says what is missing and the rest of PAC works as before.
+#
+# PAC on a server, opened from other computers: set PAC_API_URL (e.g. http://server:8000) and
+# PAC_WEB_URL (http://server:5173) in .env, the addresses the browsers use.
+
 services:
   backend:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        PAC_EXTRAS: ${PAC_EXTRAS:-}
     ports:
       - "8000:8000"
     environment:
-      CORS_ORIGINS: "http://localhost:5173"
+      CORS_ORIGINS: ${PAC_WEB_URL:-http://localhost:5173}
+      # The assistant's model: the `model` service, the `tunnel` service
+      # (http://tunnel:8001/v1), or a server elsewhere.
+      PACO_LLM_BASE_URL: ${PACO_LLM_BASE_URL:-http://model:8000/v1}
+      PACO_LLM_MODEL: ${PACO_LLM_MODEL:-Qwen/Qwen3-8B}
+      PACO_LLM_API_KEY: ${PACO_LLM_API_KEY:-EMPTY}
+      # Worker processes of the assistant's runs.
+      PACO_WORKERS: ${PACO_WORKERS:-4}
     volumes:
       - ./data/input:/app/data/input
       - ./data/output:/app/data/output
@@ -17,9 +47,76 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: "http://localhost:8000"
+        VITE_API_URL: ${PAC_API_URL:-http://localhost:8000}
     ports:
       - "5173:80"
     depends_on:
       - backend
     restart: unless-stopped
+
+  # The assistant's model (Qwen3-8B, about 17 GB on the GPU; set PACO_LLM_MODEL=Qwen/Qwen3-8B-FP8
+  # or Qwen/Qwen3-4B for a smaller card). The first start downloads it.
+  model:
+    image: vllm/vllm-openai:v0.30.0
+    command:
+      - --model=${PACO_LLM_MODEL:-Qwen/Qwen3-8B}
+      - --max-model-len=${VLLM_MAX_MODEL_LEN:-16384}
+      # One user: preparing for few conversations at once leaves the GPU's memory to the context.
+      - --max-num-seqs=${VLLM_MAX_NUM_SEQS:-8}
+      # Qwen3's tool calls, and its thinking kept out of the answers.
+      - --enable-auto-tool-choice
+      - --tool-call-parser=hermes
+      - --reasoning-parser=qwen3
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+      # Required of every request when set (PAC sends it as PACO_LLM_API_KEY).
+      VLLM_API_KEY: ${VLLM_API_KEY:-}
+    volumes:
+      - huggingface:/root/.cache/huggingface
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      # This machine only: reach it from another one through an SSH tunnel. MODEL_BIND=0.0.0.0
+      # opens it to the network: only behind a TLS proxy, and with VLLM_API_KEY set.
+      - ${MODEL_BIND:-127.0.0.1}:8001:8000
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      start_period: 10m  # downloading and loading the model
+    restart: unless-stopped
+    profiles: [agent]
+
+  # The assistant's model on another machine, reached over SSH (install_assistant.py --tunnel
+  # writes its settings): it forwards PAC's requests, on this network only, to the model on that
+  # machine's own 127.0.0.1:8001. Its key must have no passphrase: it reconnects unattended.
+  tunnel:
+    build: ./tunnel
+    command:
+      - -N
+      - -o
+      - BatchMode=yes
+      - -o
+      - ExitOnForwardFailure=yes
+      - -o
+      - ServerAliveInterval=30
+      - -o
+      - UserKnownHostsFile=/ssh/known_hosts
+      - -p
+      - ${MODEL_SSH_PORT:-22}
+      - -L
+      - 0.0.0.0:8001:127.0.0.1:8001
+      - ${MODEL_SSH:-}
+    volumes:
+      - ${MODEL_SSH_KEY:-./no-key}:/ssh/key:ro
+      - ${MODEL_SSH_KNOWN_HOSTS:-./no-known-hosts}:/ssh/known_hosts:ro
+    restart: unless-stopped
+    profiles: [tunnel]
+
+volumes:
+  huggingface:

@@ -1,9 +1,19 @@
 import { useState } from "react";
-import { type Acquisition } from "./api";
+import { type Acquisition, type Dispersion, type Masw } from "./api";
 import { MaswPreview } from "./components/MaswPreview";
 import { MuteGather } from "./components/MuteGather";
 import { RunPanel } from "./components/RunPanel";
 import { buildMutingParams, buildNormalizationParams, buildFilteringParams, buildSelectionParams, buildStackingParams, buildWhiteningParams} from "./builders";
+import {
+  type FilteringState,
+  type MutingState,
+  type PresetDefaults,
+  type SelectionState,
+  type StackingState,
+  type WhiteningState,
+  stage,
+  usePreset,
+} from "./presets";
 
 function NumberField({
   label,
@@ -35,36 +45,53 @@ function NumberField({
   );
 }
 
-export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
+export function ConfigForm({ acquisition, profile }: { acquisition: Acquisition; profile: string }) {
+  const { preset, error } = usePreset("passive", profile);
+  if (error) return <p style={{ color: "crimson" }}>Error: {error}</p>;
+  if (!preset) return <p>Loading settings…</p>;
+  return <Form acquisition={acquisition} profile={profile} preset={preset} />;
+}
+
+function Form({
+  acquisition,
+  profile,
+  preset,
+}: {
+  acquisition: Acquisition;
+  profile: string;
+  preset: PresetDefaults;
+}) {
   const maxTime = Number(Math.max(...acquisition.durations).toFixed(2));
   const nyquist = (acquisition.sampling_frequencies[0] ?? 0) / 2;
   const nCpus = navigator.hardwareConcurrency || 1;
 
-  const [masw, setMasw] = useState({ length: 3, step: 1, distance_min: 0, distance_max: 100 });
-  const [muting, setMuting] = useState({ method: "none", tmin: 0, tmax: maxTime, vmin: 0, vmax: 100_000, taper: 0 });
-  const [filtering, setFiltering] = useState({ method: "none", fmin: 0, fmax: nyquist, order: 4 });
-  const [slicing, setSlicing] = useState({ segment_duration: 0.1, segment_step: 0.1});
-  const [selection, SetSelection] = useState({ method: "none", threshold: 0.1, vmin: 0, vmax: 100_000});
-  const [whitening, SetWhitening] = useState({ method: "none", fmin: 0, fmax : nyquist, taper_width_Hz: 5});
-  const [normalization, setNormalization] = useState({ method: "none"});
-  const [dispersion, setDispersion] = useState({ fmin: 0, fmax: 100, vmin: 1, vmax: 1_000, nv: 1_000 });
-  const [stacking, setStacking] = useState({ method: "linear", nu: 2, n : 2});
+  const [masw, setMasw] = useState(() => stage<Masw>(preset, "masw"));
+  const [muting, setMuting] = useState(() => stage<MutingState>(preset, "muting"));
+  const [filtering, setFiltering] = useState(() => stage<FilteringState>(preset, "filtering"));
+  const [slicing, setSlicing] = useState(() => stage<{ segment_duration: number; segment_step: number }>(preset, "slicing"));
+  const [selection, SetSelection] = useState(() => stage<SelectionState>(preset, "selection"));
+  const [whitening, SetWhitening] = useState(() => stage<WhiteningState>(preset, "whitening"));
+  const [normalization, setNormalization] = useState(() => stage<{ method: string }>(preset, "normalization"));
+  const [dispersion, setDispersion] = useState(() => stage<Dispersion>(preset, "dispersion"));
+  const [stacking, setStacking] = useState(() => stage<StackingState>(preset, "stacking"));
   const [execution, setExecution] = useState({ n_workers: 1 });
   const [nPositions, setNPositions] = useState(0);
 
   const config = {
+    profile,
     mode: "passive",
-    acquisition_params: acquisition,
-    masw_params: masw,
-    muting_params: buildMutingParams(muting),
-    filtering_params: buildFilteringParams(filtering),
-    slicing_params: slicing,
-    selection_params: buildSelectionParams(selection),
-    whitening_params: buildWhiteningParams(whitening),
-    normalization_params: buildNormalizationParams(normalization),
-    stacking_params: buildStackingParams(stacking),
-    dispersion_params: dispersion,
-    execution_params: execution,
+    overrides: {
+      masw,
+      muting: buildMutingParams(muting),
+      filtering: buildFilteringParams(filtering),
+      slicing,
+      selection: buildSelectionParams(selection),
+      whitening: buildWhiteningParams(whitening),
+      normalization: buildNormalizationParams(normalization),
+      stacking: buildStackingParams(stacking),
+      dispersion,
+    },
+    workers: execution.n_workers,
   };
 
 

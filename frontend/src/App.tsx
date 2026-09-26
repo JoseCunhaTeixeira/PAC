@@ -8,9 +8,10 @@ import DispersionPickingPage from "./DispersionPickingPage";
 import InversionPage from "./InversionPage";
 import PetroInversionPage from "./PetroInversionPage";
 import VisualizationPage from "./VisualizationPage";
+import ChatPage from "./ChatPage";
 import { API } from "./api";
 import { applyTheme, getInitialTheme, ThemeContext, type Theme } from "./theme";
-import { CrosshairIcon, DepthIcon, EyeIcon, FlaskIcon, HomeIcon, LayersIcon, MoonIcon, SunIcon, WavesIcon, ZapIcon } from "./components/icons";
+import { ChatIcon, CrosshairIcon, DepthIcon, EyeIcon, FlaskIcon, HomeIcon, LayersIcon, MoonIcon, SunIcon, WavesIcon, ZapIcon } from "./components/icons";
 import logoDeepWaveLight from "./assets/logo_DeepWave_lightmode.png";
 import logoDeepWaveDark from "./assets/logo_DeepWave_darkmode.png";
 
@@ -23,11 +24,14 @@ const NAV_ITEMS = [
   { to: "/seismic_inversion", end: false, label: "Seismic Inversion", icon: <DepthIcon /> },
   { to: "/petro_inversion", end: false, label: "Petrophysical Inversion", icon: <FlaskIcon /> },
   { to: "/visualization", end: false, label: "Visualization", icon: <EyeIcon /> },
+  { to: "/assistant", end: false, label: "Assistant", icon: <ChatIcon /> },
 ];
 
 export default function App() {
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme());
   const [version, setVersion] = useState<string | null>(null);
+  // The assistant's page, only where PAC was installed with it.
+  const [assistant, setAssistant] = useState(false);
 
   useEffect(() => {
     applyTheme(theme);
@@ -38,6 +42,10 @@ export default function App() {
       .then((res) => (res.ok ? res.json() : Promise.reject()))
       .then((data: { version: string }) => setVersion(data.version))
       .catch(() => setVersion(null));
+    fetch(`${API}/agent/installed`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: { installed: boolean }) => setAssistant(data.installed))
+      .catch(() => setAssistant(false));
   }, []);
 
   return (
@@ -73,7 +81,7 @@ export default function App() {
           </div>
 
           <nav style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-            {NAV_ITEMS.map((item) => (
+            {NAV_ITEMS.filter((item) => assistant || item.to !== "/assistant").map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -105,6 +113,7 @@ export default function App() {
             <Route path="/seismic_inversion" element={<InversionPage />} />
             <Route path="/petro_inversion" element={<PetroInversionPage />} />
             <Route path="/visualization" element={<VisualizationPage />} />
+            <Route path="/assistant" element={<ChatPage />} />
           </Routes>
         </main>
       </div>

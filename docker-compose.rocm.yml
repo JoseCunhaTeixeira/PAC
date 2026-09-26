@@ -1,0 +1,25 @@
+# The assistant's model on an AMD GPU (ROCm), such as the Radeon RX 9000 and 7900 series: vLLM's
+# ROCm image and AMD's device access, over docker-compose.yml.
+#
+#   PAC_EXTRAS=agent docker compose -f docker-compose.yml -f docker-compose.rocm.yml \
+#     --profile agent up -d --build
+#
+# vLLM's 4-bit formats (AWQ, GPTQ) do not run on AMD GPUs. On a 16 GB card, set
+# PACO_LLM_MODEL=Qwen/Qwen3-8B-FP8 or Qwen/Qwen3-4B (Qwen3-8B needs about 16.4 GB for its weights).
+
+services:
+  model:
+    image: vllm/vllm-openai-rocm:v0.30.0
+    deploy: !reset {}
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+    # The models this machine already downloaded, instead of a Docker volume.
+    volumes: !override
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface

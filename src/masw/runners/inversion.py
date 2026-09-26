@@ -8,10 +8,11 @@ from dataclasses import asdict
 from typing import cast
 
 from masw.io import inversion as io
-from masw.io.paths import OUTPUT_DIR
+from masw.io.paths import output_folder
 from masw.logging_config import setup_logging
-from masw.models.inversion import InversionParameters, InversionRunConfig
+from masw.models.inversion import InversionRunConfig
 from masw.runners.computing import WindowError
+from sigpipe.masw.inversion import InversionParameters
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def run_inversion(
         config.n_workers,
     )
 
-    out_dir = OUTPUT_DIR / config.folder
+    out_dir = output_folder(config.folder)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "seismic_inversion_config.json").write_text(config.model_dump_json(indent=2))
 
@@ -84,11 +85,6 @@ def run_inversion(
 
     results.sort(key=lambda r: cast(float, r["xmid"]))
     (out_dir / "seismic_inversion_outcome.json").write_text(json.dumps(results, indent=2))
-
-    # Positions just got new (or first) results on disk -- drop the cached
-    # reads/forward-models so the viz endpoints pick them up instead of
-    # serving what was cached before this run.
-    io.clear_inversion_cache()
 
     n_failed = len(errors)
     logger.info("%d/%d succeeded, %d failed", total - n_failed, total, n_failed)

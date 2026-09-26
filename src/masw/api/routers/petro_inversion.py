@@ -60,7 +60,7 @@ def start_petro_inversion(config: PetroInversionRunConfig) -> Job:
     return job_manager.submit_petro_inversion(config)
 
 
-@router.get("/petro_inversion/status/{folder}")
+@router.get("/petro_inversion/status/{folder:path}")
 def get_petro_inversion_status(folder: str) -> list[PositionStatusOut]:
     try:
         status = io.list_petro_inversion_status(folder)
@@ -69,7 +69,7 @@ def get_petro_inversion_status(folder: str) -> list[PositionStatusOut]:
     return [PositionStatusOut(xmid=xmid, has_result=has_result) for xmid, has_result in status]
 
 
-@router.get("/petro_inversion/curves/{folder}")
+@router.get("/petro_inversion/curves/{folder:path}")
 def get_curves_by_position(folder: str) -> list[PositionCurvesOut]:
     try:
         curves = io.get_curves_by_position(folder)
@@ -89,7 +89,7 @@ def get_curves_by_position(folder: str) -> list[PositionCurvesOut]:
     ]
 
 
-@router.get("/petro_inversion/section/{folder}")
+@router.get("/petro_inversion/section/{folder:path}")
 def get_petro_section(folder: str) -> PetroSectionOut:
     try:
         section = io.get_petro_section(folder)
@@ -107,7 +107,7 @@ def get_petro_section(folder: str) -> PetroSectionOut:
     )
 
 
-@router.get("/petro_inversion/shear_modulus_section/{folder}")
+@router.get("/petro_inversion/shear_modulus_section/{folder:path}")
 def get_shear_modulus_section(folder: str) -> ContinuousSectionOut:
     try:
         section = io.get_shear_modulus_section(folder)
@@ -120,7 +120,7 @@ def get_shear_modulus_section(folder: str) -> ContinuousSectionOut:
     )
 
 
-@router.get("/petro_inversion/vs_section/{folder}")
+@router.get("/petro_inversion/vs_section/{folder:path}")
 def get_vs_section(folder: str) -> ContinuousSectionOut:
     try:
         section = io.get_vs_section(folder)
@@ -133,7 +133,7 @@ def get_vs_section(folder: str) -> ContinuousSectionOut:
     )
 
 
-@router.get("/petro_inversion/pseudo_section_comparison/{folder}")
+@router.get("/petro_inversion/pseudo_section_comparison/{folder:path}")
 def get_pseudo_section_comparison(folder: str) -> PseudoSectionComparisonOut:
     try:
         comparison = io.get_pseudo_section_comparison(folder)
@@ -142,7 +142,7 @@ def get_pseudo_section_comparison(folder: str) -> PseudoSectionComparisonOut:
     return PseudoSectionComparisonOut(
         positions=comparison.positions.tolist(),
         fs=comparison.fs.tolist(),
-        observed_grid=nan_to_none(comparison.observed_grid),
-        predicted_grid=nan_to_none(comparison.predicted_grid),
-        residual_grid=nan_to_none(comparison.residual_grid),
+        observed_grid=nan_to_none(comparison.observed),
+        predicted_grid=nan_to_none(comparison.predicted),
+        residual_grid=nan_to_none(comparison.residual),
     )

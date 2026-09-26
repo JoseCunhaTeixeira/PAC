@@ -33,7 +33,11 @@ export default function VisualizationPage() {
         }
         return res.json();
       })
-      .then((data: string[]) => setFolders(data))
+      .then((data: string[]) => {
+        setFolders(data);
+        // An output folder: the latest run by default (the list holds the newest first).
+        if (endpoint === "output_folders") setFolder((current) => current || (data[0] ?? ""));
+      })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoadingFolders(false));
   }, [mode]);

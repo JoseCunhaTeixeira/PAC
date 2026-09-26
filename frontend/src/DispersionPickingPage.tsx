@@ -51,7 +51,11 @@ export default function DispersionPickingPage() {
   useEffect(() => {
     fetch(`${API}/output_folders`)
       .then((res) => res.json())
-      .then((data: string[]) => setFolders(data))
+      .then((data: string[]) => {
+        setFolders(data);
+        // The latest run by default: the output folders list the newest first.
+        setFolder((current) => current || (data[0] ?? ""));
+      })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoadingFolders(false));
   }, []);

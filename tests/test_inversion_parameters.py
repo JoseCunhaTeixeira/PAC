@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from masw.api.main import app
-from masw.models.inversion import InversionParameters
+from sigpipe.masw.inversion import InversionParameters
 
 client = TestClient(app)
 
@@ -31,8 +31,7 @@ def _config(n_iterations: int, n_burnin_iterations: int) -> dict[str, object]:
 
 
 def test_a_burnin_that_leaves_nothing_to_sample_is_refused() -> None:
-    # 2,000 iterations with the form's default burn-in of 10,000: every position used to fail,
-    # after sampling, with KeyError: 'space.vs1'.
+    # 2,000 iterations with the form's default burn-in of 10,000 leave nothing to sample.
     response = client.post("/inversion/run", json=_config(2_000, 10_000))
 
     assert response.status_code == 422

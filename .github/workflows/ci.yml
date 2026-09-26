@@ -17,7 +17,7 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --group dev --extra agent
 
       - name: Ruff check
         run: uv run ruff check src tests

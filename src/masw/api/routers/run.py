@@ -3,7 +3,8 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from masw.api.jobs import Job, job_manager
-from masw.models.computing import AnyComputingConfig
+from masw.api.routers.config import check_request
+from masw.models.processing import ProcessingRequest
 
 logger = logging.getLogger(__name__)
 
@@ -11,8 +12,9 @@ router = APIRouter(tags=["run"])
 
 
 @router.post("/run", status_code=202)
-def start_run(config: AnyComputingConfig) -> Job:
-    return job_manager.submit(config)
+def start_run(request: ProcessingRequest) -> Job:
+    check_request(request)
+    return job_manager.submit(request)
 
 
 @router.get("/jobs/{job_id}")

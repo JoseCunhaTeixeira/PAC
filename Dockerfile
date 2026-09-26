@@ -11,13 +11,15 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends git build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# PAC_EXTRAS=agent adds the assistant page's agent (PACo); its model is served apart.
+ARG PAC_EXTRAS=""
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project --no-dev
+RUN uv sync --frozen --no-install-project --no-dev ${PAC_EXTRAS:+--extra $PAC_EXTRAS}
 
 COPY src ./src
 COPY data ./data
 RUN cp -r data/input data_demo_input
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev ${PAC_EXTRAS:+--extra $PAC_EXTRAS}
 
 FROM python:3.14-slim-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \

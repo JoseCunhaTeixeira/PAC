@@ -34,6 +34,23 @@ interface ThicknessLayer {
   thickness_perturb_std: number;
 }
 
+// sigpipe's inversion parameters (GET /inversion/defaults): the form's starting values, and
+// those of a layer it adds.
+interface InversionParameters {
+  n_layers: number;
+  vs_layers: VsLayer[];
+  thickness_layers: ThicknessLayer[];
+  n_iterations: number;
+  n_burnin_iterations: number;
+  n_chains: number;
+}
+
+interface InversionDefaults {
+  parameters: InversionParameters;
+  vs_layer: VsLayer;
+  thickness_layer: ThicknessLayer;
+}
+
 interface VelocitySection {
   positions: number[];
   elevations: number[];
@@ -41,12 +58,9 @@ interface VelocitySection {
   vs_std_grid: (number | null)[][];
 }
 
-function defaultVsLayer(): VsLayer {
-  return { vs_min: 100, vs_max: 1000, vs_perturb_std: 20 };
-}
-
-function defaultThicknessLayer(): ThicknessLayer {
-  return { thickness_min: 1, thickness_max: 10, thickness_perturb_std: 1 };
+// `layers` cut or extended to `n`, extended with `added`.
+function resized<T>(layers: T[], n: number, added: T): T[] {
+  return [...layers.slice(0, n), ...Array<T>(Math.max(0, n - layers.length)).fill(added)];
 }
 
 function NumberField({
@@ -90,15 +104,15 @@ export default function InversionPage() {
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [selectedPositions, setSelectedPositions] = useState<Record<number, boolean>>({});
 
-  const [nLayers, setNLayers] = useState(2);
-  const [vsLayers, setVsLayers] = useState<VsLayer[]>([defaultVsLayer(), defaultVsLayer()]);
-  const [thicknessLayers, setThicknessLayers] = useState<ThicknessLayer[]>([
-    defaultThicknessLayer(),
-  ]);
+  // Set from sigpipe's defaults once they load.
+  const [defaults, setDefaults] = useState<InversionDefaults | null>(null);
+  const [nLayers, setNLayers] = useState(0);
+  const [vsLayers, setVsLayers] = useState<VsLayer[]>([]);
+  const [thicknessLayers, setThicknessLayers] = useState<ThicknessLayer[]>([]);
 
-  const [nIterations, setNIterations] = useState(100_000);
-  const [nBurninIterations, setNBurninIterations] = useState(10_000);
-  const [nChains, setNChains] = useState(5);
+  const [nIterations, setNIterations] = useState(0);
+  const [nBurninIterations, setNBurninIterations] = useState(0);
+  const [nChains, setNChains] = useState(0);
   const [nWorkers, setNWorkers] = useState(1);
 
   const [velocitySection, setVelocitySection] = useState<VelocitySection | null>(null);
@@ -114,9 +128,29 @@ export default function InversionPage() {
   const nCpus = navigator.hardwareConcurrency || 1;
 
   useEffect(() => {
+    fetch(`${API}/inversion/defaults`)
+      .then((res) => res.json())
+      .then((data: InversionDefaults) => {
+        const parameters = data.parameters;
+        setDefaults(data);
+        setNLayers(parameters.n_layers);
+        setVsLayers(parameters.vs_layers);
+        setThicknessLayers(parameters.thickness_layers);
+        setNIterations(parameters.n_iterations);
+        setNBurninIterations(parameters.n_burnin_iterations);
+        setNChains(parameters.n_chains);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+  }, []);
+
+  useEffect(() => {
     fetch(`${API}/output_folders`)
       .then((res) => res.json())
-      .then((data: string[]) => setFolders(data))
+      .then((data: string[]) => {
+        setFolders(data);
+        // The latest run by default: the output folders list the newest first.
+        setFolder((current) => current || (data[0] ?? ""));
+      })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoadingFolders(false));
   }, []);
@@ -181,21 +215,13 @@ export default function InversionPage() {
     Promise.resolve().then(() => setSelectedPositions({}));
   }, [selectedLabels]);
 
-  useEffect(() => {
-    Promise.resolve().then(() => {
-      setVsLayers((prev) => {
-        const next = prev.slice(0, nLayers);
-        while (next.length < nLayers) next.push(defaultVsLayer());
-        return next;
-      });
-      setThicknessLayers((prev) => {
-        const n = Math.max(0, nLayers - 1);
-        const next = prev.slice(0, n);
-        while (next.length < n) next.push(defaultThicknessLayer());
-        return next;
-      });
-    });
-  }, [nLayers]);
+  // A layer added starts from sigpipe's defaults; the half-space has no thickness.
+  function setLayerCount(n: number) {
+    if (!defaults) return;
+    setNLayers(n);
+    setVsLayers((prev) => resized(prev, n, defaults.vs_layer));
+    setThicknessLayers((prev) => resized(prev, n - 1, defaults.thickness_layer));
+  }
 
   function toggleLabel(labelValue: string) {
     setSelectedLabels((prev) =>
@@ -246,6 +272,7 @@ export default function InversionPage() {
   };
 
   const missing: string[] = [];
+  if (!defaults) missing.push("the inversion's defaults (loading)");
   if (!folder) missing.push("a data folder");
   if (selectedLabels.length === 0) missing.push("at least one mode to invert");
   if (selectedXmids.length === 0) missing.push("at least one position to invert");
@@ -398,7 +425,7 @@ export default function InversionPage() {
             <NumberField
               label="Number of layers (including half-space)"
               value={nLayers}
-              onChange={(v) => setNLayers(Math.max(2, Math.round(v)))}
+              onChange={(v) => setLayerCount(Math.max(2, Math.round(v)))}
               min={2}
               step={1}
             />
@@ -426,7 +453,7 @@ export default function InversionPage() {
                       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                         <NumberField
                           label="Min [m]"
-                          value={thicknessLayers[i]?.thickness_min ?? 1}
+                          value={thicknessLayers[i].thickness_min}
                           step={0.1}
                           min={0.1}
                           onChange={(v) =>
@@ -440,7 +467,7 @@ export default function InversionPage() {
 
                         <NumberField
                           label="Max [m]"
-                          value={thicknessLayers[i]?.thickness_max ?? 10}
+                          value={thicknessLayers[i].thickness_max}
                           step={0.1}
                           min={0.1}
                           onChange={(v) =>
@@ -454,7 +481,7 @@ export default function InversionPage() {
 
                         <NumberField
                           label="Std [m]"
-                          value={thicknessLayers[i]?.thickness_perturb_std ?? 1}
+                          value={thicknessLayers[i].thickness_perturb_std}
                           step={0.01}
                           min={0.01}
                           onChange={(v) =>

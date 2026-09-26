@@ -1,14 +1,15 @@
 import logging
-import math
-from itertools import pairwise
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from masw.algorithms.dispersion_picking import mode_to_label
 from masw.io import dispersion_images as io
 from masw.io.folders import get_output_folders, get_xmid_folders
+from sigpipe.algorithms.picking.dispersion.curve import (
+    max_resolvable_wavelength,
+    min_resolvable_wavelength,
+)
 from sigpipe.base.dispersion_image import DispersionImage
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,7 @@ def _to_image_out(image: DispersionImage) -> DispersionImageOut:
     curves = (
         [
             DispersionCurveOut(
-                label=mode_to_label(c.mode),
+                label=c.mode.label,
                 fs=c.fs.tolist(),
                 vs=c.vs.tolist(),
                 vs_std=c.vs_err.tolist() if c.vs_err is not None else None,
@@ -92,33 +93,17 @@ def _to_image_out(image: DispersionImage) -> DispersionImageOut:
         else []
     )
 
-    # array resolution limits: below lambda_min (Nyquist wavelength) picks
-    # are spatially aliased, above lambda_max (array aperture) they aren't
-    # resolvable. distances follow the receivers' x,z positions (topography),
-    # not just x, since the array can have elevation. dx is the smallest
-    # spacing between consecutive receivers (arrays aren't always uniform)
-    # and lambda_max is the actual array length along that profile.
-    # Acquisition geometry may be unknown (e.g. older outputs computed
-    # without source_positions.yaml), leaving fewer than 2 real receivers —
-    # the bounds are then undefined rather than computable.
-    receivers = sorted(image.acquisition.receivers, key=lambda r: r.x)
-    spacings = [math.hypot(b.x - a.x, b.z - a.z) for a, b in pairwise(receivers)]
-    if image.acquisition.is_unknown or not spacings:
-        lambda_min = None
-        lambda_max = None
-    else:
-        dx = min(spacings)
-        lambda_min = 2 * dx
-        lambda_max = sum(spacings)
-
+    # The array's resolution limits: below lambda_min (twice the smallest spacing) picks are
+    # spatially aliased, above lambda_max (the array's length) they aren't resolvable. Both along
+    # the ground, and undefined for an unknown geometry.
     return DispersionImageOut(
         fv_map=image.fv_map.tolist(),
         fs=image.fs.tolist(),
         vs=image.vs.tolist(),
         type=image.type,
         curves=curves,
-        lambda_min=lambda_min,
-        lambda_max=lambda_max,
+        lambda_min=min_resolvable_wavelength(image.acquisition),
+        lambda_max=max_resolvable_wavelength(image.acquisition),
     )
 
 
@@ -127,7 +112,7 @@ def list_output_folders() -> list[str]:
     return get_output_folders()
 
 
-@router.get("/xmids/{folder}")
+@router.get("/xmids/{folder:path}")
 def get_xmids(folder: str) -> list[float]:
     try:
         return get_xmid_folders(folder)
@@ -135,7 +120,7 @@ def get_xmids(folder: str) -> list[float]:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.get("/dispersion_images/{folder}/{xmid}")
+@router.get("/dispersion_images/{folder:path}/{xmid}")
 def get_dispersion_image(folder: str, xmid: float) -> DispersionImageOut:
     try:
         return _to_image_out(io.load_dispersion_image(folder, xmid))
@@ -143,7 +128,7 @@ def get_dispersion_image(folder: str, xmid: float) -> DispersionImageOut:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.post("/dispersion_images/{folder}/{xmid}/pick/lasso")
+@router.post("/dispersion_images/{folder:path}/{xmid}/pick/lasso")
 def pick_lasso(folder: str, xmid: float, request: LassoPickRequest) -> DispersionImageOut:
     try:
         return _to_image_out(io.pick_lasso(folder, xmid, request.polygon, request.label))
@@ -151,7 +136,7 @@ def pick_lasso(folder: str, xmid: float, request: LassoPickRequest) -> Dispersio
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.post("/dispersion_images/{folder}/{xmid}/pick/box")
+@router.post("/dispersion_images/{folder:path}/{xmid}/pick/box")
 def pick_box(folder: str, xmid: float, request: BoxPickRequest) -> DispersionImageOut:
     try:
         return _to_image_out(
@@ -171,7 +156,7 @@ def pick_box(folder: str, xmid: float, request: BoxPickRequest) -> DispersionIma
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.delete("/dispersion_images/{folder}/{xmid}/pick/{label}")
+@router.delete("/dispersion_images/{folder:path}/{xmid}/pick/{label}")
 def delete_pick(folder: str, xmid: float, label: str) -> DispersionImageOut:
     try:
         return _to_image_out(io.delete_curve(folder, xmid, label))
@@ -179,7 +164,7 @@ def delete_pick(folder: str, xmid: float, label: str) -> DispersionImageOut:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.get("/dispersion_image_labels/{folder}")
+@router.get("/dispersion_image_labels/{folder:path}")
 def get_dispersion_image_labels(folder: str) -> dict[str, int]:
     try:
         return io.list_labels(folder)
@@ -187,7 +172,7 @@ def get_dispersion_image_labels(folder: str) -> dict[str, int]:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.get("/dispersion_picks_by_position/{folder}")
+@router.get("/dispersion_picks_by_position/{folder:path}")
 def get_dispersion_picks_by_position(folder: str) -> list[PositionPicksOut]:
     try:
         picks = io.list_labels_by_position(folder)
@@ -196,7 +181,7 @@ def get_dispersion_picks_by_position(folder: str) -> list[PositionPicksOut]:
     return [PositionPicksOut(xmid=xmid, labels=labels) for xmid, labels in picks]
 
 
-@router.get("/dispersion_pseudo_section/{folder}/{label}")
+@router.get("/dispersion_pseudo_section/{folder:path}/{label}")
 def get_pseudo_section(folder: str, label: str) -> PseudoSectionOut:
     try:
         section = io.get_pseudo_section(folder, label)

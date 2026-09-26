@@ -41,7 +41,7 @@ export function MuteGather({
   acquisition: Acquisition;
   muting?: Muting;
   // Controlled file selection: when omitted, the component owns its own
-  // selector (the original config-preview behavior, one file at a time).
+  // selector (the config forms' preview, one file at a time).
   file?: string;
   norm?: "trace" | "global";
 }) {

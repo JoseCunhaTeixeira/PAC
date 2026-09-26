@@ -16,6 +16,7 @@ export interface Job {
   elapsed: number | null;
   error: string | null;
   errors: WindowError[];
+  run?: string | null; // a processing job's run, <profile>/<run_id>, once it has ended
 }
 
 function formatDuration(s: number): string {
@@ -164,6 +165,7 @@ export function RunPanel({
               {job.total - job.errors.length}/{job.total} {itemLabel} computed
               {job.elapsed != null && ` in ${formatDuration(job.elapsed)}`}
               {job.errors.length > 0 && ` (${job.errors.length} failed)`}.
+              {job.run && ` Saved as run ${job.run}.`}
             </p>
           )}
 
