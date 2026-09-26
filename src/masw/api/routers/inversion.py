@@ -8,10 +8,17 @@ from masw.api.routers.dispersion_images import nan_to_none
 from masw.io import inversion as io
 from masw.io.inversion import ModelName
 from masw.models.inversion import InversionRunConfig
+from sigpipe.masw.inversion import InversionParameters, ThicknessLayer, VsLayer
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["inversion"])
+
+
+class InversionDefaultsOut(BaseModel):
+    parameters: InversionParameters
+    vs_layer: VsLayer  # a layer the form adds
+    thickness_layer: ThicknessLayer
 
 
 class PositionStatusOut(BaseModel):
@@ -55,12 +62,20 @@ class PseudoSectionComparisonOut(BaseModel):
     residual_grid: list[list[float | None]]
 
 
+@router.get("/inversion/defaults")
+def get_inversion_defaults() -> InversionDefaultsOut:
+    """The inversion form's starting values: sigpipe's, as PACo's agent gets them."""
+    return InversionDefaultsOut(
+        parameters=InversionParameters(), vs_layer=VsLayer(), thickness_layer=ThicknessLayer()
+    )
+
+
 @router.post("/inversion/run", status_code=202)
 def start_inversion(config: InversionRunConfig) -> Job:
     return job_manager.submit_inversion(config)
 
 
-@router.get("/inversion/status/{folder}")
+@router.get("/inversion/status/{folder:path}")
 def get_inversion_status(folder: str) -> list[PositionStatusOut]:
     try:
         status = io.list_inversion_status(folder)
@@ -69,7 +84,7 @@ def get_inversion_status(folder: str) -> list[PositionStatusOut]:
     return [PositionStatusOut(xmid=xmid, has_result=has_result) for xmid, has_result in status]
 
 
-@router.get("/inversion/velocity_section/{folder}")
+@router.get("/inversion/velocity_section/{folder:path}")
 def get_velocity_section(
     folder: str, model: ModelName = "smooth_median", lateral_smoothing: bool = False
 ) -> VelocitySectionOut:
@@ -80,12 +95,12 @@ def get_velocity_section(
     return VelocitySectionOut(
         positions=section.positions.tolist(),
         elevations=section.elevations.tolist(),
-        vs_grid=nan_to_none(section.vs_grid),
-        vs_std_grid=nan_to_none(section.vs_std_grid),
+        vs_grid=nan_to_none(section.vs),
+        vs_std_grid=nan_to_none(section.vs_std),
     )
 
 
-@router.get("/inversion/curves/{folder}/{label}")
+@router.get("/inversion/curves/{folder:path}/{label}")
 def get_curves_by_position(
     folder: str, label: str, model: ModelName = "smooth_median"
 ) -> list[PositionCurvesOut]:
@@ -107,7 +122,7 @@ def get_curves_by_position(
     ]
 
 
-@router.get("/inversion/pseudo_section_comparison/{folder}/{label}")
+@router.get("/inversion/pseudo_section_comparison/{folder:path}/{label}")
 def get_pseudo_section_comparison(
     folder: str, label: str, model: ModelName = "smooth_median"
 ) -> PseudoSectionComparisonOut:
@@ -118,13 +133,13 @@ def get_pseudo_section_comparison(
     return PseudoSectionComparisonOut(
         positions=comparison.positions.tolist(),
         fs=comparison.fs.tolist(),
-        observed_grid=nan_to_none(comparison.observed_grid),
-        predicted_grid=nan_to_none(comparison.predicted_grid),
-        residual_grid=nan_to_none(comparison.residual_grid),
+        observed_grid=nan_to_none(comparison.observed),
+        predicted_grid=nan_to_none(comparison.predicted),
+        residual_grid=nan_to_none(comparison.residual),
     )
 
 
-@router.post("/inversion/save_images/{folder}")
+@router.post("/inversion/save_images/{folder:path}")
 def save_images(folder: str, body: SaveImagesIn) -> SaveImagesOut:
     """Save the Vs/std section and per-label pseudo-section comparison plots
     for the given model/smoothing choice into the profile's output folder.

@@ -1,14 +1,15 @@
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from enum import StrEnum
 
 from pydantic import BaseModel
 
-from masw.models.computing import AnyComputingConfig
 from masw.models.inversion import InversionRunConfig
 from masw.models.petro_inversion import PetroInversionRunConfig
+from masw.models.processing import ProcessingRequest
 from masw.runners.computing import WindowError, run_compute
 from masw.runners.inversion import run_inversion
 from masw.runners.petro_inversion import run_petro_inversion
@@ -30,6 +31,7 @@ class Job(BaseModel):
     elapsed: float | None = None  # seconds, set when finished
     error: str | None = None
     errors: list[WindowError] = []  # per-window failures
+    run: str | None = None  # a processing job's run, <profile>/<run_id>, once it has ended
 
 
 class JobManager:
@@ -38,55 +40,44 @@ class JobManager:
         self._jobs: dict[str, Job] = {}
         self._started: dict[str, float] = {}
 
-    def submit(self, config: AnyComputingConfig) -> Job:
-        job = Job(id=uuid.uuid4().hex)
-        self._jobs[job.id] = job
-        self._started[job.id] = time.monotonic()
+    def submit(self, request: ProcessingRequest) -> Job:
+        job = self._new_job()
 
-        def on_progress(completed: int, total: int, err: WindowError | None) -> None:
-            job.completed = completed
-            job.total = total
-            if err is not None:
-                job.errors.append(err)
+        def work() -> list[WindowError]:
+            job.run, errors = run_compute(request, self._progress(job))
+            return errors
 
-        future = self._executor.submit(run_compute, config, on_progress)
-        future.add_done_callback(lambda f: self._finalize(job.id, f))
-
-        logger.info("Submitted job %s", job.id)
-        return job
+        return self._launch(job, work, "processing")
 
     def submit_inversion(self, config: InversionRunConfig) -> Job:
-        job = Job(id=uuid.uuid4().hex)
-        self._jobs[job.id] = job
-        self._started[job.id] = time.monotonic()
-
-        def on_progress(completed: int, total: int, err: WindowError | None) -> None:
-            job.completed = completed
-            job.total = total
-            if err is not None:
-                job.errors.append(err)
-
-        future = self._executor.submit(run_inversion, config, on_progress)
-        future.add_done_callback(lambda f: self._finalize(job.id, f))
-
-        logger.info("Submitted inversion job %s", job.id)
-        return job
+        job = self._new_job()
+        return self._launch(job, lambda: run_inversion(config, self._progress(job)), "inversion")
 
     def submit_petro_inversion(self, config: PetroInversionRunConfig) -> Job:
+        job = self._new_job()
+        return self._launch(
+            job, lambda: run_petro_inversion(config, self._progress(job)), "petro inversion"
+        )
+
+    def _new_job(self) -> Job:
         job = Job(id=uuid.uuid4().hex)
         self._jobs[job.id] = job
         self._started[job.id] = time.monotonic()
+        return job
 
+    def _progress(self, job: Job) -> Callable[[int, int, WindowError | None], None]:
         def on_progress(completed: int, total: int, err: WindowError | None) -> None:
             job.completed = completed
             job.total = total
             if err is not None:
                 job.errors.append(err)
 
-        future = self._executor.submit(run_petro_inversion, config, on_progress)
-        future.add_done_callback(lambda f: self._finalize(job.id, f))
+        return on_progress
 
-        logger.info("Submitted petro inversion job %s", job.id)
+    def _launch(self, job: Job, work: Callable[[], list[WindowError]], kind: str) -> Job:
+        future = self._executor.submit(work)
+        future.add_done_callback(lambda f: self._finalize(job.id, f))
+        logger.info("Submitted %s job %s", kind, job.id)
         return job
 
     def _finalize(self, job_id: str, future: Future[list[WindowError]]) -> None:
@@ -94,6 +85,12 @@ class JobManager:
         job.elapsed = time.monotonic() - self._started[job_id]
         error = future.exception()
         if error is None:
+            # A processing job knows its failed windows once its run has ended; the other jobs
+            # report theirs as they go.
+            reported = {(one.xmid, one.error_type) for one in job.errors}
+            job.errors.extend(
+                one for one in future.result() if (one.xmid, one.error_type) not in reported
+            )
             job.state = JobState.SUCCEEDED
             logger.info("Job %s succeeded in %.2f s", job_id, job.elapsed)
         else:

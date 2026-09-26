@@ -1,8 +1,7 @@
 """Smoke tests: the FastAPI app builds and its basic endpoints respond.
 
-These don't exercise MASW/inversion logic (that needs real acquisition
-data), just that the app wires up -- routers import, dependencies resolve,
-and the server answers requests.
+These don't exercise MASW/inversion logic, just that the app wires up --
+routers import, dependencies resolve, and the server answers requests.
 """
 
 from fastapi.testclient import TestClient

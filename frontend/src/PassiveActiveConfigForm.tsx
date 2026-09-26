@@ -1,9 +1,18 @@
 import { useState } from "react";
-import { type Acquisition } from "./api";
+import { type Acquisition, type Dispersion, type Masw } from "./api";
 import { MaswPreview } from "./components/MaswPreview";
 import { MuteGather } from "./components/MuteGather";
 import { RunPanel } from "./components/RunPanel";
-import { buildMutingParams, buildFilteringParams, buildStackingParams} from "./builders";
+import { buildMutingParams, buildFilteringParams, buildStackingParams, buildWindowParams } from "./builders";
+import {
+  type FilteringState,
+  type MutingState,
+  type PresetDefaults,
+  type StackingState,
+  type WindowState,
+  stage,
+  usePreset,
+} from "./presets";
 
 
 function NumberField({
@@ -36,29 +45,50 @@ function NumberField({
   );
 }
 
-export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
+export function ConfigForm({ acquisition, profile }: { acquisition: Acquisition; profile: string }) {
+  const { preset, error } = usePreset("passive-active", profile);
+  if (error) return <p style={{ color: "crimson" }}>Error: {error}</p>;
+  if (!preset) return <p>Loading settings…</p>;
+  return <Form acquisition={acquisition} profile={profile} preset={preset} />;
+}
+
+function Form({
+  acquisition,
+  profile,
+  preset,
+}: {
+  acquisition: Acquisition;
+  profile: string;
+  preset: PresetDefaults;
+}) {
   const maxTime = Number(acquisition.durations[0]?.toFixed(2) ?? 0);
   const nyquist = (acquisition.sampling_frequencies[0] ?? 0) / 2;
   const nCpus = navigator.hardwareConcurrency || 1;
 
-  const [masw, setMasw] = useState({ length: 3, step: 1, distance_min: 0, distance_max: 100 });
-  const [muting, setMuting] = useState({ method: "none", tmin: 0, tmax: maxTime, vmin: 0, vmax: 100_000, taper: 0 });
-  const [filtering, setFiltering] = useState({ method: "none", fmin: 0, fmax: nyquist, order: 4 });
-  const [dispersion, setDispersion] = useState({ fmin: 0, fmax: 100, vmin: 1, vmax: 1_000, nv: 1_000 });
-  const [stacking, setStacking] = useState({ method: "linear", nu: 2, n : 2});
+  const [masw, setMasw] = useState(() => stage<Masw>(preset, "masw"));
+  const [trigger, setTrigger] = useState(() => stage<{ t0: number }>(preset, "trigger"));
+  const [muting, setMuting] = useState(() => stage<MutingState>(preset, "muting"));
+  const [filtering, setFiltering] = useState(() => stage<FilteringState>(preset, "filtering"));
+  const [surfaceWaves, setSurfaceWaves] = useState(() => stage<WindowState>(preset, "correlation_window"));
+  const [dispersion, setDispersion] = useState(() => stage<Dispersion>(preset, "dispersion"));
+  const [stacking, setStacking] = useState(() => stage<StackingState>(preset, "stacking"));
   const [execution, setExecution] = useState({ n_workers: 1 });
   const [nPositions, setNPositions] = useState(0);
 
 
   const config = {
+    profile,
     mode: "passive-active",
-    acquisition_params: acquisition,
-    masw_params: masw,
-    muting_params: buildMutingParams(muting),
-    filtering_params: buildFilteringParams(filtering),
-    stacking_params: buildStackingParams(stacking),
-    dispersion_params: dispersion,
-    execution_params: execution,
+    overrides: {
+      masw,
+      trigger,
+      muting: buildMutingParams(muting),
+      filtering: buildFilteringParams(filtering),
+      correlation_window: buildWindowParams(surfaceWaves),
+      stacking: buildStackingParams(stacking),
+      dispersion,
+    },
+    workers: execution.n_workers,
   };
 
 
@@ -73,6 +103,9 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
       <NumberField label="Min distance from sources [m]" value={masw.distance_min} onChange={(v) => setMasw({ ...masw, distance_min: v })} min={0} />
       <NumberField label="Max distance from sources [m]" value={masw.distance_max} onChange={(v) => setMasw({ ...masw, distance_max: v })} min={0} />
       <MaswPreview acquisition={acquisition} masw={masw} onCount={setNPositions} />
+
+      <h2>Trigger</h2>
+      <NumberField label="Time origin shift t0 [s]" value={trigger.t0} onChange={(v) => setTrigger({ t0: v })} step={0.001} />
 
       <h2>Signal muting</h2>
       <label style={{ display: "block", margin: "4px 0" }}>
@@ -106,6 +139,23 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
           <NumberField label="Min frequency [Hz]" value={filtering.fmin} onChange={(v) => setFiltering({ ...filtering, fmin: v })} min={0} max={nyquist} step={5} />
           <NumberField label="Max frequency [Hz]" value={filtering.fmax} onChange={(v) => setFiltering({ ...filtering, fmax: v })} min={0} max={nyquist} step={5} />
           <NumberField label="Max frequency [Hz]" value={filtering.order} onChange={(v) => setFiltering({ ...filtering, order: v })} min={4} step={1} />
+        </>
+      )}
+
+      <h2>Surface-wave window</h2>
+      <p style={{ margin: "4px 0" }}>Each shot kept between the arrivals at these velocities before it is correlated.</p>
+      <label style={{ display: "block", margin: "4px 0" }}>
+        Method:{" "}
+        <select value={surfaceWaves.method} onChange={(e) => setSurfaceWaves({ ...surfaceWaves, method: e.target.value })}>
+          <option value="none">None</option>
+          <option value="mute">Mute</option>
+        </select>
+      </label>
+      {surfaceWaves.method === "mute" && (
+        <>
+          <NumberField label="Min group velocity [m/s]" value={surfaceWaves.vmin} onChange={(v) => setSurfaceWaves({ ...surfaceWaves, vmin: v })} min={0} />
+          <NumberField label="Max group velocity [m/s]" value={surfaceWaves.vmax} onChange={(v) => setSurfaceWaves({ ...surfaceWaves, vmax: v })} min={0} />
+          <NumberField label="Taper width [#]" value={surfaceWaves.taper} onChange={(v) => setSurfaceWaves({ ...surfaceWaves, taper: v })} min={0} />
         </>
       )}
 

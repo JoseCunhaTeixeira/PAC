@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { API, type Acquisition, type Masw } from "../api";
+import { API, type Acquisition, type Masw, profileName } from "../api";
 
 interface WindowSummary {
   xmid: number;
@@ -85,7 +85,7 @@ export function MaswPreview({
       fetch(`${API}/windows`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acquisition_params: acquisition, masw_params: masw }),
+        body: JSON.stringify({ profile: profileName(acquisition), masw }),
       })
         .then(async (res) => {
           if (res.status === 422) {

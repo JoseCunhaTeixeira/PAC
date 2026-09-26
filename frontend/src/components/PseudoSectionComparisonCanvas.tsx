@@ -19,7 +19,7 @@ const FONT = CANVAS_FONT;
 const TOTAL_W = ML + PLOT_W + MR;
 const TOTAL_H = MT + 3 * PLOT_H + 2 * PANEL_GAP + MB;
 
-// Observed/predicted/residual pseudo-sections stacked vertically, mirroring
+// Observed/predicted/residual pseudo-sections stacked vertically, like
 // sigpipe's `plot_pseudo_section_comparison` (obs+pred share one viridis
 // scale so they're directly comparable; residual uses a symmetric bwr scale).
 export function PseudoSectionComparisonCanvas({

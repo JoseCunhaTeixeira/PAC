@@ -9,10 +9,10 @@ import matplotlib
 # Force the non-interactive Agg backend before any module imports pyplot.
 # FastAPI runs synchronous endpoints (e.g. dispersion picking, which plots
 # and saves a PNG on every pick) in a worker thread, not the process's main
-# thread. matplotlib's default backend on this machine is TkAgg, which
-# creates Tk objects tied to whichever thread made them; when those objects
-# are later garbage-collected from a different thread (or after no Tk main
-# loop is running), Tk raises "main thread is not in main loop". Agg has no
+# thread. matplotlib's default backend can be TkAgg, which creates Tk
+# objects tied to whichever thread made them; when those objects are later
+# garbage-collected from a different thread (or after no Tk main loop is
+# running), Tk raises "main thread is not in main loop". Agg has no
 # GUI/main-loop concept, so it has no such thread affinity.
 matplotlib.use("Agg")
 
@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from masw.api.routers import (
     acquisitions,
+    agent,
     config,
     dispersion_images,
     gather,
@@ -69,6 +70,7 @@ app.include_router(gather.router)
 app.include_router(dispersion_images.router)
 app.include_router(inversion.router)
 app.include_router(petro_inversion.router)
+app.include_router(agent.router)
 
 
 @app.get("/health")

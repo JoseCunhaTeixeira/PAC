@@ -90,7 +90,7 @@ export default function App() {
             </tbody>
           </table>
 
-          <ConfigForm acquisition={acquisition} />
+          <ConfigForm key={selected} acquisition={acquisition} profile={selected} />
         </>
       )}
     </div>

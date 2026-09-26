@@ -61,3 +61,13 @@ export function buildWhiteningParams(m: { method: string; fmin?: number; fmax?: 
       return { method: "none"};
   }
 }
+
+
+export function buildWindowParams(m: { method: string; vmin: number; vmax: number; taper: number; }) {
+  switch (m.method) {
+    case "mute":
+      return { method: "mute", vmin: m.vmin, vmax: m.vmax, taper: m.taper };
+    default:
+      return { method: "none" };
+  }
+}

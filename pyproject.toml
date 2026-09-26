@@ -18,6 +18,11 @@ dependencies = [
     "disba>=0.7.0",
 ]
 
+[project.optional-dependencies]
+# The assistant page: PACo, PAC's agent, run in PAC's process. Its model is served apart
+# (vLLM on a GPU able to hold it, here or elsewhere): see docker-compose.yml's agent profile.
+agent = ["PACo @ git+https://github.com/JoseCunhaTeixeira/PACo"]
+
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.14", "pyright>=1.1", "pre-commit>=4"]
 
@@ -84,6 +89,11 @@ select = [
 ignore = [
     "E501", # line length handled by formatter
 ]
+
+[tool.ruff.per-file-target-version]
+# The install step runs on the host, with the python3 it has, before PAC is installed.
+"src/masw/gpu.py" = "py39"
+"install_assistant.py" = "py39"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]

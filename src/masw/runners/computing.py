@@ -1,21 +1,17 @@
-import json
-import logging
-import time
-import traceback
-from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import asdict, dataclass
-from typing import cast
+"""A profile processed, as PAC's run job does it: sigpipe's run (sigpipe.masw.runs), and its
+failed windows as the job's errors, each with its traceback."""
 
-from masw.adapters.registry import PIPELINE_BUILDERS
-from masw.adapters.windows import MASWWindow, build_windows
-from masw.logging_config import setup_logging
-from masw.models.computing import AnyComputingConfig
-from sigpipe.base import Pipeline
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+
+from masw.io.paths import OUTPUT_DIR, PACKAGES, workspace
+from masw.models.processing import ProcessingRequest
+from sigpipe.masw.runs import WindowOutcome, run_processing
 
 logger = logging.getLogger(__name__)
 
-# now also receives optional error info
 ProgressCallback = Callable[[int, int, "WindowError | None"], None]
 
 
@@ -28,93 +24,49 @@ class WindowError:
 
 
 def run_compute(
-    config: AnyComputingConfig,
+    request: ProcessingRequest,
     on_progress: ProgressCallback | None = None,
-) -> list[WindowError]:
-    windows = build_windows(config.acquisition_params, config.masw_params)
-    total = len(windows)
-    builder = PIPELINE_BUILDERS[config.mode]
-
+) -> tuple[str, list[WindowError]]:
+    """The run's output folder (<profile>/<run_id>), and its failed windows."""
     logger.info(
-        "Starting %s processing: %d windows, %d workers",
-        config.mode.value,
-        total,
-        config.execution_params.n_workers,
+        "Starting %s processing of %s, %d workers",
+        request.mode.value,
+        request.profile,
+        request.workers,
     )
-
-    profile = config.acquisition_params.folder_path.name
-    out_dir = config.execution_params.output_folder / profile
-    out_dir.mkdir(parents=True, exist_ok=True)
-    # Written once here, in the main process -- every window shares this same
-    # config, so writing it per-window from worker processes raced on this
-    # path and hit sharing-violation PermissionErrors on Windows.
-    (out_dir / "computing_config.json").write_text(config.model_dump_json(indent=2))
-
-    errors: list[WindowError] = []
-    results: list[dict[str, object]] = []
-    completed = 0
-    if on_progress is not None:
-        on_progress(completed, total, None)
-
-    with ProcessPoolExecutor(
-        max_workers=config.execution_params.n_workers,
-        initializer=setup_logging,
-    ) as executor:
-        futures = {
-            executor.submit(process_window, config, window, builder): window for window in windows
-        }
-        for future in as_completed(futures):
-            window = futures[future]
-            win_err = None
-            try:
-                duration_s = future.result()
-                logger.info("Finished xmid=%.2f", window.xmid)
-                results.append({"xmid": window.xmid, "status": "success", "duration_s": duration_s})
-            except Exception as exc:
-                logger.exception("Processing failed for xmid=%.2f", window.xmid)
-                win_err = WindowError(
-                    xmid=window.xmid,
-                    error_type=type(exc).__name__,
-                    message=str(exc),
-                    traceback=traceback.format_exc(),
-                )
-                errors.append(win_err)
-                results.append(
-                    {"xmid": window.xmid, "status": "failed", "duration_s": None, **asdict(win_err)}
-                )
-            finally:
-                completed += 1
-                if on_progress is not None:
-                    on_progress(completed, total, win_err)
-
-    results.sort(key=lambda r: cast(float, r["xmid"]))
-    (out_dir / "computing_outcome.json").write_text(json.dumps(results, indent=2))
-
-    n_failed = len(errors)
-    logger.info("%d/%d succeeded, %d failed", total - n_failed, total, n_failed)
-
-    return errors
+    manifest = run_processing(
+        request.profile,
+        request.mode,
+        request.overrides,
+        workspace(request.workers),
+        on_progress=None
+        if on_progress is None
+        else lambda done, total: on_progress(done, total, None),
+        packages=PACKAGES,
+    )
+    folder = f"{manifest.profile.name}/{manifest.run_id}"
+    errors = [
+        window_error(OUTPUT_DIR / folder, outcome)
+        for outcome in manifest.windows
+        if outcome.status == "failed"
+    ]
+    logger.info(
+        "%d/%d succeeded, %d failed",
+        len(manifest.windows) - len(errors),
+        len(manifest.windows),
+        len(errors),
+    )
+    return folder, errors
 
 
-def process_window(
-    config: AnyComputingConfig,
-    window: MASWWindow,
-    build_pipeline: Callable[..., Pipeline],
-) -> float:
-    profile = config.acquisition_params.folder_path.name
-    base = config.execution_params.output_folder / profile
-    base.mkdir(parents=True, exist_ok=True)
-
-    output_folder = base / f"xmid_{window.xmid:.2f}"
-    output_folder.mkdir(parents=True, exist_ok=True)  # <-- was missing
-    (output_folder / "window.json").write_text(window.model_dump_json(indent=2))
-
-    logger.info("Processing xmid=%.2f -> %s", window.xmid, output_folder)
-    start = time.perf_counter()
-    try:
-        pipeline = build_pipeline(config=config, window=window, output_folder=output_folder)
-        pipeline.run(show_log=False)
-    except Exception:
-        (output_folder / "error.log").write_text(traceback.format_exc())
-        raise
-    return time.perf_counter() - start
+def window_error(run_folder: Path, outcome: WindowOutcome) -> WindowError:
+    """A failed window as the job reports it: the error's type and message, and its traceback
+    from the window's error.log."""
+    error_type, _, message = (outcome.error or "").partition(": ")
+    log = run_folder / outcome.folder / "error.log"
+    return WindowError(
+        xmid=outcome.xmid,
+        error_type=error_type,
+        message=message,
+        traceback=log.read_text() if log.exists() else "",
+    )

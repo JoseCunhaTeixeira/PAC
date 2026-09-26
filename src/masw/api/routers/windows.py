@@ -1,11 +1,11 @@
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from masw.adapters.windows import build_windows
-from masw.models.acquisition import AcquisitionParameters
-from masw.models.masw import MASWParameters
+from masw.io.paths import workspace
+from sigpipe.masw.profiles import ProfileError, load_profile
+from sigpipe.masw.windows import MASWParameters, build_windows
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +13,8 @@ router = APIRouter(tags=["windows"])
 
 
 class WindowRequest(BaseModel):
-    acquisition_params: AcquisitionParameters
-    masw_params: MASWParameters
+    profile: str
+    masw: MASWParameters
 
 
 class WindowSummary(BaseModel):
@@ -26,7 +26,10 @@ class WindowSummary(BaseModel):
 
 @router.post("/windows")
 def preview_windows(request: WindowRequest) -> list[WindowSummary]:
-    windows = build_windows(request.acquisition_params, request.masw_params)
+    try:
+        windows = build_windows(load_profile(request.profile, workspace()), request.masw)
+    except (ProfileError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return [
         WindowSummary(
             xmid=w.xmid,

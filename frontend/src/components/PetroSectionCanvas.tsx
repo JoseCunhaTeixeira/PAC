@@ -23,7 +23,7 @@ const SOIL_COLORS: Record<string, string> = {
   sand: "#F2D57E",
 };
 
-// matplotlib's tab10/tab20 categorical palettes, mirroring sigpipe's
+// matplotlib's tab10/tab20 categorical palettes, as in sigpipe's
 // dataio.plot_config.n_value_colors (tab10 for <=10 distinct values, else
 // tab20), so N-value colors match sigpipe's own plots too.
 const TAB10 = [
@@ -53,7 +53,7 @@ const FONT = CANVAS_FONT;
 const TOTAL_W = ML + PLOT_W + MR;
 const TOTAL_H = MT + 2 * PLOT_H + PANEL_GAP + MB;
 
-// Soil-type and N-value depth section, mirroring sigpipe's
+// Soil-type and N-value depth section, like sigpipe's
 // plot_petro_models_section (two stacked panels, water table as a dashed
 // step per position on both panels) as an interactive canvas instead of a
 // static plot.

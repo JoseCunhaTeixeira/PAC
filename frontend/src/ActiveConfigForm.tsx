@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { type Acquisition } from "./api";
+import { type Acquisition, type Dispersion, type Masw } from "./api";
 import { MaswPreview } from "./components/MaswPreview";
 import { MuteGather } from "./components/MuteGather";
 import { RunPanel } from "./components/RunPanel";
 import { buildFilteringParams, buildMutingParams } from "./builders";
+import { type FilteringState, type MutingState, type PresetDefaults, stage, usePreset } from "./presets";
 
 function NumberField({
   label,
@@ -35,26 +36,45 @@ function NumberField({
   );
 }
 
-export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
+export function ConfigForm({ acquisition, profile }: { acquisition: Acquisition; profile: string }) {
+  const { preset, error } = usePreset("active", profile);
+  if (error) return <p style={{ color: "crimson" }}>Error: {error}</p>;
+  if (!preset) return <p>Loading settings…</p>;
+  return <Form acquisition={acquisition} profile={profile} preset={preset} />;
+}
+
+function Form({
+  acquisition,
+  profile,
+  preset,
+}: {
+  acquisition: Acquisition;
+  profile: string;
+  preset: PresetDefaults;
+}) {
   const maxTime = Number(acquisition.durations[0]?.toFixed(2) ?? 0);
   const nyquist = (acquisition.sampling_frequencies[0] ?? 0) / 2;
   const nCpus = navigator.hardwareConcurrency || 1;
 
-  const [masw, setMasw] = useState({ length: 3, step: 1, distance_min: 0, distance_max: 100 });
-  const [muting, setMuting] = useState({ method: "none", tmin: 0, tmax: maxTime, vmin: 0, vmax: 100_000, taper: 0 });
-  const [filtering, setFiltering] = useState({ method: "none", fmin: 0, fmax: nyquist, order: 4 });
-  const [dispersion, setDispersion] = useState({ fmin: 0, fmax: 100, vmin: 1, vmax: 1_000, nv: 1_000 });
+  const [masw, setMasw] = useState(() => stage<Masw>(preset, "masw"));
+  const [trigger, setTrigger] = useState(() => stage<{ t0: number }>(preset, "trigger"));
+  const [muting, setMuting] = useState(() => stage<MutingState>(preset, "muting"));
+  const [filtering, setFiltering] = useState(() => stage<FilteringState>(preset, "filtering"));
+  const [dispersion, setDispersion] = useState(() => stage<Dispersion>(preset, "dispersion"));
   const [execution, setExecution] = useState({ n_workers: 1 });
   const [nPositions, setNPositions] = useState(0);
 
   const config = {
+    profile,
     mode: "active",
-    acquisition_params: acquisition,
-    masw_params: masw,
-    muting_params: buildMutingParams(muting),
-    filtering_params: buildFilteringParams(filtering),
-    dispersion_params: dispersion,
-    execution_params: execution,
+    overrides: {
+      masw,
+      trigger,
+      muting: buildMutingParams(muting),
+      filtering: buildFilteringParams(filtering),
+      dispersion,
+    },
+    workers: execution.n_workers,
   };
 
   const maxWorkers = nPositions > 0 ? Math.min(nCpus, nPositions) : nCpus;
@@ -68,6 +88,9 @@ export function ConfigForm({ acquisition }: { acquisition: Acquisition }) {
       <NumberField label="Min distance from sources [m]" value={masw.distance_min} onChange={(v) => setMasw({ ...masw, distance_min: v })} min={0} />
       <NumberField label="Max distance from sources [m]" value={masw.distance_max} onChange={(v) => setMasw({ ...masw, distance_max: v })} min={0} />
       <MaswPreview acquisition={acquisition} masw={masw} onCount={setNPositions} />
+
+      <h2>Trigger</h2>
+      <NumberField label="Time origin shift t0 [s]" value={trigger.t0} onChange={(v) => setTrigger({ t0: v })} step={0.001} />
 
       <h2>Signal muting</h2>
       <label style={{ display: "block", margin: "4px 0" }}>

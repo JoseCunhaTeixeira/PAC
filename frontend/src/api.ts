@@ -10,6 +10,13 @@ export interface Acquisition {
   sampling_frequencies: number[];
   source_positions: Position[];
   receiver_positions: Position[];
+  kind: string; // "active" or "passive"
+  modes: string[]; // the modes it can be processed in
+}
+
+// A profile's name: its folder's, in the input folder.
+export function profileName(acquisition: Acquisition): string {
+  return acquisition.folder_path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
 }
 
 export interface Masw {
