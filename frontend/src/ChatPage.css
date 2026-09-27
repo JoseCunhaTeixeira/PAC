@@ -63,7 +63,7 @@
 .chat-subtitle {
   margin: 4px 0 0;
   max-width: 560px;
-  font-size: 0.92rem;
+  font-size: var(--fs-body);
   color: var(--text-muted);
 }
 
@@ -83,7 +83,7 @@
   border-radius: 999px;
   background: var(--surface-hover);
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--fs-small);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -108,7 +108,7 @@
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--fs-small);
   box-shadow: none;
 }
 
@@ -163,8 +163,8 @@
 
 .chat-answer .chat-heading {
   margin: 0.2rem 0 0.4rem;
-  font-size: 1.05rem;
-  font-weight: 700;
+  font-size: var(--fs-h2);
+  font-weight: 650;
 }
 
 .chat-answer ul,
@@ -182,8 +182,8 @@
   padding: 1px 5px;
   border-radius: 5px;
   background: var(--surface-hover);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.86em;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
 }
 
 /* The settings the gates changed, which PAC's host appends to every answer. */
@@ -195,7 +195,7 @@
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: var(--fs-small);
   line-height: 1.5;
 }
 
@@ -231,7 +231,7 @@
   padding: 2px 6px 2px 0;
   background: transparent;
   color: var(--text-faint);
-  font-size: 0.82rem;
+  font-size: var(--fs-small);
   box-shadow: none;
 }
 
@@ -263,7 +263,7 @@
   align-items: flex-start;
   gap: 8px;
   color: var(--text-muted);
-  font-size: 0.87rem;
+  font-size: var(--fs-body);
 }
 
 .chat-step-icon {
@@ -295,7 +295,7 @@
 .chat-step-note {
   display: block;
   color: var(--text-faint);
-  font-size: 0.8rem;
+  font-size: var(--fs-small);
   white-space: pre-wrap;
 }
 
@@ -338,7 +338,7 @@
   align-items: center;
   gap: 9px;
   color: var(--text-muted);
-  font-size: 0.87rem;
+  font-size: var(--fs-body);
 }
 
 .chat-error {
@@ -347,14 +347,14 @@
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
   color: var(--text);
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .chat-note {
   color: var(--text-faint);
-  font-size: 0.85rem;
+  font-size: var(--fs-small);
   text-align: center;
 }
 
@@ -384,14 +384,15 @@
   margin: 8px 0 0;
   padding: 0;
   border: none;
-  font-size: 1.35rem;
+  font-size: var(--fs-h2);
+  font-weight: 650;
 }
 
 .chat-welcome-text {
   max-width: 520px;
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.93rem;
+  font-size: var(--fs-body);
 }
 
 .chat-chips {
@@ -409,7 +410,7 @@
   border-radius: 999px;
   background: var(--surface);
   color: var(--text);
-  font-size: 0.86rem;
+  font-size: var(--fs-small);
   font-weight: 500;
   box-shadow: none;
 }
@@ -466,7 +467,7 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 0.95rem;
+  font-size: var(--fs-body);
   line-height: 1.5;
 }
 
@@ -488,7 +489,7 @@
 .chat-hint {
   margin: 7px 4px 0;
   color: var(--text-faint);
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);
 }
 
 /* The conversations, in a menu under their button in the header: the chat keeps its width. */
@@ -551,7 +552,7 @@
   background: transparent;
   box-shadow: none;
   color: var(--text);
-  font-size: 0.88rem;
+  font-size: var(--fs-body);
   font-weight: 600;
 }
 
@@ -611,7 +612,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.88rem;
+  font-size: var(--fs-body);
   font-weight: 550;
 }
 
@@ -624,7 +625,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.74rem;
+  font-size: var(--fs-caption);
   color: var(--text-faint);
 }
 
@@ -666,5 +667,5 @@
   gap: 6px;
   margin: 8px 0 0;
   color: var(--text-faint);
-  font-size: 0.84rem;
+  font-size: var(--fs-small);
 }

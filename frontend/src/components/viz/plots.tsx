@@ -1,4 +1,5 @@
 import { useTheme } from "../../theme";
+import type { ReactNode } from "react";
 import { LinePlot, type PlotArea, type PlotRef, type PlotSeries } from "./LinePlot";
 import { num } from "./format";
 import { vizPalette } from "./palette";
@@ -74,7 +75,9 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
   ];
   return (
     <div>
-      <p className="viz-plot-title">Vs profile</p>
+      <div className="viz-row viz-plot-head">
+        <p className="viz-plot-title">Vs profile</p>
+      </div>
       <LinePlot
         series={series}
         areas={areas}
@@ -112,7 +115,18 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
 
 export type CurveAxis = "frequency" | "wavelength";
 
-export function CurveFitPlot({ curve, axis, modelled }: { curve: FitCurve; axis: CurveAxis; modelled: string }) {
+export function CurveFitPlot({
+  curve,
+  axis,
+  modelled,
+  aside,
+}: {
+  curve: FitCurve;
+  axis: CurveAxis;
+  modelled: string;
+  /** On the title's line, at the right: the axis's switch. */
+  aside?: ReactNode;
+}) {
   const palette = vizPalette(useTheme());
   const along = (f: number, v: number) => (axis === "frequency" ? f : v / f);
   const observed: PlotSeries = {
@@ -132,7 +146,10 @@ export function CurveFitPlot({ curve, axis, modelled }: { curve: FitCurve; axis:
   };
   return (
     <div>
-      <p className="viz-plot-title">Picked and modelled curve</p>
+      <div className="viz-row viz-plot-head">
+        <p className="viz-plot-title">Picked and modelled curve</p>
+        {aside}
+      </div>
       <LinePlot
         series={[observed, predicted]}
         xLabel={axis === "frequency" ? "Frequency (Hz)" : "Wavelength (m)"}
@@ -194,7 +211,9 @@ export function SoilColumnView({ column }: { column: SoilColumn }) {
   }
   return (
     <div>
-      <p className="viz-plot-title">Soil column</p>
+      <div className="viz-row viz-plot-head">
+        <p className="viz-plot-title">Soil column</p>
+      </div>
       <div className="viz-column-wrap" style={{ height }}>
         <div className="viz-column" style={{ height }}>
           {column.soils.map((soil, i) => (

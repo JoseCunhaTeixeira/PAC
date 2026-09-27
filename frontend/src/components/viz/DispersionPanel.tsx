@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { API } from "../../api";
 import { DispersionImageCanvas, type DispersionImage } from "../DispersionImageCanvas";
-import { PseudoSectionCanvas, type PseudoSection } from "../PseudoSectionCanvas";
+import { StrataIcon } from "../icons";
+import { Card, Segmented } from "../kit";
+import { ModeHead, PseudoSectionCanvas, type PseudoSection } from "../PseudoSectionCanvas";
 import { xmidOf } from "./format";
 import { StageHead, UnitCard } from "./panel";
 import type { DispersionCard, Overview, WindowSources } from "./types";
@@ -10,7 +12,7 @@ import { useJson } from "./useJson";
 
 // The dispersion stage: the selected window's card (the shots its image stacks, its image and
 // picks, the checks), its image with the picks on it, and along the line, the pseudo-section
-// of the picked curves.
+// of each mode's picked curves (M0, M1…), as the picking page shows them.
 
 const at = (folder: string) => encodeURIComponent(folder);
 
@@ -33,13 +35,9 @@ export function DispersionPanel({
   const card = useJson<DispersionCard>(xmid !== null ? `${API}/quality/dispersion/card/${at(folder)}/${xmid}` : null);
   const image = useJson<DispersionImage>(xmid !== null ? `${API}/dispersion_images/${at(folder)}/${xmid}` : null);
   const labels = useJson<Record<string, number>>(`${API}/dispersion_image_labels/${at(folder)}`);
-  const sectioned = Object.entries(labels.data ?? {}).filter(([, count]) => count >= 2).map(([label]) => label);
-  const [label, setLabel] = useState<string | null>(null);
-  const shown = label && sectioned.includes(label) ? label : sectioned[0] ?? null;
+  const modes = Object.entries(labels.data ?? {});
+  const windows = overview?.cells.length ?? 0;
   const [axis, setAxis] = useState<"frequency" | "wavelength">("frequency");
-  const section = useJson<PseudoSection>(
-    shown ? `${API}/dispersion_pseudo_section/${at(folder)}/${encodeURIComponent(shown)}` : null,
-  );
   const pick = (position: number) => {
     const cell = overview?.cells.find((one) => one.x !== null && Math.abs(one.x - position) < 1e-6);
     if (cell) onSelect(cell.key);
@@ -60,9 +58,11 @@ export function DispersionPanel({
             details={card.data && <Details gates={card.data.gates} attempts={card.data.attempts} />}
           >
             <div style={{ marginTop: 16 }}>
-              <p className="viz-plot-title">
-                Dispersion image{card.data?.picked_by === "auto" ? " · picked automatically" : card.data?.picked_by === "hand" ? " · picked by hand" : ""}
-              </p>
+              <div className="viz-row viz-plot-head">
+                <p className="viz-plot-title">
+                  Dispersion image{card.data?.picked_by === "auto" ? " · picked automatically" : card.data?.picked_by === "hand" ? " · picked by hand" : ""}
+                </p>
+              </div>
               {image.data ? (
                 <DispersionImageCanvas image={image.data} />
               ) : image.error ? (
@@ -74,45 +74,81 @@ export function DispersionPanel({
           </UnitCard>
         </div>
       )}
-      <section className="viz-section viz-card">
-        <div className="viz-row" style={{ marginBottom: 10 }}>
-          <h2 className="viz-h2" style={{ margin: 0 }}>
-            {shown ? `${shown} pseudo-section` : "Pseudo-section"}
-          </h2>
-          <div className="viz-toolbar" style={{ margin: 0 }}>
-            {sectioned.length > 1 && (
-              <label className="viz-field">
-                Mode
-                <select value={shown ?? ""} onChange={(e) => setLabel(e.target.value)}>
-                  {sectioned.map((one) => (
-                    <option key={one}>{one}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <div className="viz-segment" role="group" aria-label="Vertical axis">
-              {(["frequency", "wavelength"] as const).map((one) => (
-                <button key={one} type="button" className={axis === one ? "active" : ""} onClick={() => setAxis(one)}>
-                  {one === "frequency" ? "Frequency" : "Wavelength"}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-        {section.data ? (
-          <PseudoSectionCanvas
-            section={section.data}
-            mode={axis}
-            height={260}
-            marker={xmid ?? undefined}
-            onPick={pick}
+      <Card
+        className="viz-section"
+        icon={<StrataIcon size={17} />}
+        title="Pseudo-sections"
+        aside={
+          <Segmented
+            size="sm"
+            label="Vertical axis"
+            value={axis}
+            onChange={setAxis}
+            options={[
+              { value: "frequency", label: "Frequency" },
+              { value: "wavelength", label: "Wavelength" },
+            ]}
           />
-        ) : labels.data && sectioned.length === 0 ? (
-          <Empty>Needs 2 picked windows.</Empty>
+        }
+      >
+        {modes.length > 0 ? (
+          <div className="stack">
+            {modes.map(([label, count]) => (
+              <PickedSection
+                key={label}
+                folder={folder}
+                label={label}
+                count={count}
+                windows={windows}
+                axis={axis}
+                marker={xmid ?? undefined}
+                onPick={pick}
+              />
+            ))}
+          </div>
+        ) : labels.data || labels.error ? (
+          <Empty>No curve picked.</Empty>
         ) : (
           <Skeleton height={300} />
         )}
-      </section>
+      </Card>
     </>
+  );
+}
+
+/** One mode's picked curves along the line: its head, then its pseudo-section. */
+function PickedSection({
+  folder,
+  label,
+  count,
+  windows,
+  axis,
+  marker,
+  onPick,
+}: {
+  folder: string;
+  label: string;
+  count: number;
+  windows: number;
+  axis: "frequency" | "wavelength";
+  marker?: number;
+  onPick: (position: number) => void;
+}) {
+  const section = useJson<PseudoSection>(
+    count >= 2 ? `${API}/dispersion_pseudo_section/${at(folder)}/${encodeURIComponent(label)}` : null,
+  );
+  return (
+    <div>
+      <ModeHead label={label} count={count} total={windows} unit="windows" />
+      {count < 2 ? (
+        <p className="faint">Needs 2 picked windows.</p>
+      ) : section.data ? (
+        <PseudoSectionCanvas section={section.data} mode={axis} height={220} marker={marker} onPick={onPick} />
+      ) : section.error ? (
+        <Empty>No pseudo-section for {label}.</Empty>
+      ) : (
+        <Skeleton height={220} />
+      )}
+    </div>
   );
 }

@@ -49,23 +49,19 @@ class PositionCurvesOut(BaseModel):
     velocity_type: str
 
 
-class SaveImagesIn(BaseModel):
-    labels: list[str]
-    model: ModelName = "smooth_median"
-    lateral_smoothing: bool = False
-
-
-class SaveImagesOut(BaseModel):
-    saved_paths: list[str]
-    errors: list[str]
-
-
 class PseudoSectionComparisonOut(BaseModel):
+    """Picked, modelled and their residual by position and frequency, and by position and
+    wavelength."""
+
     positions: list[float]
     fs: list[float]
     observed_grid: list[list[float | None]]
     predicted_grid: list[list[float | None]]
     residual_grid: list[list[float | None]]
+    lambdas: list[float]
+    observed_by_wavelength_grid: list[list[float | None]]
+    predicted_by_wavelength_grid: list[list[float | None]]
+    residual_by_wavelength_grid: list[list[float | None]]
 
 
 @router.get("/inversion/defaults")
@@ -149,31 +145,8 @@ def get_pseudo_section_comparison(
         observed_grid=nan_to_none(comparison.observed),
         predicted_grid=nan_to_none(comparison.predicted),
         residual_grid=nan_to_none(comparison.residual),
+        lambdas=comparison.lambdas.tolist(),
+        observed_by_wavelength_grid=nan_to_none(comparison.observed_by_wavelength),
+        predicted_by_wavelength_grid=nan_to_none(comparison.predicted_by_wavelength),
+        residual_by_wavelength_grid=nan_to_none(comparison.residual_by_wavelength),
     )
-
-
-@router.post("/inversion/save_images/{folder:path}")
-def save_images(folder: str, body: SaveImagesIn) -> SaveImagesOut:
-    """Save the Vs/std section and per-label pseudo-section comparison plots
-    for the given model/smoothing choice into the profile's output folder.
-
-    Best-effort per artifact (matching the runner's end-of-run auto-save):
-    one label without enough data doesn't block the others.
-    """
-    saved_paths: list[str] = []
-    errors: list[str] = []
-
-    try:
-        section_path = io.save_velocity_section_plot(folder, body.model, body.lateral_smoothing)
-        saved_paths.append(str(section_path))
-    except ValueError as exc:
-        errors.append(str(exc))
-
-    for label in body.labels:
-        try:
-            pseudo_path = io.save_pseudo_section_comparison_plot(folder, label, body.model)
-            saved_paths.append(str(pseudo_path))
-        except ValueError as exc:
-            errors.append(str(exc))
-
-    return SaveImagesOut(saved_paths=saved_paths, errors=errors)

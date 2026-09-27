@@ -2,7 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { API } from "./api";
 import { ArrowRightIcon, CpuIcon, FlaskIcon } from "./components/icons";
-import { Callout, Card, Page, SelectField } from "./components/kit";
+import {
+  Callout,
+  Card,
+  Page,
+  SelectField,
+} from "./components/kit";
 import {
   PositionRail,
   RailLegend,
@@ -10,6 +15,7 @@ import {
 } from "./components/PositionRail";
 import { judged, useStageStates, xmidKey } from "./components/railStates";
 import { num } from "./components/viz/format";
+import { WorkersField } from "./components/computing";
 import { RunPanel } from "./components/RunPanel";
 import { runningJob } from "./components/jobs";
 import { useStoredState } from "./components/stored";
@@ -141,6 +147,9 @@ export default function PetroInversionPage() {
   const selectedXmids = eligible.filter((xmid) => selectedPositions[xmid]);
   const maxWorkers =
     selectedXmids.length > 0 ? Math.min(nCpus, selectedXmids.length) : nCpus;
+  // Fewer positions than workers: as many workers, for good (more positions later do not raise
+  // them).
+  if (nWorkers > maxWorkers) setNWorkers(maxWorkers);
   const cells: RailCell[] = xmids.map((xmid) => {
     const can = eligible.includes(xmid);
     const state = states.get(xmidKey(xmid));
@@ -168,7 +177,7 @@ export default function PetroInversionPage() {
   };
   const missing: string[] = [];
   if (!modelName) missing.push("a Silex model");
-  if (selectedXmids.length === 0) missing.push("a position");
+  if (selectedXmids.length === 0) missing.push("a window");
 
   return (
     <Page
@@ -217,7 +226,7 @@ export default function PetroInversionPage() {
             >
               <div className="rail-head" style={{ marginTop: 0 }}>
                 <span className="muted">
-                  <b>{selectedXmids.length}</b> of {eligible.length} positions
+                  <b>{selectedXmids.length}</b> of {eligible.length} windows
                 </span>
                 <span className="rail-actions">
                   <button
@@ -258,7 +267,7 @@ export default function PetroInversionPage() {
             <Card
               step={2}
               title="Silex model"
-              hint="The deep-learning model, from sigpipe."
+              hint="The deep-learning model."
             >
               {models.length === 0 ? (
                 <Callout tone="warn">No Silex model found.</Callout>
@@ -285,8 +294,8 @@ export default function PetroInversionPage() {
             onRunning={setRunning}
             config={config}
             runUrl="/petro_inversion/run"
-            itemLabel="positions"
-            itemLabelSingular="position"
+            itemLabel="windows"
+            itemLabelSingular="window"
             label="Invert"
             missing={missing}
             onDone={() => setRuns((n) => n + 1)}
@@ -294,29 +303,15 @@ export default function PetroInversionPage() {
               <>
                 <span>
                   <b>{selectedXmids.length}</b>{" "}
-                  {selectedXmids.length === 1 ? "position" : "positions"} to
+                  {selectedXmids.length === 1 ? "window" : "windows"} to
                   invert
                 </span>
-                <label
-                  className="workers"
-                  data-tip="Positions inverted at once"
-                >
-                  <input
-                    type="number"
-                    min={1}
-                    max={maxWorkers}
-                    value={nWorkers}
-                    onChange={(e) =>
-                      setNWorkers(
-                        Math.max(
-                          1,
-                          Math.min(Number(e.target.value), maxWorkers),
-                        ),
-                      )
-                    }
-                  />
-                  <span>workers</span>
-                </label>
+                <WorkersField
+                  workers={nWorkers}
+                  setWorkers={setNWorkers}
+                  maxWorkers={maxWorkers}
+                  tip="Windows inverted in parallel"
+                />
               </>
             }
             after={() => (

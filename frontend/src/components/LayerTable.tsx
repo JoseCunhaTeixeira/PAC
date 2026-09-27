@@ -5,6 +5,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { CopyIcon, GripIcon, LockIcon, StrataIcon, TrashIcon } from "./icons";
+import { NumberInput } from "./kit";
+import { above } from "./numbers";
 import {
   copied,
   moved,
@@ -201,7 +203,7 @@ export function LayerTable({
                         data-tip={
                           drag || movable < 2
                             ? undefined
-                            : "Move\nDrag it up or down"
+                            : "Drag to move"
                         }
                         onPointerDown={(event) => grab(event, i)}
                         onPointerMove={slide}
@@ -220,7 +222,7 @@ export function LayerTable({
                           type="button"
                           className="ghost icon"
                           aria-label={`Copy ${name.toLowerCase()}`}
-                          data-tip={"Copy\nPut below this layer"}
+                          data-tip="Copy below"
                           onClick={() => onChange(copied(layers, i))}
                         >
                           <CopyIcon size={13} />
@@ -231,7 +233,7 @@ export function LayerTable({
                           aria-label={`Remove ${name.toLowerCase()}`}
                           data-tip={
                             movable < 2
-                              ? "Remove\nOne layer stays above the half-space"
+                              ? "Remove\nOne layer must stay"
                               : "Remove"
                           }
                           disabled={movable < 2}
@@ -258,45 +260,40 @@ export function LayerTable({
                     </td>
                     {thickness.thickness_fixed != null ? (
                       <td colSpan={2}>
-                        <input
-                          type="number"
+                        <NumberInput
                           className="layer-fixed"
                           aria-label={`${name}: thickness, fixed`}
                           min={0.1}
+                          unit="m"
                           step={0.1}
                           value={thickness.thickness_fixed}
-                          onChange={(e) =>
-                            setThickness(i, {
-                              thickness_fixed: Number(e.target.value),
-                            })
+                          onChange={(v) =>
+                            setThickness(i, { thickness_fixed: v })
                           }
                         />
                       </td>
                     ) : (
                       <>
                         <td>
-                          <input
-                            type="number"
+                          <NumberInput
                             min={0.1}
+                            unit="m"
                             step={0.1}
                             value={thickness.thickness_min}
-                            onChange={(e) =>
-                              setThickness(i, {
-                                thickness_min: Number(e.target.value),
-                              })
+                            onChange={(v) =>
+                              setThickness(i, { thickness_min: v })
                             }
                           />
                         </td>
                         <td>
-                          <input
-                            type="number"
+                          <NumberInput
                             min={0.1}
+                            unit="m"
                             step={0.1}
                             value={thickness.thickness_max}
-                            onChange={(e) =>
-                              setThickness(i, {
-                                thickness_max: Number(e.target.value),
-                              })
+                            check={above(thickness.thickness_min)}
+                            onChange={(v) =>
+                              setThickness(i, { thickness_max: v })
                             }
                           />
                         </td>
@@ -313,40 +310,35 @@ export function LayerTable({
                 </td>
                 {vs.vs_fixed != null ? (
                   <td colSpan={2}>
-                    <input
-                      type="number"
+                    <NumberInput
                       className="layer-fixed"
                       aria-label={`${name}: Vs, fixed`}
                       min={10}
+                      unit="m/s"
                       step={10}
                       value={vs.vs_fixed}
-                      onChange={(e) =>
-                        setVs(i, { vs_fixed: Number(e.target.value) })
-                      }
+                      onChange={(v) => setVs(i, { vs_fixed: v })}
                     />
                   </td>
                 ) : (
                   <>
                     <td>
-                      <input
-                        type="number"
+                      <NumberInput
                         min={10}
+                        unit="m/s"
                         step={10}
                         value={vs.vs_min}
-                        onChange={(e) =>
-                          setVs(i, { vs_min: Number(e.target.value) })
-                        }
+                        onChange={(v) => setVs(i, { vs_min: v })}
                       />
                     </td>
                     <td>
-                      <input
-                        type="number"
+                      <NumberInput
                         min={10}
+                        unit="m/s"
                         step={10}
                         value={vs.vs_max}
-                        onChange={(e) =>
-                          setVs(i, { vs_max: Number(e.target.value) })
-                        }
+                        check={above(vs.vs_min)}
+                        onChange={(v) => setVs(i, { vs_max: v })}
                       />
                     </td>
                   </>
@@ -378,7 +370,7 @@ function FixToggle({
       aria-label={on ? `Sample the ${what} again` : `Fix the ${what}`}
       data-tip={
         on
-          ? `Fixed ${what}\nOne value, not sampled\nClick to sample it again`
+          ? `Free the ${what}\nSampled within a range`
           : `Fix the ${what}\nOne value, not sampled`
       }
       onClick={onToggle}

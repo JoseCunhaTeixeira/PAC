@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { API, type Acquisition } from "../../api";
+import { Segmented } from "../kit";
 import type { Range } from "../useZoom";
 import { LineGather, type GatherData } from "./LineGather";
 import { StageHead, UnitCard } from "./panel";
@@ -30,10 +31,8 @@ function RunGather({
   );
   return (
     <div>
-      <div className="viz-row" style={{ marginBottom: 6 }}>
-        <p className="viz-plot-title" style={{ margin: 0 }}>
-          {name} · preprocessed, as the windows used it
-        </p>
+      <div className="viz-row viz-plot-head">
+        <p className="viz-plot-title">{name} · preprocessed, as the windows used it</p>
         <Normalization value={norm} onChange={setNorm} />
       </div>
       {gather.data ? (
@@ -49,13 +48,16 @@ function RunGather({
 
 function Normalization({ value, onChange }: { value: "trace" | "global"; onChange: (value: "trace" | "global") => void }) {
   return (
-    <div className="viz-segment" role="group" aria-label="Normalization">
-      {(["trace", "global"] as const).map((one) => (
-        <button key={one} type="button" className={value === one ? "active" : ""} onClick={() => onChange(one)}>
-          {one === "trace" ? "By trace" : "Global"}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      size="sm"
+      label="Normalization"
+      value={value}
+      onChange={onChange}
+      options={[
+        { value: "trace", label: "By trace" },
+        { value: "global", label: "Global" },
+      ]}
+    />
   );
 }
 

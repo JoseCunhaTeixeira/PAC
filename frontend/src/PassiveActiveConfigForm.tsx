@@ -26,6 +26,7 @@ import {
   NumberField,
   Segmented,
 } from "./components/kit";
+import { above } from "./components/numbers";
 import { RunPanel } from "./components/RunPanel";
 import { useStoredState } from "./components/stored";
 import {
@@ -101,6 +102,10 @@ function Form({
   const [workers, setWorkers] = useStoredState(`${kept}.workers`, 1);
   const [nPositions, setNPositions] = useState(0);
 
+  // At most one worker a window.
+  const maxWorkers = nPositions > 0 ? Math.min(nCpus, nPositions) : nCpus;
+  // Fewer windows than workers: as many workers, for good (more windows later do not raise them).
+  if (workers > maxWorkers) setWorkers(maxWorkers);
   const config = {
     profile,
     mode: "passive-active",
@@ -115,7 +120,6 @@ function Form({
     },
     workers,
   };
-  const maxWorkers = nPositions > 0 ? Math.min(nCpus, nPositions) : nCpus;
 
   return (
     <>
@@ -131,7 +135,7 @@ function Form({
         <Card
           step={2}
           title="Preprocessing"
-          hint="What each shot goes through first."
+          hint="Applied to each shot first."
         >
           <div className="rows">
             <TriggerRow t0={trigger.t0} setT0={(t0) => setTrigger({ t0 })} />
@@ -157,8 +161,8 @@ function Form({
           <div className="rows">
             <Row
               icon={<ScissorsIcon size={16} />}
-              title="Surface-wave window"
-              hint="Keeps each shot's arrivals between two velocities before it is correlated."
+              title="Surface-wave muting"
+              hint="Keeps the arrivals between two velocities, before correlating."
               control={
                 <Segmented
                   size="sm"
@@ -193,6 +197,7 @@ function Form({
                       setSurfaceWaves({ ...surfaceWaves, vmax: v })
                     }
                     min={0}
+                    check={above(surfaceWaves.vmin)}
                   />
                   <NumberField
                     label="Taper"
@@ -218,7 +223,7 @@ function Form({
         <Card
           step={4}
           title="Dispersion image"
-          hint="The stacked virtual shot's phase-shift image."
+          hint="The stacked virtual shot's dispersion image."
         >
           <div className="rows">
             <DispersionRows

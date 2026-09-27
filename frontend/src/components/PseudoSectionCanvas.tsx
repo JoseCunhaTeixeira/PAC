@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { cividis } from "./colormaps";
 import { HoverTooltip } from "./HoverTooltip";
+import { Badge } from "./kit";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { nearestIndex, useCanvasHover } from "./useCanvasHover";
 import { drawMarker, useClick } from "./sectionPick";
@@ -27,6 +28,31 @@ export interface PseudoSection {
 const ML = 60, MR = 120, MT = 16, MB = 40;
 const BASE_W = 820; // the drawing's width until its card is measured
 const FONT = CANVAS_FONT;
+
+/** A mode's pseudo-section's head, alike on every page: its label (M0, M1…), and on how many of
+ * the positions it is drawn. */
+export function ModeHead({
+  label,
+  count,
+  total,
+  unit,
+}: {
+  label: string;
+  count?: number;
+  total: number;
+  unit: string;
+}) {
+  return (
+    <div className="section-label">
+      <strong>{label}</strong>
+      {count !== undefined && total > 0 && (
+        <Badge tone={count === total ? "ok" : "neutral"}>
+          {count}/{total} {unit}
+        </Badge>
+      )}
+    </div>
+  );
+}
 
 export function PseudoSectionCanvas({
   section,

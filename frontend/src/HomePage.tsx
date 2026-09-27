@@ -31,7 +31,7 @@ interface Way {
 // The workflow; its first and third steps come in several kinds, listed under it.
 const STEPS: Way[] = [
   { to: "/active", icon: <ZapIcon />, title: "Compute", text: "Records to dispersion images" },
-  { to: "/dispersion_picking", icon: <CrosshairIcon />, title: "Pick", text: "Images to dispersion curves" },
+  { to: "/dispersion_picking", icon: <CrosshairIcon />, title: "Pick", text: "Dispersion images to curves" },
   { to: "/seismic_inversion", icon: <DepthIcon />, title: "Invert", text: "Curves to ground models" },
   { to: "/visualization", icon: <EyeIcon />, title: "Review", text: "Every window, check and model" },
 ];

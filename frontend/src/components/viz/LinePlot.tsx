@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CANVAS_FONT, canvasFont, canvasPalette, useTheme } from "../../theme";
+import { CANVAS_FONT, canvasPalette, useTheme } from "../../theme";
 import { useContainerWidth } from "../useContainerWidth";
 import { tickDecimals, useZoom, type PlotRect, type Range } from "../useZoom";
 import { ZoomReset, ZoomSelection } from "../ZoomOverlay";
@@ -186,7 +186,7 @@ export function LinePlot({
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.fillStyle = ref.color;
-      ctx.font = canvasFont(11);
+      ctx.font = CANVAS_FONT;
       if (ref.axis === "y") {
         ctx.textAlign = "right";
         ctx.textBaseline = "bottom";
@@ -235,7 +235,7 @@ export function LinePlot({
     ctx.strokeStyle = palette.axis;
     ctx.lineWidth = 1;
     ctx.strokeRect(ML + 0.5, MT + 0.5, plotW - 1, plotH - 1);
-    ctx.font = canvasFont(11);
+    ctx.font = CANVAS_FONT;
     ctx.fillStyle = palette.tick;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";

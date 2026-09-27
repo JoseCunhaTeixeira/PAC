@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { API, type Acquisition, type Masw, profileName } from "../api";
 import { canvasPalette, useTheme } from "../theme";
 import { useContainerWidth } from "./useContainerWidth";
+import { AlertCircleIcon } from "./icons";
 import {
   drawElevation,
   drawLaneLabels,
@@ -82,7 +83,12 @@ export function GeometryPlot({
     onCountRef.current = onCount;
   }, [onCount]);
 
+  // A value being typed or wrong (its field says why): the windows drawn stay as they were.
+  const settled =
+    Object.values(masw).every((v) => typeof v !== "number" || Number.isFinite(v)) &&
+    masw.distance_max > masw.distance_min;
   useEffect(() => {
+    if (!settled) return;
     const timer = setTimeout(() => {
       fetch(`${API}/windows`, {
         method: "POST",
@@ -91,7 +97,7 @@ export function GeometryPlot({
       })
         .then(async (res) => {
           const body = await res.json().catch(() => null);
-          if (!res.ok) throw new Error(typeof body?.detail === "string" ? body.detail : "These window settings give no window.");
+          if (!res.ok) throw new Error(typeof body?.detail === "string" ? body.detail : "");
           return body as WindowSummary[];
         })
         .then((data) => {
@@ -106,7 +112,7 @@ export function GeometryPlot({
         });
     }, 250);
     return () => clearTimeout(timer);
-  }, [acquisition, masw]);
+  }, [acquisition, masw, settled]);
 
   const receiverPoints = useMemo(
     () => acquisition.receiver_positions.map(([x, z]): [number, number] => [x, z]),
@@ -354,12 +360,17 @@ export function GeometryPlot({
         <span>
           <i className="receiver">▼</i> {receivers.length} receivers
         </span>
-        <span>
-          <i className="window" />{" "}
-          {invalid ? "no window" : counted === null ? "counting windows…" : `${windows.length} windows`}
-        </span>
+        {invalid !== null ? (
+          <span className="field-error" data-tip={`No window${invalid ? `\n${invalid}` : ""}`}>
+            <AlertCircleIcon size={13} />
+            No window
+          </span>
+        ) : (
+          <span>
+            <i className="window" /> {counted === null ? "counting windows…" : `${windows.length} windows`}
+          </span>
+        )}
       </div>
-      {invalid && <p className="geometry-invalid">{invalid}</p>}
     </div>
   );
 }

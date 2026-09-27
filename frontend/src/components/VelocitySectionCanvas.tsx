@@ -24,8 +24,9 @@ const FONT = CANVAS_FONT;
 // Module-level (not inline) so it's referentially stable across renders when
 // callers don't override it, matching `colormap`'s default (cividis) --
 // an inline arrow default would be a new function every render, forcing the
-// hover/draw effects below to always see a "changed" dependency.
-const DEFAULT_FORMAT_VALUE = (v: number) => v.toFixed(1);
+// hover/draw effects below to always see a "changed" dependency. Velocities
+// whole, in m/s, as the pseudo-sections' colour bars write them.
+const DEFAULT_FORMAT_VALUE = (v: number) => v.toFixed(0);
 
 export function VelocitySectionCanvas({
   positions,

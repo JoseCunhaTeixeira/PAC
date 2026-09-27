@@ -1,4 +1,4 @@
-import { canvasFont } from "../theme";
+import { CANVAS_FONT } from "../theme";
 import { tickDecimals } from "./useZoom";
 
 // What every plot of a line from above shares, so that the computing pages' geometry and
@@ -86,7 +86,7 @@ export function receiverPath(ctx: CanvasRenderingContext2D, x: number, size: num
 
 /** The lanes' labels, left of the plot. */
 export function drawLaneLabels(ctx: CanvasRenderingContext2D, color: string, shots: boolean) {
-  ctx.font = canvasFont(12);
+  ctx.font = CANVAS_FONT;
   ctx.fillStyle = color;
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
@@ -109,7 +109,7 @@ export function drawLineAxis(
   const y = top + 4;
   ctx.strokeStyle = colors.axis;
   ctx.lineWidth = 1;
-  ctx.font = canvasFont(11);
+  ctx.font = CANVAS_FONT;
   ctx.fillStyle = colors.tick;
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
@@ -126,7 +126,7 @@ export function drawLineAxis(
     first = false;
   }
   // The axis's name as the lanes' labels are written, level with the ticks' values.
-  ctx.font = canvasFont(12);
+  ctx.font = CANVAS_FONT;
   ctx.fillStyle = colors.tick;
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
@@ -194,7 +194,7 @@ export function drawElevation(
   colors: { tick: string; ground: string },
 ) {
   const Y = elevationY(relief, top);
-  ctx.font = canvasFont(12);
+  ctx.font = CANVAS_FONT;
   ctx.fillStyle = colors.tick;
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
@@ -233,7 +233,7 @@ export function drawElevation(
     const high = shown.reduce((a, b) => (b[1] > a[1] ? b : a));
     const low = shown.reduce((a, b) => (b[1] < a[1] ? b : a));
     const decimals = high[1] - low[1] < 1 ? 2 : 1;
-    ctx.font = canvasFont(11);
+    ctx.font = CANVAS_FONT;
     ctx.fillStyle = colors.tick;
     ctx.textAlign = "center";
     const write = ([x, z]: [number, number], y: number, baseline: CanvasTextBaseline) => {

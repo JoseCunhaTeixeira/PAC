@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { API } from "../api";
-import { CheckIcon, PlayIcon, StopIcon } from "./icons";
+import { AlertCircleIcon, CheckIcon, PlayIcon, StopIcon } from "./icons";
 import { runningJob } from "./jobs";
+import { useWrongCount } from "./numbers";
 import { readStored, writeStored } from "./stored";
 
 interface WindowError {
@@ -200,6 +201,10 @@ export function RunPanel({
   useEffect(() => {
     onRunningRef.current?.(running);
   }, [running]);
+  // The page's wrong number fields (left empty, beyond their bounds), and a number left empty
+  // anywhere in the settings (NaN, which JSON would send as null): the run waits for them.
+  const wrong = Math.max(useWrongCount(), unfilled(config) ? 1 : 0);
+  const blocked = missing.length > 0 || wrong > 0;
   const pct = job && job.total > 0 ? Math.round((job.completed / job.total) * 100) : 0;
   const failed = job?.errors.length ?? 0;
   // A stopped processing job keeps a run only when windows had finished.
@@ -226,9 +231,7 @@ export function RunPanel({
             // The next run's settings (what it takes, the workers) always; the last run's
             // outcome under them, with its links.
             <div className="run-bar-lines">
-              <div className="run-bar-next">
-                {missing.length > 0 ? <span>Missing: {missing.join(", ")}.</span> : summary}
-              </div>
+              <div className="run-bar-next">{summary}</div>
               {job && (
                 <div className="run-bar-last">
                   {job.state === "succeeded" ? (
@@ -263,13 +266,30 @@ export function RunPanel({
           )}
         </div>
         <div className="run-bar-actions">
+          {!running && missing.length > 0 && (
+            <span className="run-issue">
+              <AlertCircleIcon size={14} />
+              Needs {listed(missing)}
+            </span>
+          )}
+          {!running && wrong > 0 && (
+            <button
+              type="button"
+              className="run-issue wrong"
+              onClick={toFirstWrong}
+              data-tip="Go to the first"
+            >
+              <AlertCircleIcon size={14} />
+              {wrong} {wrong === 1 ? "value" : "values"} to fix
+            </button>
+          )}
           {running && (
             <button
               type="button"
               className="secondary large"
               onClick={stop}
               disabled={job.stopping}
-              data-tip={"Stop\nAt once: what finished is kept\nNothing half-written is kept"}
+              data-tip={"Stop now\nWhat finished is kept"}
             >
               {job.stopping ? (
                 <>
@@ -282,7 +302,7 @@ export function RunPanel({
               )}
             </button>
           )}
-          <button type="button" className="large" onClick={compute} disabled={running || missing.length > 0}>
+          <button type="button" className="large" onClick={compute} disabled={running || blocked}>
             {running ? (
               <>
                 <span className="spinner" /> Computing…
@@ -315,4 +335,26 @@ export function RunPanel({
       )}
     </>
   );
+}
+
+/** `items` as a sentence's list: "a mode and a window". */
+function listed(items: string[]): string {
+  return items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+}
+
+/** Brings the page's first wrong number field into view, ready to be typed. */
+function toFirstWrong(event: MouseEvent<HTMLElement>) {
+  const first = event.currentTarget
+    .closest(".page")
+    ?.querySelector<HTMLInputElement>('input[aria-invalid="true"]');
+  first?.scrollIntoView({ block: "center", behavior: "smooth" });
+  first?.focus({ preventScroll: true });
+}
+
+/** Whether a number anywhere in `value` is NaN: a field left empty. */
+function unfilled(value: unknown): boolean {
+  if (typeof value === "number") return Number.isNaN(value);
+  if (Array.isArray(value)) return value.some(unfilled);
+  if (value && typeof value === "object") return Object.values(value).some(unfilled);
+  return false;
 }

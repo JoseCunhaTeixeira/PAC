@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
-import { AlertIcon, CheckIcon, InfoIcon } from "./icons";
+import { useCallback, useMemo, useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { AlertCircleIcon, AlertIcon, CheckIcon, InfoIcon } from "./icons";
+import { boundsOf, tipOf, useNumberDraft, WrongNumbers } from "./numbers";
 import { PageArt, type ArtKind } from "./PageArt";
 import "./kit.css";
 
@@ -23,7 +24,22 @@ export function Page({
   art?: ArtKind;
   children?: ReactNode;
 }) {
+  // The page's wrong number fields: its run bar waits until none is left.
+  const [wrong, setWrong] = useState<ReadonlySet<string>>(new Set());
+  const mark = useCallback(
+    (id: string, is: boolean) =>
+      setWrong((ids) => {
+        if (ids.has(id) === is) return ids;
+        const next = new Set(ids);
+        if (is) next.add(id);
+        else next.delete(id);
+        return next;
+      }),
+    [],
+  );
+  const numbers = useMemo(() => ({ count: wrong.size, mark }), [wrong, mark]);
   return (
+    <WrongNumbers.Provider value={numbers}>
     <div className="page">
       <header className="page-hero">
         <div className="page-hero-text">
@@ -42,6 +58,7 @@ export function Page({
       {actions && <div className="page-toolbar">{actions}</div>}
       {children}
     </div>
+    </WrongNumbers.Provider>
   );
 }
 
@@ -93,6 +110,55 @@ export function Fields({ children, min = 170 }: { children: ReactNode; min?: num
   );
 }
 
+/** A number typed freely, in a table or a line (NumberField in a card): a field wrong (left
+ * empty, beyond its bounds) turns red and says why on hover; the run bar waits for it (see
+ * numbers.ts). */
+export function NumberInput({
+  value,
+  onChange,
+  min,
+  max,
+  optional,
+  check,
+  unit,
+  onFocus,
+  onBlur,
+  ...rest
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  /** May be left empty (NaN): the word shown then, such as "auto". */
+  optional?: string;
+  /** A rule another field moves (numbers.ts's `above`, `below`, `upTo`). */
+  check?: (n: number) => string | null;
+  /** The value's unit, for its hover's bounds and its issues. */
+  unit?: string;
+} & Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "min" | "max" | "type">) {
+  const { input, issue } = useNumberDraft({ value, onChange, min, max, optional, check, unit });
+  // What it means (its data-tip), then its bounds.
+  const tip = tipOf((rest as { "data-tip"?: string })["data-tip"], boundsOf(min, max, unit));
+  return (
+    <input
+      {...rest}
+      {...input}
+      className={[rest.className, input.className].filter(Boolean).join(" ") || undefined}
+      placeholder={optional ?? rest.placeholder}
+      data-tip={issue ?? tip}
+      data-tip-tone={issue ? "danger" : undefined}
+      onFocus={(e) => {
+        input.onFocus();
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        input.onBlur();
+        onBlur?.(e);
+      }}
+    />
+  );
+}
+
 export function NumberField({
   label,
   unit,
@@ -105,6 +171,7 @@ export function NumberField({
   title,
   disabled = false,
   optional,
+  check,
 }: {
   label: ReactNode;
   unit?: string;
@@ -120,30 +187,31 @@ export function NumberField({
   disabled?: boolean;
   /** May be left empty (NaN): the word shown then, such as "auto". */
   optional?: string;
+  /** A rule another field moves (numbers.ts's `above`, `below`, `upTo`). */
+  check?: (n: number) => string | null;
 }) {
+  // Wrong (left empty, beyond its bounds, against its rule): red, and why under it, in place of
+  // its hint.
+  const { input, issue } = useNumberDraft({ value, onChange, min, max, optional, check, unit });
+  // What the field means, then its bounds; right by what is hovered: over its name, under its
+  // box.
+  const tip = tipOf(title, boundsOf(min, max, unit));
   return (
-    <label className="field" data-tip={title}>
-      <span className="field-label">{label}</span>
-      <span className="field-control">
-        <input
-          type="number"
-          value={Number.isFinite(value) ? value : ""}
-          min={min}
-          max={max}
-          step={step}
-          disabled={disabled}
-          placeholder={optional}
-          onChange={(e) =>
-            onChange(
-              optional !== undefined && e.target.value === ""
-                ? Number.NaN
-                : Number(e.target.value),
-            )
-          }
-        />
+    <label className="field">
+      <span className="field-label" data-tip={tip} data-tip-place="above">
+        {label}
+      </span>
+      <span className="field-control" data-tip={tip}>
+        <input {...input} step={step} disabled={disabled} />
         {unit && <span className="field-unit">{unit}</span>}
       </span>
-      {hint && <span className="field-hint">{hint}</span>}
+      {issue && (
+        <span className="field-error" role="alert">
+          <AlertCircleIcon size={13} />
+          {issue}
+        </span>
+      )}
+      {hint && !issue && <span className="field-hint">{hint}</span>}
     </label>
   );
 }
