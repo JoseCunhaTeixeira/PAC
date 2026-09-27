@@ -22,6 +22,9 @@ class WindowSummary(BaseModel):
     start_index: int
     end_index: int
     n_shots: int
+    sources: list[
+        float
+    ]  # x of each shot the window stacks, m (a passive window's: its first receiver)
 
 
 @router.post("/windows")
@@ -36,6 +39,7 @@ def preview_windows(request: WindowRequest) -> list[WindowSummary]:
             start_index=w.receiver_indices[0],
             end_index=w.receiver_indices[-1],
             n_shots=len(w.selected_files),
+            sources=[acquisition.source.x for acquisition in w.acquisitions],
         )
         for w in windows
     ]

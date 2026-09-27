@@ -5,9 +5,9 @@ WORKDIR /app
 
 # git: needed by `uv sync` to clone the sigpipe dependency
 # (sigpipe @ git+https://github.com/JoseCunhaTeixeira/sigpipe).
-# build-essential: bayesbay (sigpipe's MCMC dependency) ships no prebuilt
-# wheel for Python 3.14 yet -- uv compiles its bayesbay._utils_1d C++
-# extension from source on install, which needs g++.
+# build-essential: on an ARM machine obspy and santiludo ship no wheel for
+# Python 3.14 -- uv compiles them from source on install, which needs a C
+# compiler.
 RUN apt-get update && apt-get install -y --no-install-recommends git build-essential \
     && rm -rf /var/lib/apt/lists/*
 

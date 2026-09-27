@@ -2,7 +2,9 @@
 a run, its dispersion images and picks, an inversion and its section. sigpipe's MASW layer
 computes; these tests check what PAC asks of it and what the pages read back."""
 
+import json
 import time
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote
 
@@ -10,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from masw.api.main import app
+from masw.io.paths import output_folder
 from sigpipe.masw.inversion import InversionParameters, ThicknessLayer, VsLayer
 
 from .synthetic import N_RECEIVERS, SAMPLING, SOURCES
@@ -69,6 +72,7 @@ def test_the_windows_are_previewed_and_the_settings_checked() -> None:
     ).json()
     assert [window["xmid"] for window in windows] == [2.5, 5.5, 8.5]
     assert all(window["n_shots"] == 2 for window in windows)
+    assert all(len(window["sources"]) == 2 for window in windows)
 
     request = {"profile": "shots", "mode": "active", "overrides": {"masw": {"length": 6}}}
     assert client.post("/config", json=request).json() == {"valid": True, "mode": "active"}
@@ -134,9 +138,11 @@ def test_the_picks_replace_their_modes_curve(run: str) -> None:
     left = client.delete(f"/dispersion_images/{run}/2.5/pick/M1").json()
     assert [one["label"] for one in left["curves"]] == ["M0"]
     assert client.delete(f"/dispersion_images/{run}/2.5/pick/M1").status_code == 404
+    # Picked in PAC, by hand: the picking page says so.
     assert client.get(f"/dispersion_picks_by_position/{run}").json()[0] == {
         "xmid": 2.5,
         "labels": ["M0"],
+        "picked_by": "hand",
     }
     section = client.get(f"/dispersion_pseudo_section/{run}/M0").json()
     assert section["positions"] == [2.5, 5.5, 8.5]
@@ -146,9 +152,15 @@ def test_the_inversion_form_starts_from_sigpipes_defaults() -> None:
     defaults = client.get("/inversion/defaults").json()
 
     parameters = defaults["parameters"]
-    assert InversionParameters.model_validate(parameters) == InversionParameters()
+    # sigpipe's, but the half-space up to 2,000 m/s, as PACo's priors start it.
+    half_space = VsLayer(vs_max=2_000.0)
+    # The data choosing the layers; the table's layers ready for the fixed layering.
+    assert InversionParameters.model_validate(parameters) == InversionParameters(
+        layering="free", vs_layers=(VsLayer(), half_space)
+    )
     assert len(parameters["vs_layers"]) == parameters["n_layers"]
     assert defaults["vs_layer"] == VsLayer().model_dump()
+    assert defaults["half_space_layer"] == half_space.model_dump()
     assert defaults["thickness_layer"] == ThicknessLayer().model_dump()
 
 
@@ -215,3 +227,93 @@ def test_a_petrophysical_inversion_gives_its_sections(run: str) -> None:
     assert [one["predicted_fs"] is not None for one in curves] == [True, True, False]
     comparison = client.get(f"/petro_inversion/pseudo_section_comparison/{run}").json()
     assert comparison["positions"] == [2.5, 5.5]
+
+
+# Stopping: at once, what finished kept, nothing half-written (sigpipe.masw.runs.stopping).
+
+
+def _once(check: Callable[[dict[str, Any]], bool], job: dict[str, Any]) -> dict[str, Any]:
+    """Job `job` once `check` holds of it."""
+    for _ in range(1200):
+        job = client.get(f"/jobs/{job['id']}").json()
+        if check(job):
+            return job
+        time.sleep(0.05)
+    raise AssertionError("the job never got there")
+
+
+def test_a_stopped_run_keeps_the_windows_that_finished() -> None:
+    request = {
+        "profile": "shots",
+        "mode": "active",
+        "overrides": {"masw": {"length": 6, "step": 1}},
+        "workers": 1,
+    }
+    job = _once(lambda one: one["completed"] >= 1, client.post("/run", json=request).json())
+
+    asked = client.post(f"/jobs/{job['id']}/stop").json()
+    job = _wait(job)
+
+    assert asked["state"] == "stopped" or asked["stopping"]
+    assert job["state"] == "stopped" and not job["stopping"]
+    folder = output_folder(job["run"])
+    manifest = json.loads((folder / "run.json").read_text())
+    kept = {window["folder"] for window in manifest["windows"]}
+    assert manifest["stopped"] and 1 <= len(kept) < job["total"]
+    assert {path.name for path in folder.glob("xmid_*")} == kept
+    assert not list(folder.rglob(".partial"))
+    assert any(one["id"] == job["id"] for one in client.get("/jobs").json())
+
+
+def test_a_job_stopped_before_it_starts_never_runs() -> None:
+    request = {
+        "profile": "shots",
+        "mode": "active",
+        "overrides": {"masw": {"length": 6, "step": 1}},
+        "workers": 1,
+    }
+    first = client.post("/run", json=request).json()
+    queued = client.post("/run", json=request).json()
+
+    stopped = client.post(f"/jobs/{queued['id']}/stop").json()
+    client.post(f"/jobs/{first['id']}/stop")
+
+    assert (stopped["state"], stopped["elapsed"], stopped["run"]) == ("stopped", 0.0, None)
+    assert _wait(first)["state"] == "stopped"
+    assert client.post("/jobs/nope/stop").status_code == 404
+
+
+def test_a_stopped_inversion_leaves_its_windows_as_they_were(run: str) -> None:
+    box = {"fmin": 10, "fmax": 60, "vmin": 100, "vmax": 400, "label": "M0"}
+    assert client.post(f"/dispersion_images/{run}/8.5/pick/box", json=box).status_code == 200
+    window = output_folder(run) / "xmid_8.50"
+    before = window / "SeismicInversion_Log_0000.log"
+    before.write_text("an earlier inversion\n")
+    files = sorted(path.name for path in window.iterdir())
+    config = {
+        "folder": run,
+        "positions": [8.5],
+        "labels": ["M0"],
+        "parameters": {
+            "n_layers": 2,
+            "vs_layers": [{"vs_min": 100, "vs_max": 400, "vs_perturb_std": 20}] * 2,
+            "thickness_layers": [
+                {"thickness_min": 1, "thickness_max": 5, "thickness_perturb_std": 1}
+            ],
+            "n_iterations": 2_000_000,  # minutes: stopped long before its end
+            "n_burnin_iterations": 1_000,
+            "n_chains": 2,
+        },
+        "n_workers": 1,
+    }
+    job = client.post("/inversion/run", json=config).json()
+    time.sleep(3)  # the position's worker inverting
+
+    client.post(f"/jobs/{job['id']}/stop")
+    job = _wait(job)
+
+    assert job["state"] == "stopped" and job["elapsed"] < 60
+    assert sorted(path.name for path in window.iterdir()) == files  # no staging, nothing new
+    assert before.read_text() == "an earlier inversion\n"
+    outcome = json.loads((output_folder(run) / "seismic_inversion_outcome.json").read_text())
+    assert outcome == []

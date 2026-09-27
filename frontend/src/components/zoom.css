@@ -1,0 +1,32 @@
+/* Rectangle zoom on the plots: see useZoom.ts and ZoomOverlay.tsx. */
+
+.zoom-selection {
+  position: absolute;
+  box-sizing: border-box;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* A quiet button, not the global red one: `button.` outweighs `button:hover`. */
+button.zoom-reset {
+  position: absolute;
+  z-index: 6;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 13px;
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+button.zoom-reset:hover {
+  color: var(--text);
+  background: transparent;
+  border-color: var(--text-faint);
+}

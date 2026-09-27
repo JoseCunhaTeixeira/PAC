@@ -20,13 +20,23 @@ export function useTheme(): Theme {
 }
 
 // Canvas drawing uses raw pixel colors that can't follow CSS variables, so
-// plotting components look these up explicitly via useTheme().
+// plotting components look these up explicitly via useTheme(): the page's own
+// text colours (index.css), ticks and labels muted, titles in the main text's.
 export function canvasPalette(theme: Theme) {
   return theme === "dark"
-    ? { axis: "#777", tick: "#ccc", title: "#f0f0f0" }
-    : { axis: "#999", tick: "#444", title: "#222" };
+    ? { axis: "#5c6778", tick: "#a1abbc", title: "#e7ebf2" }
+    : { axis: "#a3abb8", tick: "#525d70", title: "#0f1728" };
+}
+
+// The page's font (index.css), so that a plot's text reads as the page's.
+export const FONT_FAMILY =
+  '"Inter", "Source Sans Pro", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+/** The canvas font at `size` px (and `weight`), in the page's family. */
+export function canvasFont(size: number, weight = 400): string {
+  return `${weight} ${size}px ${FONT_FAMILY}`;
 }
 
 // Shared so every canvas-based plot (dispersion image, pseudo-section, mute
 // gather) renders axis/tick/title text at the same size.
-export const CANVAS_FONT = "13px sans-serif";
+export const CANVAS_FONT = canvasFont(13);

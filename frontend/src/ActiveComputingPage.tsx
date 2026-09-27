@@ -1,126 +1,17 @@
-import { useEffect, useState } from "react";
 import { ConfigForm } from "./ActiveConfigForm";
-import { API, type Acquisition } from "./api";
+import { ComputingPage } from "./components/computing";
+import { ZapIcon } from "./components/icons";
 
-export default function App() {
-  const [folders, setFolders] = useState<string[]>([]);
-  const [selected, setSelected] = useState("");
-  const [acquisition, setAcquisition] = useState<Acquisition | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [missingSource, setMissingSource] = useState(false);
-  const [loadingFolders, setLoadingFolders] = useState(true);
-
-  useEffect(() => {
-    fetch(`${API}/input_folders`)
-      .then((res) => res.json())
-      .then((data: string[]) => setFolders(data))
-      .catch((err) => setError(String(err)))
-      .finally(() => setLoadingFolders(false));
-  }, []);
-
-  useEffect(() => {
-    if (!selected) {
-      Promise.resolve().then(() => setAcquisition(null));
-      return;
-    }
-    Promise.resolve().then(() => {
-      setLoading(true);
-      setError(null);
-      setMissingSource(false);
-    });
-    fetch(`${API}/acquisitions/${selected}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => null);
-          throw new Error(body?.detail ?? `HTTP ${res.status}`);
-        }
-        return res.json();
-      })
-      .then((data: Acquisition) => {
-        if (data.source_positions.length === 0) {
-          setMissingSource(true);
-          setAcquisition(null);
-          return;
-        }
-        setAcquisition(data);
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : String(err));
-        setAcquisition(null);
-      })
-      .finally(() => setLoading(false));
-  }, [selected]);
-
+export default function ActiveComputingPage() {
   return (
-    <div style={{ padding: 24 }}>
-      <h1>Active Computing</h1>
-
-      <label>
-        <h2>Loading</h2>
-        Acquisition folder:{" "}
-        <select value={selected} onChange={(e) => setSelected(e.target.value)}>
-          <option value="">— choose —</option>
-          {folders.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {!loadingFolders && folders.length === 0 && <p>❌ No folders found.</p>}
-
-      {loading && <p>Loading acquisition…</p>}
-      {error && <p style={{ color: "crimson" }}>Error: {error}</p>}
-      {missingSource && (
-        <p
-          style={{
-            background: "var(--info-bg)",
-            color: "var(--info-text)",
-            padding: "8px 12px",
-            borderRadius: "var(--radius-sm)",
-          }}
-        >
-          ❌ source_positions.yaml is missing for this folder — required for active computing
-        </p>
-      )}
-
-      {acquisition && acquisition.files.length === 0 && (
-        <p>❌ Selected input data folder empty.</p>
-      )}
-
-      {acquisition && acquisition.files.length > 0 && (
-        <>
-          <table>
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Duration [s]</th>
-                <th>Sampling frequency [Hz]</th>
-                <th>Source x, z [m]</th>
-                <th>Receivers [#]</th>
-              </tr>
-            </thead>
-            <tbody>
-              {acquisition.files.map((file, i) => (
-                <tr key={file}>
-                  <td>{file}</td>
-                  <td>{acquisition.durations[i] ?? "—"}</td>
-                  <td>{acquisition.sampling_frequencies[i] ?? "—"}</td>
-                  <td>
-                    {acquisition.source_positions[i]
-                      ? `${acquisition.source_positions[i][0]}, ${acquisition.source_positions[i][1]}`
-                      : "—"}
-                  </td>
-                  <td>{acquisition.receiver_positions.length ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <ConfigForm key={selected} acquisition={acquisition} profile={selected} />
-        </>
-      )}
-    </div>
+    <ComputingPage
+      mode="active"
+      title="Active computing"
+      subtitle="Compute dispersion images from active shots"
+      icon={<ZapIcon size={24} />}
+      art="active"
+      needsSources
+      Form={ConfigForm}
+    />
   );
 }

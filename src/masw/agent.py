@@ -9,15 +9,19 @@ module of PAC that imports PACo, and only once a conversation starts."""
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import logging
 import os
 import queue
 import threading
 import uuid
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
 import anyio
+import anyio.from_thread
+import anyio.lowlevel
 import anyio.to_thread
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -26,6 +30,7 @@ from masw.io.paths import INPUT_DIR, OUTPUT_DIR
 
 if TYPE_CHECKING:
     from paco.agent import AgentSettings, ChatModel
+    from paco.stopping import Signal
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +39,28 @@ LOG_DIR = OUTPUT_DIR / "agent_logs"
 # Conversations kept at once: a new one past this closes the oldest idle one.
 MAX_SESSIONS = 8
 
-type EventKind = Literal["user", "step", "answer", "error"]
+type EventKind = Literal["user", "step", "answer", "error", "stopped"]
+
+# What a stopped answer says, in the conversation.
+STOPPED = "Stopped. What had finished is kept; the rest is as it was."
 
 
 class Event(BaseModel):
     index: int
-    kind: EventKind  # the user's message, a tool call (or its failure), the answer, an error
+    # The user's message, a tool call (or its failure), the answer, an error, a stop.
+    kind: EventKind
     text: str
+
+
+class SessionInfo(BaseModel):
+    """A conversation as the chat page lists them."""
+
+    id: str
+    title: str  # its first question; empty before any
+    busy: bool
+    closed: bool
+    started_at: datetime
+    updated_at: datetime
 
 
 class AgentStatus(BaseModel):
@@ -119,17 +139,24 @@ def _use_pacs_folders() -> None:
 
 class Session:
     """One conversation: its agent answers in a thread of its own, one message at a time; the
-    page polls the events."""
+    page polls the events. An answer can be stopped: at once, and everything it started (see
+    paco.stopping), what had finished kept, nothing half-written."""
 
     def __init__(self, model: ChatModel | None = None) -> None:
         self.id = uuid.uuid4().hex
         self.events: list[Event] = []
         self.busy = False
+        self.stopping = False  # a stop was asked, and the answer has not ended yet
         self.progress: str | None = None  # the running tool's latest progress, while busy
         self.closed = False
+        self.started_at = self.updated_at = datetime.now(UTC)
         self._model = model
         self._questions: queue.Queue[str | None] = queue.Queue()
         self._lock = threading.Lock()
+        # Once the conversation runs: PACo's stop, the running answer's scope, and its loop.
+        self._signal: Signal | None = None
+        self._scope: anyio.CancelScope | None = None
+        self._loop: anyio.lowlevel.EventLoopToken | None = None
         self._thread = threading.Thread(target=self._run, name=f"agent-{self.id[:8]}", daemon=True)
         self._thread.start()
 
@@ -147,11 +174,41 @@ class Session:
         with self._lock:
             return self.events[after:]
 
+    def info(self) -> SessionInfo:
+        with self._lock:
+            title = next((event.text for event in self.events if event.kind == "user"), "")
+            return SessionInfo(
+                id=self.id,
+                title=title,
+                busy=self.busy,
+                closed=self.closed,
+                started_at=self.started_at,
+                updated_at=self.updated_at,
+            )
+
+    def stop(self) -> bool:
+        """Stop the answer running, and everything it started: at once, what had finished kept,
+        nothing half-written. False when no answer runs."""
+        with self._lock:
+            if not self.busy:
+                return False
+            self.stopping = True
+            signal, scope, loop = self._signal, self._scope, self._loop
+        # The answer first (this waits until its loop has it), then its tools: a tool that ended
+        # first would have its answer go on without it.
+        if scope is not None and loop is not None:
+            with contextlib.suppress(RuntimeError):  # the conversation's loop has just ended
+                anyio.from_thread.run_sync(scope.cancel, token=loop)
+        if signal is not None:
+            signal.stop()
+        return True
+
     def close(self) -> None:
         self._questions.put(None)
 
     def _add(self, kind: EventKind, text: str) -> None:
         self.events.append(Event(index=len(self.events), kind=kind, text=text))
+        self.updated_at = datetime.now(UTC)
 
     def _on_event(self, line: str) -> None:
         """PACo's loop reports tool calls and failures (steps), and a running tool's progress
@@ -167,6 +224,7 @@ class Session:
         with self._lock:
             self._add(kind, text)
             self.busy = False
+            self.stopping = False
             self.progress = None
 
     def _run(self) -> None:
@@ -175,7 +233,7 @@ class Session:
     async def _converse(self) -> None:
         from mcp import Client
         from openai import AsyncOpenAI
-        from paco import server
+        from paco import server, stopping
         from paco.agent import Agent, OpenAIChat, save_transcript
 
         agent: Agent | None = None
@@ -192,14 +250,38 @@ class Session:
                 assert self._model is not None
                 model = self._model
             _use_pacs_folders()
+            # PACo's stop for this conversation, set before its tools' server starts: their
+            # calls, run by the server's tasks, inherit it.
+            signal = stopping.Signal()
+            stopping.SIGNAL.set(signal)
+            with self._lock:
+                self._signal = signal
+                self._loop = anyio.lowlevel.current_token()
             async with Client(server.server) as tools:
                 agent = await Agent.start(tools, model, on_event=self._on_event)
                 while (question := await anyio.to_thread.run_sync(self._questions.get)) is not None:
-                    try:
-                        self._finish("answer", await agent.answer(question))
-                    except Exception as error:
-                        logger.exception("The agent failed to answer in session %s", self.id)
-                        self._finish("error", f"{type(error).__name__}: {error}")
+                    signal.renew()
+                    answer: str | None = None
+                    failed: Exception | None = None
+                    with anyio.CancelScope() as scope:
+                        with self._lock:
+                            self._scope = scope
+                            if self.stopping:  # stopped before the answer began
+                                signal.stop()
+                                scope.cancel()
+                        try:
+                            answer = await agent.answer(question)
+                        except Exception as error:
+                            logger.exception("The agent failed to answer in session %s", self.id)
+                            failed = error
+                    with self._lock:
+                        self._scope = None
+                    if failed is not None:
+                        self._finish("error", f"{type(failed).__name__}: {failed}")
+                    elif answer is None:
+                        self._finish("stopped", STOPPED)
+                    else:
+                        self._finish("answer", answer)
         except Exception as error:
             logger.exception("The agent's session %s stopped", self.id)
             self._finish("error", f"{type(error).__name__}: {error}")
@@ -236,11 +318,20 @@ class Sessions:
     def get(self, session_id: str) -> Session | None:
         return self._sessions.get(session_id)
 
+    def listed(self) -> list[SessionInfo]:
+        """The conversations kept, the latest first."""
+        with self._lock:
+            found = list(self._sessions.values())
+        return sorted((one.info() for one in found), key=lambda info: info.updated_at, reverse=True)
+
     def close(self, session_id: str) -> bool:
+        """Delete conversation `session_id`: its answer stopped first if one runs (its work kept
+        or undone as a stop does); its transcript is saved as it ends."""
         with self._lock:
             session = self._sessions.pop(session_id, None)
         if session is None:
             return False
+        session.stop()
         session.close()
         return True
 

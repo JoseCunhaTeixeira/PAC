@@ -1,0 +1,926 @@
+/* Visualization: a run's card, its line, and each stage's panel. The states' colours match the
+   canvases' (palette.ts). */
+
+.viz {
+  --ok: #1a9e4b;
+  --ok-soft: rgba(26, 158, 75, 0.12);
+  --warn: #b87404;
+  --warn-soft: rgba(217, 138, 4, 0.14);
+  --bad: #d63c3c;
+  --bad-soft: rgba(214, 60, 60, 0.12);
+  --none: #8a8a90;
+  --none-soft: rgba(138, 138, 144, 0.14);
+  --blue: #2a78d6;
+  --blue-soft: rgba(42, 120, 214, 0.12);
+  --card-radius: 14px;
+
+  font-size: 0.95rem;
+}
+
+[data-theme="dark"] .viz {
+  --ok: #34c46a;
+  --ok-soft: rgba(52, 196, 106, 0.16);
+  --warn: #f0b429;
+  --warn-soft: rgba(240, 180, 41, 0.16);
+  --bad: #f06a6a;
+  --bad-soft: rgba(240, 106, 106, 0.16);
+  --none: #8d9099;
+  --none-soft: rgba(141, 144, 153, 0.16);
+  --blue: #4f9cf5;
+  --blue-soft: rgba(79, 156, 245, 0.16);
+}
+
+/* Header: the title, and the run to show. */
+
+.viz-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px 24px;
+  margin-bottom: 20px;
+}
+
+.viz-header h1 {
+  margin: 0;
+}
+
+.viz-sub {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.viz-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.viz-picker select {
+  margin-left: 0;
+  min-width: 150px;
+  max-width: 380px;
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+/* Cards and sections. */
+
+.viz-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-sm);
+  padding: 16px 18px;
+}
+
+.viz-card + .viz-card,
+.viz-section + .viz-section {
+  margin-top: 14px;
+}
+
+.viz-section {
+  margin-top: 22px;
+}
+
+.viz h2.viz-h2,
+.viz h3.viz-h3 {
+  margin: 0 0 10px;
+  padding: 0;
+  border: none;
+  color: var(--text);
+}
+
+.viz h2.viz-h2 {
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.viz h3.viz-h3 {
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.viz-muted {
+  color: var(--text-muted);
+}
+
+.viz-small {
+  font-size: 0.82rem;
+}
+
+/* The run: who made it, its windows at a glance, and each setting with why. */
+
+.viz-run-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 14px;
+}
+
+.viz-run-title strong {
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+
+.viz-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.6;
+  background: var(--none-soft);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.viz-chip.blue {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.viz-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.viz-tile {
+  position: relative;
+  padding: 11px 13px 12px;
+  border-radius: 11px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.viz-tile-label {
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.viz-tile-value {
+  margin-top: 3px;
+  font-size: 1.12rem;
+  font-weight: 650;
+  line-height: 1.3;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-tile-sub {
+  margin-top: 2px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.viz-origin {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 650;
+  line-height: 1.7;
+  background: var(--none-soft);
+  color: var(--text-muted);
+}
+
+.viz-origin.rule {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.viz-origin.given {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+/* Folded content: settings, details. */
+
+.viz-fold {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.viz-fold > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.viz-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.viz-fold > summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+  margin-right: 2px;
+}
+
+.viz-fold[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.viz-fold > summary:hover {
+  color: var(--text);
+}
+
+.viz-settings {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) 1fr;
+  gap: 10px 18px;
+  margin: 12px 0 2px;
+}
+
+.viz-settings dt {
+  font-weight: 600;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.viz-settings dd {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.viz-settings dd b {
+  font-weight: 650;
+  margin-right: 6px;
+}
+
+.viz-settings dd .viz-why {
+  display: block;
+  margin-top: 1px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.viz-trials {
+  margin-top: 6px;
+}
+
+/* The stages: a segmented control. */
+
+.viz-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  margin: 22px 0 14px;
+  border-radius: 12px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+}
+
+.viz button.viz-tab {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+  font-size: 0.9rem;
+}
+
+.viz button.viz-tab:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.viz button.viz-tab.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm), 0 0 0 1px var(--border);
+}
+
+.viz button.viz-tab:disabled {
+  background: transparent;
+  color: var(--text-faint);
+}
+
+.viz-tab small {
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--none-soft);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-tab.active small {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+/* The line: the profile plot and its legend. */
+
+.viz-line-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.viz-line-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.viz-swatch {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.viz-swatch.round {
+  border-radius: 50%;
+}
+
+.viz-swatch.pass {
+  background: var(--ok);
+}
+
+.viz-swatch.warn {
+  background: var(--warn);
+}
+
+.viz-swatch.fail {
+  background: var(--bad);
+}
+
+.viz-swatch.none {
+  background: var(--none-soft);
+  box-shadow: inset 0 0 0 1px var(--none);
+}
+
+.viz-hint {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.viz-summary {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 550;
+}
+
+/* The selected unit's card. */
+
+.viz-unit-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-bottom: 12px;
+}
+
+.viz-unit-head strong {
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+  margin-right: 4px;
+}
+
+.viz-nav {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.viz button.viz-icon {
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  box-shadow: none;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.viz button.viz-icon:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.viz-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 650;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.viz-badge.pass {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.viz-badge.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.viz-badge.fail {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.viz-badge.none,
+.viz-badge.info {
+  background: var(--none-soft);
+  color: var(--text-muted);
+}
+
+.viz-sentences {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.viz-sentences li {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  align-items: start;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.viz-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 50%;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.viz-mark.pass {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.viz-mark.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.viz-mark.fail {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.viz-mark.info {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.viz-plots-2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+@media (min-width: 760px) {
+  .viz-plots-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.viz-plot-title {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.viz-plot-note {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.viz-legend-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.viz-legend-inline span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.viz-legend-inline i {
+  display: inline-block;
+  width: 16px;
+  height: 0;
+  border-top: 2px solid currentColor;
+}
+
+.viz-legend-inline i.dashed {
+  border-top-style: dashed;
+}
+
+.viz-legend-inline i.area {
+  height: 9px;
+  border: none;
+  border-radius: 2px;
+}
+
+/* Tables in the details. */
+
+.viz-table-wrap {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+.viz table.viz-table {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.viz table.viz-table th,
+.viz table.viz-table td {
+  padding: 5px 10px;
+  vertical-align: top;
+}
+
+.viz table.viz-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.viz table.viz-table tr.failed td {
+  color: var(--bad);
+}
+
+.viz-gates {
+  display: grid;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.viz-gate-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+  font-size: 0.88rem;
+}
+
+/* Display settings of a stage's line views. */
+
+.viz-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 18px;
+  margin-bottom: 12px;
+}
+
+.viz-field {
+  display: grid;
+  gap: 4px;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.viz-field select,
+.viz-field input:not([type="checkbox"]):not([type="radio"]) {
+  margin-left: 0;
+  padding: 6px 9px;
+  border-radius: 9px;
+  font-size: 0.88rem;
+}
+
+.viz-field input[type="number"] {
+  width: 92px;
+}
+
+.viz-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.viz-segment {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 10px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+}
+
+.viz .viz-segment button {
+  padding: 4px 11px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.viz .viz-segment button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.viz button.viz-button {
+  padding: 7px 14px;
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  font-size: 0.86rem;
+}
+
+.viz button.viz-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+/* Soil column. */
+
+.viz-column-wrap {
+  position: relative;
+}
+
+.viz-column {
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.viz-column > div {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 10px 0;
+  font-size: 0.82rem;
+  color: #1a1a1a;
+  overflow: hidden;
+}
+
+.viz-column > div + div {
+  border-top: 1px solid rgba(0, 0, 0, 0.14);
+}
+
+.viz-water {
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  height: 0;
+  border-top: 2px dashed #1f5fbf;
+}
+
+.viz-water span {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  top: 0;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #1f5fbf;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+/* States: loading, nothing, an error. */
+
+.viz-skeleton {
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-hover) 25%,
+    var(--border) 37%,
+    var(--surface-hover) 63%
+  );
+  background-size: 400% 100%;
+  animation: viz-shimmer 1.3s ease infinite;
+}
+
+@keyframes viz-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+.viz-empty {
+  padding: 26px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.viz-error {
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--bad-soft);
+  color: var(--bad);
+  font-size: 0.9rem;
+}
+
+/* Canvases' overlays, and the chains' small multiples. */
+
+/* Every plot's tooltip, as the app's others (kit.css's .tip-layer). */
+.viz-tooltip {
+  position: absolute;
+  z-index: 10;
+  padding: 8px 11px;
+  border-radius: 9px;
+  background: #0f1728;
+  color: #e7ebf2;
+  font-size: 0.78rem;
+  font-weight: 450;
+  line-height: 1.45;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 10px 28px rgba(15, 23, 40, 0.3);
+}
+
+[data-theme="dark"] .viz-tooltip {
+  background: #1f2937;
+  border: 1px solid #2d394a;
+}
+
+.viz-tooltip b {
+  font-weight: 650;
+}
+
+.viz-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-weight: 400;
+}
+
+.viz-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.viz-legend i {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+}
+
+.viz-plots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.viz-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.viz-figures a {
+  display: block;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.viz-figures img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* The line's legend: the rest of it on hover. */
+.viz-legend-more {
+  display: inline-flex;
+  margin-left: auto;
+  color: var(--text-faint);
+  cursor: help;
+}
+
+/* A unit card's other sentences, folded under its verdict and warnings. */
+.viz-more {
+  margin-top: 6px;
+}
+
+/* A card's head: its verdict first, then each check's, set apart and quieter. */
+.viz-unit-head > .viz-badge {
+  font-size: 0.8rem;
+  padding: 3px 11px;
+}
+
+.viz-gate-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border-strong);
+}
+
+.viz-gate-list .viz-badge {
+  font-size: 0.68rem;
+  padding: 1px 7px;
+}
+
+/* A field beside its label, in a card's head (the model shown). */
+.viz-field.viz-inline {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A profile not processed yet: its records counted as the computing pages count them, the one
+   shown chosen beside. */
+.viz-records-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.viz-records-head .stat {
+  min-width: 140px;
+}
+
+.viz-records-head .field {
+  flex: 0 1 320px;
+}

@@ -1,7 +1,9 @@
 """A profile processed, as PAC's run job does it: sigpipe's run (sigpipe.masw.runs), and its
-failed windows as the job's errors, each with its traceback."""
+failed windows as the job's errors, each with its traceback. Stoppable: see
+sigpipe.masw.runs.stopping."""
 
 import logging
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,8 +28,10 @@ class WindowError:
 def run_compute(
     request: ProcessingRequest,
     on_progress: ProgressCallback | None = None,
+    stop: threading.Event | None = None,
 ) -> tuple[str, list[WindowError]]:
-    """The run's output folder (<profile>/<run_id>), and its failed windows."""
+    """The run's output folder (<profile>/<run_id>), and its failed windows; Stopped, once
+    `stop` is set (with the run's manifest when windows had finished, which it keeps)."""
     logger.info(
         "Starting %s processing of %s, %d workers",
         request.mode.value,
@@ -43,6 +47,7 @@ def run_compute(
         if on_progress is None
         else lambda done, total: on_progress(done, total, None),
         packages=PACKAGES,
+        stop=stop,
     )
     folder = f"{manifest.profile.name}/{manifest.run_id}"
     errors = [
