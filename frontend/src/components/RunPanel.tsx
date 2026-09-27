@@ -222,36 +222,45 @@ export function RunPanel({
                 {itemLabel}
               </span>
             </>
-          ) : job?.state === "succeeded" ? (
-            <span className={failed ? "run-warn" : "run-ok"}>
-              <CheckIcon size={16} />
-              <b>
-                {job.total - failed}/{job.total}
-              </b>{" "}
-              {itemLabel} computed{job.elapsed != null && ` in ${formatDuration(job.elapsed)}`}
-              {failed > 0 && `, ${failed} failed`}
-            </span>
-          ) : job?.state === "stopped" ? (
-            <span className="run-warn">
-              <StopIcon size={14} />
-              {kept ? (
-                <>
-                  Stopped: <b>{job.completed}/{job.total}</b> {itemLabel} kept
-                </>
-              ) : (
-                "Stopped: nothing kept"
-              )}
-            </span>
-          ) : job?.state === "failed" ? (
-            <span className="run-bad">
-              Failed{job.elapsed != null && ` after ${formatDuration(job.elapsed)}`}: {job.error}
-            </span>
-          ) : missing.length > 0 ? (
-            <span>Missing: {missing.join(", ")}.</span>
           ) : (
-            summary
+            // The next run's settings (what it takes, the workers) always; the last run's
+            // outcome under them, with its links.
+            <div className="run-bar-lines">
+              <div className="run-bar-next">
+                {missing.length > 0 ? <span>Missing: {missing.join(", ")}.</span> : summary}
+              </div>
+              {job && (
+                <div className="run-bar-last">
+                  {job.state === "succeeded" ? (
+                    <span className={failed ? "run-warn" : "run-ok"}>
+                      <CheckIcon size={15} />
+                      <b>
+                        {job.total - failed}/{job.total}
+                      </b>{" "}
+                      {itemLabel} computed{job.elapsed != null && ` in ${formatDuration(job.elapsed)}`}
+                      {failed > 0 && `, ${failed} failed`}
+                    </span>
+                  ) : job.state === "stopped" ? (
+                    <span className="run-warn">
+                      <StopIcon size={13} />
+                      {kept ? (
+                        <>
+                          Stopped: <b>{job.completed}/{job.total}</b> {itemLabel} kept
+                        </>
+                      ) : (
+                        "Stopped: nothing kept"
+                      )}
+                    </span>
+                  ) : job.state === "failed" ? (
+                    <span className="run-bad">
+                      Failed{job.elapsed != null && ` after ${formatDuration(job.elapsed)}`}: {job.error}
+                    </span>
+                  ) : null}
+                  {results && after?.(job)}
+                </div>
+              )}
+            </div>
           )}
-          {results && job && after?.(job)}
         </div>
         <div className="run-bar-actions">
           {running && (

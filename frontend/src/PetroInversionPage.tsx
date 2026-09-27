@@ -293,7 +293,9 @@ export default function PetroInversionPage() {
             summary={
               <>
                 <span>
-                  <b>{selectedXmids.length}</b> positions to invert
+                  <b>{selectedXmids.length}</b>{" "}
+                  {selectedXmids.length === 1 ? "position" : "positions"} to
+                  invert
                 </span>
                 <label
                   className="workers"
