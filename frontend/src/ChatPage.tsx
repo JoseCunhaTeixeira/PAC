@@ -523,7 +523,7 @@ export default function ChatPage() {
                       onClick={() => void remove(one.id)}
                       aria-label="Delete"
                       data-tip={
-                        "Delete\nIts answer is stopped first if it runs"
+                        "Delete\nA running answer is stopped first"
                       }
                     >
                       <TrashIcon size={14} />
@@ -601,7 +601,7 @@ export default function ChatPage() {
                 data-tip={
                   stopping
                     ? "Stopping…"
-                    : "Stop\nThe answer and all it started, at once\nWhat had finished is kept"
+                    : "Stop now\nThe answer and the runs it started\nWhat finished is kept"
                 }
               >
                 {stopping ? (
@@ -640,10 +640,7 @@ function StatusBadge({ status }: { status: AgentStatus | null }) {
         ? (status.model ?? "Ready")
         : "Unavailable";
   return (
-    <span
-      className="chat-status"
-      title={ready ? "The AI assistant's model answers." : undefined}
-    >
+    <span className="chat-status">
       <span className={ready ? "chat-status-dot ready" : "chat-status-dot"} />
       {label}
     </span>

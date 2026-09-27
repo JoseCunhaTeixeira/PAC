@@ -15,6 +15,7 @@ import {
   Page,
   Segmented,
 } from "./components/kit";
+import { WorkersField } from "./components/computing";
 import { LayerTable } from "./components/LayerTable";
 import {
   added,
@@ -28,6 +29,7 @@ import {
   type RailCell,
 } from "./components/PositionRail";
 import { judged, useStageStates, xmidKey } from "./components/railStates";
+import { above, upTo } from "./components/numbers";
 import { num } from "./components/viz/format";
 import { RunPanel } from "./components/RunPanel";
 import { runningJob } from "./components/jobs";
@@ -95,8 +97,10 @@ interface InversionSettings {
 // settings' table is taken over, their effort (the sampler's before 2026-09-27) is not.
 const SETTINGS_KEY = "pac.inversion.settings.2";
 const DROP_TIP =
-  "A layer's Vs below the one above, at most\nFarther, a stiff layer over a soft one fits slow picks the ground never gave\n0: Vs only increases with depth";
+  "How much slower a layer may be than the one above\n0: Vs only increases with depth";
 const EARLIER_KEY = "pac.inversion.settings";
+// sigpipe keeps a model every SAVE_EVERY iterations after the burn-in.
+const SAVE_EVERY = 150;
 const FREE: FreeLayers = {
   vs_min: null,
   vs_max: null,
@@ -194,7 +198,8 @@ export default function InversionPage() {
   const [nChains, setNChains] = useState(kept?.nChains ?? 0);
   const [nWorkers, setNWorkers] = useStoredState("pac.inversion.workers", 1);
   useEffect(() => {
-    if (nLayers > 0 && nIterations > 0) {
+    // Once the defaults are in (0 before): a field left empty (NaN) is kept, as it is shown.
+    if (nLayers > 0 && nIterations !== 0) {
       writeStored(SETTINGS_KEY, {
         layering,
         free,
@@ -315,6 +320,9 @@ export default function InversionPage() {
   const selectedXmids = eligible.filter((xmid) => selectedPositions[xmid]);
   const maxWorkers =
     selectedXmids.length > 0 ? Math.min(nCpus, selectedXmids.length) : nCpus;
+  // Fewer positions than workers: as many workers, for good (more positions later do not raise
+  // them).
+  if (nWorkers > maxWorkers) setNWorkers(maxWorkers);
   const cells: RailCell[] = xmids.map((xmid) => {
     const picks = positionPicks.find((one) => one.xmid === xmid);
     const can = eligible.includes(xmid);
@@ -373,7 +381,7 @@ export default function InversionPage() {
   const missing: string[] = [];
   if (!defaults) missing.push("the defaults (loading)");
   if (selectedLabels.length === 0) missing.push("a mode");
-  if (selectedXmids.length === 0) missing.push("a position");
+  if (selectedXmids.length === 0) missing.push("a window");
   const fixedCount =
     vsLayers.filter((layer) => layer.vs_fixed != null).length +
     thicknessLayers.filter((layer) => layer.thickness_fixed != null).length;
@@ -403,7 +411,7 @@ export default function InversionPage() {
             <Card
               step={1}
               title="Curves to invert"
-              hint="The modes to invert, and where along the line."
+              hint="Modes and windows to invert."
               aside={
                 <RailLegend
                   groups={[
@@ -438,13 +446,13 @@ export default function InversionPage() {
                     />
                     <CrosshairIcon size={14} />
                     {label}
-                    <small>{labelCounts[label]} positions</small>
+                    <small>{labelCounts[label]} windows</small>
                   </label>
                 ))}
               </div>
               <div className="rail-head">
                 <span className="muted">
-                  <b>{selectedXmids.length}</b> of {eligible.length} positions
+                  <b>{selectedXmids.length}</b> of {eligible.length} windows
                 </span>
                 <span className="rail-actions">
                   <button
@@ -485,11 +493,6 @@ export default function InversionPage() {
             <Card
               step={2}
               title="Layers"
-              hint={
-                layering === "free"
-                  ? "Chosen by the data: how many, how thick, how fast."
-                  : "Given: each one's range, or a value fixed."
-              }
               aside={
                 <span className="layers-aside">
                   {layering === "fixed" && (
@@ -527,13 +530,12 @@ export default function InversionPage() {
                         value: "free",
                         label: "By the data",
                         title:
-                          "Chosen by the data\nHow many layers, how thick: the inversion samples them\nWithin the bounds below",
+                          "By the data\nThe inversion finds how many layers, their thickness and Vs",
                       },
                       {
                         value: "fixed",
                         label: "Fixed",
-                        title:
-                          "Given\nThe layers of the table, each one's range or value",
+                        title: "Fixed\nYou set the layers: each one's range or value",
                       },
                     ]}
                   />
@@ -550,7 +552,7 @@ export default function InversionPage() {
                     min={1}
                     step={10}
                     title={
-                      "Every layer's least Vs\nEmpty: half the slowest pick"
+                      "Lowest Vs of any layer\nEmpty: half the slowest pick"
                     }
                     onChange={(value) => setFree({ ...free, vs_min: value })}
                   />
@@ -560,9 +562,10 @@ export default function InversionPage() {
                     value={free.vs_max ?? Number.NaN}
                     optional="auto"
                     min={1}
+                    check={above(free.vs_min ?? Number.NaN)}
                     step={10}
                     title={
-                      "Every layer's greatest Vs\nEmpty: three times the fastest pick"
+                      "Highest Vs of any layer\nEmpty: 3 × the fastest pick"
                     }
                     onChange={(value) => setFree({ ...free, vs_max: value })}
                   />
@@ -574,7 +577,7 @@ export default function InversionPage() {
                     min={0.1}
                     step={0.5}
                     title={
-                      "Where the half-space may start, at the deepest\nEmpty: half the longest picked wavelength"
+                      "Deepest top of the half-space\nEmpty: half the longest wavelength picked"
                     }
                     onChange={(value) => setFree({ ...free, depth_max: value })}
                   />
@@ -584,15 +587,9 @@ export default function InversionPage() {
                     min={1}
                     max={20}
                     step={1}
-                    title={"The half-space included\nThe data choose how many"}
+                    title="Half-space included"
                     onChange={(value) =>
-                      setFree({
-                        ...free,
-                        max_layers: Math.max(
-                          1,
-                          Math.min(20, Math.round(value) || 1),
-                        ),
-                      })
+                      setFree({ ...free, max_layers: Math.round(value) })
                     }
                   />
                   <NumberField
@@ -635,6 +632,7 @@ export default function InversionPage() {
               <Fields>
                 <NumberField
                   label="Iterations"
+                  title="Per chain, burn-in included"
                   value={nIterations}
                   min={1}
                   step={100}
@@ -642,8 +640,11 @@ export default function InversionPage() {
                 />
                 <NumberField
                   label="Burn-in"
+                  title="Dropped at each chain's start"
                   value={nBurninIterations}
                   min={1}
+                  // A model kept at least, after it.
+                  check={upTo(nIterations - SAVE_EVERY)}
                   step={100}
                   onChange={setNBurninIterations}
                 />
@@ -652,7 +653,7 @@ export default function InversionPage() {
                   value={nChains}
                   min={1}
                   step={1}
-                  title={"Compared to judge them\n2 at least"}
+                  title={"Compared to check convergence\nOne alone cannot be checked"}
                   onChange={setNChains}
                 />
               </Fields>
@@ -663,8 +664,8 @@ export default function InversionPage() {
             onRunning={setRunning}
             config={config}
             runUrl="/inversion/run"
-            itemLabel="positions"
-            itemLabelSingular="position"
+            itemLabel="windows"
+            itemLabelSingular="window"
             label="Invert"
             missing={missing}
             onDone={() => setRuns((n) => n + 1)}
@@ -672,29 +673,15 @@ export default function InversionPage() {
               <>
                 <span>
                   <b>{selectedXmids.length}</b>{" "}
-                  {selectedXmids.length === 1 ? "position" : "positions"} to
+                  {selectedXmids.length === 1 ? "window" : "windows"} to
                   invert
                 </span>
-                <label
-                  className="workers"
-                  data-tip="Positions inverted at once"
-                >
-                  <input
-                    type="number"
-                    min={1}
-                    max={maxWorkers}
-                    value={nWorkers}
-                    onChange={(e) =>
-                      setNWorkers(
-                        Math.max(
-                          1,
-                          Math.min(Number(e.target.value), maxWorkers),
-                        ),
-                      )
-                    }
-                  />
-                  <span>workers</span>
-                </label>
+                <WorkersField
+                  workers={nWorkers}
+                  setWorkers={setNWorkers}
+                  maxWorkers={maxWorkers}
+                  tip="Windows inverted in parallel"
+                />
               </>
             }
             after={() => (

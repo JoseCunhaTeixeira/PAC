@@ -37,11 +37,18 @@ class PetroSectionOut(BaseModel):
 
 
 class PseudoSectionComparisonOut(BaseModel):
+    """Picked, modelled and their residual by position and frequency, and by position and
+    wavelength."""
+
     positions: list[float]
     fs: list[float]
     observed_grid: list[list[float | None]]
     predicted_grid: list[list[float | None]]
     residual_grid: list[list[float | None]]
+    lambdas: list[float]
+    observed_by_wavelength_grid: list[list[float | None]]
+    predicted_by_wavelength_grid: list[list[float | None]]
+    residual_by_wavelength_grid: list[list[float | None]]
 
 
 class ContinuousSectionOut(BaseModel):
@@ -145,4 +152,8 @@ def get_pseudo_section_comparison(folder: str) -> PseudoSectionComparisonOut:
         observed_grid=nan_to_none(comparison.observed),
         predicted_grid=nan_to_none(comparison.predicted),
         residual_grid=nan_to_none(comparison.residual),
+        lambdas=comparison.lambdas.tolist(),
+        observed_by_wavelength_grid=nan_to_none(comparison.observed_by_wavelength),
+        predicted_by_wavelength_grid=nan_to_none(comparison.predicted_by_wavelength),
+        residual_by_wavelength_grid=nan_to_none(comparison.residual_by_wavelength),
     )

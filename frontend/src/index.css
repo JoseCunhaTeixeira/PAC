@@ -44,6 +44,29 @@
   --sidebar-w: 264px;
   --page-w: 1280px;
   --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+
+  /* The states' colours, on every page: passed, flagged, rejected, not judged, and the
+     assistant's (the canvases' too, palette.ts). */
+  --ok: #1a9e4b;
+  --ok-soft: rgba(26, 158, 75, 0.12);
+  --warn: #b87404;
+  --warn-soft: rgba(217, 138, 4, 0.14);
+  --bad: #d63c3c;
+  --bad-soft: rgba(214, 60, 60, 0.12);
+  --none: #8a8a90;
+  --none-soft: rgba(138, 138, 144, 0.14);
+  --blue: #2a78d6;
+  --blue-soft: rgba(42, 120, 214, 0.12);
+
+  /* The type scale: one size per role, on every page (the html's 15px the rem). */
+  --fs-display: clamp(2rem, 3vw, 2.65rem); /* Home's headline only */
+  --fs-h1: 1.6rem; /* a page's title */
+  --fs-h2: 1.05rem; /* a card's or a section's title */
+  --fs-value: 1.15rem; /* a figure in a tile */
+  --fs-body: 0.9rem; /* text, subtitles, fields, buttons */
+  --fs-small: 0.82rem; /* hints, notes, secondary lines, tooltips */
+  --fs-caption: 0.76rem; /* units, badges, a field's read-out */
+  --fs-micro: 0.7rem; /* capitalised labels */
 }
 
 [data-theme="dark"] {
@@ -82,6 +105,17 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 6px 22px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+
+  --ok: #34c46a;
+  --ok-soft: rgba(52, 196, 106, 0.16);
+  --warn: #f0b429;
+  --warn-soft: rgba(240, 180, 41, 0.16);
+  --bad: #f06a6a;
+  --bad-soft: rgba(240, 106, 106, 0.16);
+  --none: #8d9099;
+  --none-soft: rgba(141, 144, 153, 0.16);
+  --blue: #4f9cf5;
+  --blue-soft: rgba(79, 156, 245, 0.16);
 }
 
 * {
@@ -107,6 +141,7 @@ html {
 
 body {
   margin: 0;
+  font-size: var(--fs-body);
   background-color: var(--bg);
   color: var(--text);
   transition: background-color 0.2s ease, color 0.2s ease;
@@ -117,7 +152,7 @@ body {
 }
 
 h1 {
-  font-size: 1.9rem;
+  font-size: var(--fs-h1);
   font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 1.15;
@@ -126,7 +161,7 @@ h1 {
 }
 
 h2 {
-  font-size: 1.15rem;
+  font-size: var(--fs-h2);
   font-weight: 650;
   letter-spacing: -0.01em;
   margin: 1.75rem 0 0.75rem;
@@ -134,7 +169,7 @@ h2 {
 }
 
 h3 {
-  font-size: 0.95rem;
+  font-size: var(--fs-body);
   font-weight: 650;
   color: var(--text);
   margin: 1.25rem 0 0.5rem;
@@ -152,7 +187,7 @@ a {
 }
 
 label {
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
   color: var(--text-muted);
 }
 
@@ -166,7 +201,7 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 select,
 textarea {
   font: inherit;
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
   padding: 7px 11px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
@@ -175,7 +210,7 @@ textarea {
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):hover:not(:disabled),
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):hover:not(:disabled):not(.invalid),
 select:hover:not(:disabled),
 textarea:hover:not(:disabled) {
   border-color: var(--text-faint);
@@ -207,7 +242,7 @@ input[type="number"] {
 
 button {
   font: inherit;
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
   font-weight: 600;
   background: var(--accent);
   color: var(--accent-text);
@@ -243,7 +278,7 @@ button:disabled {
 table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
   margin: 0.75rem 0;
 }
 
@@ -257,7 +292,7 @@ td {
 th {
   color: var(--text-muted);
   font-weight: 600;
-  font-size: 0.78rem;
+  font-size: var(--fs-caption);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -310,7 +345,7 @@ th {
 
 .sidebar-brand strong {
   display: block;
-  font-size: 1.12rem;
+  font-size: var(--fs-value);
   letter-spacing: -0.02em;
   color: var(--text);
   line-height: 1.1;
@@ -318,7 +353,7 @@ th {
 
 .sidebar-brand small {
   display: block;
-  font-size: 0.72rem;
+  font-size: var(--fs-micro);
   color: var(--text-faint);
   letter-spacing: 0.01em;
 }
@@ -329,7 +364,7 @@ th {
 
 .sidebar-group-label {
   padding: 0 12px 6px;
-  font-size: 0.68rem;
+  font-size: var(--fs-micro);
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -352,7 +387,7 @@ th {
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   font-weight: 550;
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
   text-decoration: none;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
@@ -409,7 +444,7 @@ th {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);
   color: var(--text-faint);
 }
 

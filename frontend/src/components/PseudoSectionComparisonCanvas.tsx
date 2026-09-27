@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { viridis, bwr } from "./colormaps";
+import { bwr, cividis } from "./colormaps";
 import { HoverTooltip } from "./HoverTooltip";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { nearestIndex, useCanvasHover } from "./useCanvasHover";
@@ -23,6 +23,50 @@ export interface PseudoSectionComparisonData {
   observed_grid: (number | null)[][];
   predicted_grid: (number | null)[][];
   residual_grid: (number | null)[][];
+  lambdas: number[];
+  observed_by_wavelength_grid: (number | null)[][];
+  predicted_by_wavelength_grid: (number | null)[][];
+  residual_by_wavelength_grid: (number | null)[][];
+}
+
+/** The comparison along `mode`'s axis: its values, and the three grids on them. */
+function along(comparison: PseudoSectionComparisonData, mode: "frequency" | "wavelength") {
+  return mode === "frequency"
+    ? {
+        ys: comparison.fs,
+        observed: comparison.observed_grid,
+        predicted: comparison.predicted_grid,
+        residual: comparison.residual_grid,
+      }
+    : {
+        ys: comparison.lambdas,
+        observed: comparison.observed_by_wavelength_grid,
+        predicted: comparison.predicted_by_wavelength_grid,
+        residual: comparison.residual_by_wavelength_grid,
+      };
+}
+
+/** `text` written up the canvas, centred on (x, cy): on two lines when longer than `room`. */
+function verticalLabel(ctx: CanvasRenderingContext2D, text: string, x: number, cy: number, room: number) {
+  ctx.save();
+  ctx.translate(x, cy);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  if (ctx.measureText(text).width <= room) {
+    ctx.fillText(text, 0, 0);
+  } else {
+    // Split at the space nearest the middle; the first line left of the second.
+    const words = text.split(" ");
+    let best = 1;
+    for (let k = 1; k < words.length; k++) {
+      const gap = Math.abs(words.slice(0, k).join(" ").length - text.length / 2);
+      if (gap < Math.abs(words.slice(0, best).join(" ").length - text.length / 2)) best = k;
+    }
+    ctx.fillText(words.slice(0, best).join(" "), 0, -14);
+    ctx.fillText(words.slice(best).join(" "), 0, 0);
+  }
+  ctx.restore();
 }
 
 const ML = 60, MR = 130, MT = 16, MB = 40, PANEL_GAP = 30;
@@ -44,16 +88,20 @@ function panels(plotW: number): PlotRect[] {
 }
 
 // Observed/predicted/residual pseudo-sections stacked vertically, like
-// sigpipe's `plot_pseudo_section_comparison` (obs+pred share one viridis
-// scale so they're directly comparable; residual uses a symmetric bwr scale).
+// sigpipe's `plot_pseudo_section_comparison`: obs+pred share one scale, in the
+// other pseudo-sections' cividis, so they're directly comparable; residual uses
+// a symmetric bwr scale.
 export function PseudoSectionComparisonCanvas({
   comparison,
   velocityLabel,
+  mode = "frequency",
   marker,
   onPick,
 }: {
   comparison: PseudoSectionComparisonData;
   velocityLabel: string;
+  /** The vertical axis: frequency, up, or wavelength, down like a depth (as a pseudo-section's). */
+  mode?: "frequency" | "wavelength";
   // A position to mark down the panels (the selected window), and what a click on a column
   // (not a zoom's drag) selects: its position.
   marker?: number;
@@ -70,17 +118,22 @@ export function PseudoSectionComparisonCanvas({
   const scale = 1;
   const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(scale);
 
+  // The full view; a switch between the axes starts from it again.
+  const invertY = mode === "wavelength";
   const xFirst = comparison.positions[0];
   const xExtent = comparison.positions[comparison.positions.length - 1] - xFirst || 1;
-  const fFirst = comparison.fs[0];
-  const fExtent = comparison.fs[comparison.fs.length - 1] - fFirst || 1;
+  const axisValues = along(comparison, mode).ys;
+  const fFirst = axisValues[0];
+  const fExtent = axisValues[axisValues.length - 1] - fFirst || 1;
   const zoom = useZoom({
     extent: { x: [xFirst, xFirst + xExtent], y: [fFirst, fFirst + fExtent] },
     plots: PANELS,
     width: TOTAL_W,
     height: TOTAL_H,
+    yDown: invertY,
+    resetKey: mode,
   });
-  // The positions and frequencies on show, in all three panels.
+  // The positions and frequencies (or wavelengths) on show, in all three panels.
   const [x0, x1] = zoom.view.x;
   const [f0, f1] = zoom.view.y;
 
@@ -88,7 +141,11 @@ export function PseudoSectionComparisonCanvas({
     if (!hoverPos) return null;
     if (hoverPos.x < ML || hoverPos.x > ML + PLOT_W) return null;
 
-    const { positions, fs, observed_grid, predicted_grid, residual_grid } = comparison;
+    const { positions } = comparison;
+    const { ys: fs, observed: observed_grid, predicted: predicted_grid, residual: residual_grid } = along(
+      comparison,
+      mode,
+    );
 
     const top1 = MT;
     const top2 = top1 + PLOT_H + PANEL_GAP;
@@ -114,7 +171,9 @@ export function PseudoSectionComparisonCanvas({
     }
 
     const position = x0 + ((hoverPos.x - ML) / PLOT_W) * (x1 - x0);
-    const freq = f0 + ((top + PLOT_H - hoverPos.y) / PLOT_H) * (f1 - f0);
+    const freq = invertY
+      ? f0 + ((hoverPos.y - top) / PLOT_H) * (f1 - f0)
+      : f0 + ((top + PLOT_H - hoverPos.y) / PLOT_H) * (f1 - f0);
 
     const posIdx = nearestIndex(positions, position);
     const fIdx = nearestIndex(fs, freq);
@@ -125,11 +184,11 @@ export function PseudoSectionComparisonCanvas({
       py: hoverPos.y * scale,
       lines: [
         `xmid ${positions[posIdx].toFixed(2)} m`,
-        `frequency ${fs[fIdx].toFixed(2)} Hz`,
+        invertY ? `wavelength ${fs[fIdx].toFixed(2)} m` : `frequency ${fs[fIdx].toFixed(2)} Hz`,
         `${label}: ${value === null ? "—" : value.toFixed(1)}`,
       ],
     };
-  }, [hoverPos, comparison, velocityLabel, scale, PLOT_W, x0, x1, f0, f1]);
+  }, [hoverPos, comparison, mode, invertY, velocityLabel, scale, PLOT_W, x0, x1, f0, f1]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -146,7 +205,11 @@ export function PseudoSectionComparisonCanvas({
     ctx.clearRect(0, 0, TOTAL_W, TOTAL_H);
     ctx.font = FONT;
 
-    const { positions, fs, observed_grid, predicted_grid, residual_grid } = comparison;
+    const { positions } = comparison;
+    const { ys: fs, observed: observed_grid, predicted: predicted_grid, residual: residual_grid } = along(
+      comparison,
+      mode,
+    );
     const np = positions.length;
     const nf = fs.length;
     const fMin = fs[0];
@@ -170,11 +233,15 @@ export function PseudoSectionComparisonCanvas({
     }
 
     // Only the cells on show, the same in the three panels: a column's rows
-    // run from the highest frequency at the top down (the data's entries
-    // bottom up), and each panel's edges clip those they cut through.
+    // run from rowTop at the top (the highest frequency, or the shortest
+    // wavelength) to rowBottom, and each panel's edges clip those they cut
+    // through. The image's rows are the data's entries bottom up for
+    // frequencies, top down for wavelengths.
     const [i0, i1] = visibleColumns(cellEdges, x0, x1);
-    const [k0, k1] = visibleCells(nf, fMin + fSpan, fMin, f0, f1);
-    const [j0, j1] = [nf - k1, nf - k0];
+    const rowTop = invertY ? fMin : fMin + fSpan;
+    const rowBottom = invertY ? fMin + fSpan : fMin;
+    const [k0, k1] = visibleCells(nf, rowTop, rowBottom, f0, f1);
+    const [j0, j1] = invertY ? [k0, k1] : [nf - k1, nf - k0];
 
     // The colour scales span the values on show: all of them in the full
     // view, those in the window when zoomed.
@@ -197,12 +264,15 @@ export function PseudoSectionComparisonCanvas({
       vMax: number,
       colormap: (t: number) => [number, number, number],
       legendLabel: string,
+      // The colour bar's values: velocities whole, as a pseudo-section's; residuals to 0.1 %.
+      decimals: number,
     ) {
       const vSpan = vMax - vMin || 1;
-      const yOf = (f: number) => top + PLOT_H - ((f - f0) / (f1 - f0)) * PLOT_H;
+      const yOf = (f: number) =>
+        invertY ? top + ((f - f0) / (f1 - f0)) * PLOT_H : top + PLOT_H - ((f - f0) / (f1 - f0)) * PLOT_H;
 
-      const yTop = yOf(fMin + fSpan - (k0 / nf) * fSpan);
-      const yBottom = yOf(fMin + fSpan - (k1 / nf) * fSpan);
+      const yTop = yOf(rowTop + (k0 / nf) * (rowBottom - rowTop));
+      const yBottom = yOf(rowTop + (k1 / nf) * (rowBottom - rowTop));
       ctx.save();
       ctx.beginPath();
       ctx.rect(ML, top, PLOT_W, PLOT_H);
@@ -218,7 +288,7 @@ export function PseudoSectionComparisonCanvas({
         const imgData = octx.createImageData(1, nf);
         for (let j = 0; j < nf; j++) {
           const v = grid[i][j];
-          const y = nf - 1 - j;
+          const y = invertY ? j : nf - 1 - j;
           const idx = y * 4;
           if (v === null) {
             imgData.data[idx + 3] = 0;
@@ -297,39 +367,27 @@ export function PseudoSectionComparisonCanvas({
       for (let i = 0; i <= nLegendTicks; i++) {
         const v = vMin + (i / nLegendTicks) * vSpan;
         const py = top + PLOT_H - (i / nLegendTicks) * PLOT_H;
-        ctx.fillText(v.toFixed(1), legendX + legendW + 6, py);
+        ctx.fillText(v.toFixed(decimals), legendX + legendW + 6, py);
       }
 
       ctx.fillStyle = palette.title;
-      ctx.save();
-      ctx.translate(TOTAL_W - 14, top + PLOT_H / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText(legendLabel, 0, 0);
-      ctx.restore();
-
-      ctx.save();
-      ctx.translate(16, top + PLOT_H / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.textAlign = "center";
-      ctx.fillText("Frequency (Hz)", 0, 0);
-      ctx.restore();
+      verticalLabel(ctx, legendLabel, TOTAL_W - 6, top + PLOT_H / 2, PLOT_H - 8);
+      verticalLabel(ctx, invertY ? "Wavelength (m)" : "Frequency (Hz)", 16, top + PLOT_H / 2, PLOT_H - 8);
     }
 
     const top1 = MT;
     const top2 = top1 + PLOT_H + PANEL_GAP;
     const top3 = top2 + PLOT_H + PANEL_GAP;
 
-    drawPanel(ctx, top1, observed_grid, zMin, zMax, viridis, `Picked ${velocityLabel.toLowerCase()}`);
-    drawPanel(ctx, top2, predicted_grid, zMin, zMax, viridis, `Modelled ${velocityLabel.toLowerCase()}`);
-    drawPanel(ctx, top3, residual_grid, -resLim, resLim, bwr, "Residual (%)");
+    drawPanel(ctx, top1, observed_grid, zMin, zMax, cividis, `Picked ${velocityLabel.toLowerCase()}`, 0);
+    drawPanel(ctx, top2, predicted_grid, zMin, zMax, cividis, `Modelled ${velocityLabel.toLowerCase()}`, 0);
+    drawPanel(ctx, top3, residual_grid, -resLim, resLim, bwr, "Residual (%)", 1);
 
     ctx.fillStyle = palette.title;
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
     ctx.fillText("Position (m)", ML + PLOT_W / 2, TOTAL_H - 4);
-  }, [comparison, velocityLabel, palette, scale, TOTAL_W, PLOT_W, x0, x1, f0, f1, marker]);
+  }, [comparison, mode, invertY, velocityLabel, palette, scale, TOTAL_W, PLOT_W, x0, x1, f0, f1, marker]);
 
   const click = useClick(
     TOTAL_W,

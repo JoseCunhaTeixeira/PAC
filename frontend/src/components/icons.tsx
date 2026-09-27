@@ -214,6 +214,16 @@ export function InfoIcon({ size = 18 }: IconProps) {
   );
 }
 
+export function AlertCircleIcon({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="M12 7v6" />
+      <circle cx="12" cy="16.4" r="0.6" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function AlertIcon({ size = 18 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
@@ -329,6 +339,15 @@ export function StackIcon({ size = 18 }: IconProps) {
       <path d="M3 7c2-2.5 4-2.5 6 0s4 2.5 6 0 4-2.5 6 0" />
       <path d="M3 12c2-2.5 4-2.5 6 0s4 2.5 6 0 4-2.5 6 0" />
       <path d="M3 18.5h18" strokeWidth={2.6} />
+    </svg>
+  );
+}
+
+export function ImageIcon({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <rect x="3" y="3" width="18" height="18" rx="2.5" />
+      <path d="M6.5 17.5c2-5.5 5-9 11-10.5" />
     </svg>
   );
 }

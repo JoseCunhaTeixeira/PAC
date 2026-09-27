@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ArrowLeftIcon, ArrowRightIcon, DepthIcon, FlaskIcon, ImageIcon, PulseIcon } from "../icons";
 import { neighbours } from "./cells";
 import { STATE_MEANINGS } from "./format";
 import type { Card, Cell, Overview, Sentence, StageKey } from "./types";
@@ -30,7 +31,7 @@ export function StageHead({
         className="viz-summary"
         data-tip={
           !overview.paco && overview.cells.length > 0
-            ? "Made by hand\nNo check judged it\nEach measure is shown against the assistant's limits"
+            ? "By hand\nMeasured against the assistant's limits, not judged"
             : undefined
         }
       >
@@ -46,6 +47,14 @@ export function StageHead({
     </section>
   );
 }
+
+// A window's card's icon, as its stage's pages show it.
+const STAGE_ICONS: Record<StageKey, ReactNode> = {
+  records: <PulseIcon size={17} />,
+  dispersion: <ImageIcon size={17} />,
+  inversion: <DepthIcon size={17} />,
+  petro: <FlaskIcon size={17} />,
+};
 
 export function UnitCard({
   card,
@@ -91,6 +100,7 @@ export function UnitCard({
   return (
     <section className="viz-card">
       <div className="viz-unit-head">
+        {stage && <span className="card-icon">{STAGE_ICONS[stage]}</span>}
         <strong>{card.title}</strong>
         {card.status !== "none" && (
           <StatusBadge status={card.status} meaning={stage ? STATE_MEANINGS[stage][card.status].full : undefined} />
@@ -105,21 +115,23 @@ export function UnitCard({
         <span className="viz-nav">
           <button
             type="button"
-            className="viz-icon"
+            className="secondary icon"
+            aria-label="Previous"
             disabled={!before}
             data-tip={before ? `Previous (←)\n${before.hover[0]}` : undefined}
             onClick={() => before && onSelect(before.key)}
           >
-            ←
+            <ArrowLeftIcon size={16} />
           </button>
           <button
             type="button"
-            className="viz-icon"
+            className="secondary icon"
+            aria-label="Next"
             disabled={!after}
             data-tip={after ? `Next (→)\n${after.hover[0]}` : undefined}
             onClick={() => after && onSelect(after.key)}
           >
-            →
+            <ArrowRightIcon size={16} />
           </button>
         </span>
       </div>

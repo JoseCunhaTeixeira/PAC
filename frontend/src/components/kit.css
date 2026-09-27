@@ -56,7 +56,7 @@
 
 .page-hero h1 {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: var(--fs-h1);
   letter-spacing: -0.025em;
   color: #ffffff;
 }
@@ -64,7 +64,7 @@
 .page-hero .page-sub {
   margin: 4px 0 0;
   color: rgba(226, 236, 248, 0.78);
-  font-size: 0.92rem;
+  font-size: var(--fs-body);
 }
 
 .page-icon {
@@ -408,7 +408,7 @@
 .card-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px 18px;
   margin-bottom: 16px;
@@ -420,14 +420,14 @@
 
 .card-title {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   min-width: 0;
 }
 
 .card-title h2 {
   margin: 0;
-  font-size: 1.02rem;
+  font-size: var(--fs-h2);
   font-weight: 650;
   letter-spacing: -0.01em;
 }
@@ -435,7 +435,7 @@
 .card-hint {
   margin: 3px 0 0;
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: var(--fs-small);
 }
 
 .card-icon,
@@ -451,7 +451,7 @@
 }
 
 .card-step {
-  font-size: 0.85rem;
+  font-size: var(--fs-small);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -502,7 +502,7 @@
 }
 
 .field-label {
-  font-size: 0.8rem;
+  font-size: var(--fs-small);
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -526,7 +526,7 @@
 .field-unit {
   position: absolute;
   right: 10px;
-  font-size: 0.78rem;
+  font-size: var(--fs-caption);
   color: var(--text-faint);
   pointer-events: none;
 }
@@ -544,12 +544,12 @@
 }
 
 .field-hint {
-  font-size: 0.76rem;
+  font-size: var(--fs-caption);
   color: var(--text-faint);
 }
 
 .field-note {
-  font-size: 0.86rem;
+  font-size: var(--fs-small);
   color: var(--text-faint);
   margin: 0;
 }
@@ -557,7 +557,9 @@
 /* The segmented control. */
 
 .segmented {
-  display: inline-flex;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   padding: 3px;
   gap: 2px;
   border-radius: 11px;
@@ -568,9 +570,10 @@
 .segmented button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 5px 13px;
-  font-size: 0.84rem;
+  font-size: var(--fs-small);
   font-weight: 600;
   border-radius: 8px;
   background: transparent;
@@ -581,7 +584,7 @@
 
 .segmented.sm button {
   padding: 3px 10px;
-  font-size: 0.78rem;
+  font-size: var(--fs-small);
 }
 
 .segmented button:hover {
@@ -648,7 +651,7 @@ button.icon {
 
 button.large {
   padding: 11px 22px;
-  font-size: 0.95rem;
+  font-size: var(--fs-body);
   border-radius: 11px;
 }
 
@@ -656,7 +659,7 @@ a.button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
   font-weight: 600;
   padding: 8px 16px;
   border-radius: var(--radius-sm);
@@ -685,7 +688,7 @@ button:has(svg) {
   gap: 11px;
   padding: 12px 14px;
   border-radius: 11px;
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
   line-height: 1.45;
   border: 1px solid transparent;
 }
@@ -751,7 +754,7 @@ button:has(svg) {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.7rem;
+  font-size: var(--fs-micro);
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -760,7 +763,7 @@ button:has(svg) {
 
 .stat-value {
   margin-top: 4px;
-  font-size: 1.2rem;
+  font-size: var(--fs-value);
   font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--text);
@@ -771,7 +774,7 @@ button:has(svg) {
 }
 
 .stat-sub {
-  font-size: 0.78rem;
+  font-size: var(--fs-small);
   color: var(--text-muted);
 }
 
@@ -803,11 +806,12 @@ button:has(svg) {
 
 .empty strong {
   color: var(--text);
-  font-size: 1rem;
+  font-size: var(--fs-h2);
+  font-weight: 650;
 }
 
 .empty-body {
-  font-size: 0.88rem;
+  font-size: var(--fs-body);
   max-width: 460px;
 }
 
@@ -819,7 +823,8 @@ button:has(svg) {
   gap: 5px;
   padding: 2px 9px;
   border-radius: 999px;
-  font-size: 0.74rem;
+  font-size: var(--fs-caption);
+  line-height: 1.6;
   font-weight: 650;
   white-space: nowrap;
   background: var(--surface-hover);
@@ -832,18 +837,18 @@ button:has(svg) {
 }
 
 .badge.ok {
-  background: var(--success-bg);
-  color: var(--success-text);
+  background: var(--ok-soft);
+  color: var(--ok);
 }
 
 .badge.warn {
-  background: var(--warn-bg);
-  color: var(--warn-text);
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 
 .badge.bad {
-  background: var(--danger-bg);
-  color: var(--danger-text);
+  background: var(--bad-soft);
+  color: var(--bad);
 }
 
 /* Toggle chips: a mode, a position to include. */
@@ -863,7 +868,7 @@ button:has(svg) {
   border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: var(--fs-small);
   font-weight: 600;
   cursor: pointer;
   user-select: none;
@@ -891,6 +896,7 @@ button:has(svg) {
 .chip small {
   font-weight: 500;
   color: var(--text-faint);
+  font-size: var(--fs-caption);
 }
 
 /* A table in a card. */
@@ -927,7 +933,7 @@ details.fold > summary {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.86rem;
+  font-size: var(--fs-small);
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -980,7 +986,7 @@ details.fold > summary:hover {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 18px;
-  font-size: 0.88rem;
+  font-size: var(--fs-body);
   color: var(--text-muted);
 }
 
@@ -1072,12 +1078,6 @@ details.fold > summary:hover {
   background: rgba(79, 156, 245, 0.4);
 }
 
-.geometry-invalid {
-  margin: 8px 0 0;
-  font-size: 0.84rem;
-  color: var(--danger-text);
-}
-
 /* The run bar's states (RunPanel.tsx). */
 
 .run-ok,
@@ -1090,15 +1090,15 @@ details.fold > summary:hover {
 }
 
 .run-ok {
-  color: var(--success-text);
+  color: var(--ok);
 }
 
 .run-warn {
-  color: var(--warn-text);
+  color: var(--warn);
 }
 
 .run-bad {
-  color: var(--danger-text);
+  color: var(--bad);
 }
 
 .run-ok b,
@@ -1118,7 +1118,7 @@ details.fold > summary:hover {
   gap: 6px;
   padding: 5px 11px;
   border-radius: 999px;
-  font-size: 0.82rem;
+  font-size: var(--fs-small);
   font-weight: 650;
   text-decoration: none;
   color: var(--accent-fg);
@@ -1150,7 +1150,7 @@ details.fold > summary:hover {
   padding: 10px;
   max-height: 260px;
   overflow: auto;
-  font-size: 12px;
+  font-size: var(--fs-small);
   border-radius: 8px;
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -1215,13 +1215,13 @@ details.fold > summary:hover {
 
 .row-title strong {
   display: block;
-  font-size: 0.93rem;
+  font-size: var(--fs-body);
   font-weight: 650;
 }
 
 .row-title p {
   margin: 1px 0 0;
-  font-size: 0.82rem;
+  font-size: var(--fs-small);
   color: var(--text-muted);
 }
 
@@ -1244,7 +1244,7 @@ details.fold > summary:hover {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 0.84rem;
+  font-size: var(--fs-body);
   color: var(--text-muted);
 }
 
@@ -1294,15 +1294,15 @@ button.rail-cell:hover:not(:disabled) {
 
 /* The checks' verdicts (passed, flagged, rejected), a pick made by hand, one not judged. */
 button.rail-cell.pass {
-  background: color-mix(in srgb, var(--success-text) 34%, transparent);
+  background: color-mix(in srgb, var(--ok) 34%, transparent);
 }
 
 button.rail-cell.warn {
-  background: color-mix(in srgb, var(--warn-text) 42%, transparent);
+  background: color-mix(in srgb, var(--warn) 42%, transparent);
 }
 
 button.rail-cell.fail {
-  background: color-mix(in srgb, var(--danger-text) 40%, transparent);
+  background: color-mix(in srgb, var(--bad) 40%, transparent);
 }
 
 button.rail-cell.hand {
@@ -1314,15 +1314,15 @@ button.rail-cell.auto {
 }
 
 button.rail-cell.pass:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--success-text) 58%, transparent);
+  background: color-mix(in srgb, var(--ok) 58%, transparent);
 }
 
 button.rail-cell.warn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--warn-text) 66%, transparent);
+  background: color-mix(in srgb, var(--warn) 66%, transparent);
 }
 
 button.rail-cell.fail:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--danger-text) 64%, transparent);
+  background: color-mix(in srgb, var(--bad) 64%, transparent);
 }
 
 button.rail-cell.hand:hover:not(:disabled) {
@@ -1357,15 +1357,15 @@ button.rail-cell.hand.active {
 }
 
 button.rail-cell.pass.active {
-  background: color-mix(in srgb, var(--success-text) 72%, transparent);
+  background: color-mix(in srgb, var(--ok) 72%, transparent);
 }
 
 button.rail-cell.warn.active {
-  background: color-mix(in srgb, var(--warn-text) 80%, transparent);
+  background: color-mix(in srgb, var(--warn) 80%, transparent);
 }
 
 button.rail-cell.fail.active {
-  background: color-mix(in srgb, var(--danger-text) 78%, transparent);
+  background: color-mix(in srgb, var(--bad) 78%, transparent);
 }
 
 button.rail-cell.auto.active {
@@ -1380,7 +1380,7 @@ button.rail-cell:active {
   display: flex;
   justify-content: space-between;
   margin-top: 5px;
-  font-size: 0.74rem;
+  font-size: var(--fs-caption);
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
@@ -1389,7 +1389,7 @@ button.rail-cell:active {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 16px;
-  font-size: 0.8rem;
+  font-size: var(--fs-small);
   color: var(--text-muted);
 }
 
@@ -1422,15 +1422,15 @@ button.rail-cell:active {
 }
 
 .rail-legend i.pass {
-  background: color-mix(in srgb, var(--success-text) 50%, transparent);
+  background: color-mix(in srgb, var(--ok) 50%, transparent);
 }
 
 .rail-legend i.warn {
-  background: color-mix(in srgb, var(--warn-text) 58%, transparent);
+  background: color-mix(in srgb, var(--warn) 58%, transparent);
 }
 
 .rail-legend i.fail {
-  background: color-mix(in srgb, var(--danger-text) 55%, transparent);
+  background: color-mix(in srgb, var(--bad) 55%, transparent);
 }
 
 .rail-legend i.auto {
@@ -1492,7 +1492,7 @@ button.rail-cell:active {
   gap: 8px;
   padding: 6px 12px 6px 6px;
   border-radius: 999px;
-  font-size: 0.86rem;
+  font-size: var(--fs-small);
   font-weight: 600;
   color: var(--text-muted);
   background: var(--surface-2);
@@ -1513,7 +1513,7 @@ button.pick-step:hover:not(:disabled) {
   height: 22px;
   border-radius: 50%;
   font-style: normal;
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);
   font-weight: 700;
   background: var(--surface-hover);
   color: var(--text-muted);
@@ -1536,7 +1536,7 @@ button.pick-step:hover:not(:disabled) {
 
 .pick-step.done i {
   background: var(--success-bg);
-  color: var(--success-text);
+  color: var(--ok);
 }
 
 .pick-step input {
@@ -1580,7 +1580,7 @@ button.pick-step:hover:not(:disabled) {
 .howto {
   margin: 0;
   padding-left: 18px;
-  font-size: 0.84rem;
+  font-size: var(--fs-small);
   color: var(--text-muted);
   display: flex;
   flex-direction: column;
@@ -1594,6 +1594,11 @@ button.pick-step:hover:not(:disabled) {
   margin-bottom: 8px;
 }
 
+.section-label strong {
+  font-size: var(--fs-body);
+  font-weight: 650;
+}
+
 @media (max-width: 1100px) {
   .pick-grid {
     grid-template-columns: 1fr;
@@ -1604,7 +1609,7 @@ button.pick-step:hover:not(:disabled) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.84rem;
+  font-size: var(--fs-small);
   font-weight: 600;
 }
 
@@ -1615,7 +1620,7 @@ button.pick-step:hover:not(:disabled) {
   align-items: center;
   justify-content: space-between;
   margin: 18px 0 8px;
-  font-size: 0.86rem;
+  font-size: var(--fs-small);
 }
 
 .rail-actions {
@@ -1625,20 +1630,20 @@ button.pick-step:hover:not(:disabled) {
 
 .rail-actions button {
   padding: 4px 10px;
-  font-size: 0.8rem;
+  font-size: var(--fs-small);
 }
 
 .stepper {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-size: 0.86rem;
+  font-size: var(--fs-small);
   color: var(--text-muted);
 }
 
 .stepper b {
   color: var(--text);
-  font-size: 1rem;
+  font-size: var(--fs-h2);
   font-variant-numeric: tabular-nums;
   margin-right: -5px;
 }
@@ -1653,7 +1658,7 @@ table.layers th {
 }
 
 table.layers tr.sub th {
-  font-size: 0.7rem;
+  font-size: var(--fs-micro);
   padding-top: 0;
   text-transform: none;
   letter-spacing: 0;
@@ -1691,7 +1696,7 @@ table.layers input[type="number"] {
   max-width: 320px;
   padding: 8px 11px;
   border-radius: 9px;
-  font-size: 0.78rem;
+  font-size: var(--fs-small);
   font-weight: 450;
   line-height: 1.45;
   color: #e7ebf2;
@@ -1885,5 +1890,77 @@ table.layers:not(.sorting) tr:hover .layer-actions,
 }
 
 .run-bar-last {
-  font-size: 0.82rem;
+  font-size: var(--fs-small);
+}
+
+/* A number field wrong (numbers.ts): left empty, or beyond its bounds. A red ring; why in a pill
+   under a card's field, in a red tooltip on a table's or a line's; the run bar's chips. */
+/* Above index.css's input rule (0,3,1). */
+input[type="number"][aria-invalid="true"].invalid:not(:disabled) {
+  border-color: var(--danger-text);
+  background: color-mix(in srgb, var(--danger-bg) 55%, var(--surface));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger-text) 14%, transparent);
+}
+
+input[type="number"][aria-invalid="true"].invalid:not(:disabled):focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger-text) 26%, transparent);
+}
+
+.field-error {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px 2px 6px;
+  border-radius: 999px;
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  animation: issue-in 0.16s ease-out;
+}
+
+.run-issue {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  box-shadow: none;
+  animation: issue-in 0.16s ease-out;
+}
+
+.run-issue.wrong {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border-color: color-mix(in srgb, var(--danger-text) 22%, transparent);
+}
+
+button.run-issue.wrong:hover {
+  background: color-mix(in srgb, var(--danger-text) 12%, var(--danger-bg));
+}
+
+.tip-layer.danger b {
+  color: #ff9b94;
+}
+
+@keyframes issue-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .field-error,
+  .run-issue {
+    animation: none;
+  }
 }

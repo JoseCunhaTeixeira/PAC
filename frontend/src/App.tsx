@@ -117,7 +117,7 @@ export default function App() {
                         <i
                           className="sidebar-running"
                           aria-label="Running"
-                          data-tip={item.to === "/assistant" ? "Answering\nOpen it to follow or stop it" : "Running\nOpen the page to follow or stop it"}
+                          data-tip={item.to === "/assistant" ? "Answering" : "Running"}
                         />
                       )}
                     </NavLink>

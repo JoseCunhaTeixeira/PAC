@@ -73,7 +73,7 @@ export function PositionRail({
       <div
         className={`rail-cells${onPaint ? " paint" : ""}`}
         role="listbox"
-        aria-label="Positions along the line"
+        aria-label="Windows along the line"
         aria-multiselectable={onPaint ? true : undefined}
       >
         {cells.map((cell) => (

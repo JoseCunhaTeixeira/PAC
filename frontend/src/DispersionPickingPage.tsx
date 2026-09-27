@@ -6,6 +6,7 @@ import {
   type DragMode,
 } from "./components/DispersionImageCanvas";
 import {
+  ModeHead,
   PseudoSectionCanvas,
   type PseudoSection,
 } from "./components/PseudoSectionCanvas";
@@ -14,8 +15,10 @@ import {
   ArrowRightIcon,
   CheckIcon,
   CrosshairIcon,
+  ImageIcon,
   LassoIcon,
   RulerIcon,
+  SpectrumIcon,
   StrataIcon,
   TrashIcon,
   ZoomIcon,
@@ -353,7 +356,7 @@ export default function DispersionPickingPage() {
     <Page
       icon={<CrosshairIcon size={24} />}
       title="Dispersion picking"
-      subtitle="Pick the dispersion curves on each image"
+      subtitle="Pick the curves on each dispersion image"
       art="picking"
       actions={<RunSelect folder={folder} onChange={chooseRun} />}
     >
@@ -366,8 +369,8 @@ export default function DispersionPickingPage() {
         <div className="stack">
           <Card
             icon={<RulerIcon size={17} />}
-            title="Positions"
-            hint="Click one, or step with ← →."
+            title="Windows"
+            hint="Click one, or ← →."
             aside={
               <RailLegend
                 groups={[
@@ -410,25 +413,26 @@ export default function DispersionPickingPage() {
           {!image && (
             <Empty
               icon={<CrosshairIcon size={22} />}
-              title="Choose a position"
+              title="Choose a window"
             />
           )}
 
           {image && xmid !== null && (
             <div className="pick-grid">
               <Card
+                icon={<ImageIcon size={17} />}
                 title={`xmid ${xmid.toFixed(2)} m`}
                 hint={
                   dragMode === "lasso"
-                    ? "Draw a lasso around a mode: the picker tracks the ridge inside."
-                    : "Drag to zoom, along an axis or a box; double-click to go back."
+                    ? "Lasso a mode: the picker follows its ridge."
+                    : "Drag to zoom; double-click to go back."
                 }
                 aside={
                   <>
                     <button
                       type="button"
                       className="secondary icon"
-                      data-tip="Previous position (←)"
+                      data-tip="Previous window (←)"
                       disabled={index <= 0}
                       onClick={() => setXmid(xmids[index - 1])}
                     >
@@ -437,7 +441,7 @@ export default function DispersionPickingPage() {
                     <button
                       type="button"
                       className="secondary icon"
-                      data-tip="Next position (→)"
+                      data-tip="Next window (→)"
                       disabled={index < 0 || index >= xmids.length - 1}
                       onClick={() => setXmid(xmids[index + 1])}
                     >
@@ -481,7 +485,7 @@ export default function DispersionPickingPage() {
                     type="button"
                     className={`pick-step${pendingPolygon ? " done" : dragMode === "lasso" ? " current" : ""}`}
                     data-tip={
-                      "Lasso a ridge\nDraw around one mode's ridge on the image\nThe picker follows the ridge inside"
+                      "Lasso a ridge\nDraw around one mode: the picker follows its ridge"
                     }
                     onClick={() => setDragMode("lasso")}
                   >
@@ -492,7 +496,7 @@ export default function DispersionPickingPage() {
                   <label
                     className={`pick-step${pendingPolygon && LABEL_PATTERN.test(label) ? " done" : pendingPolygon ? " current" : ""}`}
                     data-tip={
-                      "Name it\nM0 for the fundamental mode, M1 the next, and so on"
+                      "Name it\nM0: the fundamental mode, M1: the next…"
                     }
                   >
                     <i>
@@ -527,7 +531,7 @@ export default function DispersionPickingPage() {
                 </div>
               </Card>
 
-              <Card title="Picked curves">
+              <Card icon={<SpectrumIcon size={17} />} title="Picked curves">
                 {image.curves.length === 0 ? (
                   <p className="faint">None yet.</p>
                 ) : (
@@ -557,7 +561,7 @@ export default function DispersionPickingPage() {
             <Card
               icon={<StrataIcon size={17} />}
               title="Pseudo-sections"
-              hint="Click a column to open its position."
+              hint="Click a column to open its window."
               aside={
                 <Segmented
                   size="sm"
@@ -574,14 +578,14 @@ export default function DispersionPickingPage() {
               <div className="stack">
                 {Object.entries(labelCounts).map(([lbl, count]) => (
                   <div key={lbl}>
-                    <div className="section-label">
-                      <strong>{lbl}</strong>
-                      <Badge tone={count === xmids.length ? "ok" : "neutral"}>
-                        {count}/{xmids.length} positions
-                      </Badge>
-                    </div>
+                    <ModeHead
+                      label={lbl}
+                      count={count}
+                      total={xmids.length}
+                      unit="windows"
+                    />
                     {count < 2 ? (
-                      <p className="faint">Needs 2 picked positions.</p>
+                      <p className="faint">Needs 2 picked windows.</p>
                     ) : (
                       pseudoSections[lbl] && (
                         <PseudoSectionCanvas

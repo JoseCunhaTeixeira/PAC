@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CANVAS_FONT, canvasFont, canvasPalette, useTheme } from "../../theme";
+import { CANVAS_FONT, canvasPalette, useTheme } from "../../theme";
 import { useContainerWidth } from "../useContainerWidth";
 import { TooltipLines } from "../HoverTooltip";
 import { evenTicks, tickDecimals, useZoom, type PlotRect } from "../useZoom";
@@ -145,7 +145,7 @@ export function ChainTracesCanvas({
     ctx.strokeStyle = axes.axis;
     ctx.strokeRect(ML + 0.5, MT + 0.5, plotW - 1, plotH - 1);
     ctx.fillStyle = axes.tick;
-    ctx.font = canvasFont(11);
+    ctx.font = CANVAS_FONT;
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     const yDecimals = tickDecimals((y1 - y0) / 3);
@@ -298,12 +298,12 @@ function MarginalCanvas({ marginal, width }: { marginal: Marginal; width: number
     ctx.strokeStyle = axes.axis;
     ctx.strokeRect(SM_ML + 0.5, SM_MT + 0.5, plotW - 1, plotH - 1);
     ctx.fillStyle = axes.title;
-    ctx.font = canvasFont(12);
+    ctx.font = CANVAS_FONT;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillText(parameterLabel(marginal.parameter), SM_ML, 2);
     ctx.fillStyle = axes.tick;
-    ctx.font = canvasFont(10);
+    ctx.font = CANVAS_FONT;
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
     ctx.fillText(num(x0), SM_ML, SM_MT + plotH + 3);

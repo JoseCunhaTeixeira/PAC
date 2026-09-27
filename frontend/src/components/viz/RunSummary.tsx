@@ -1,4 +1,5 @@
 import { capitalized, runDate } from "./format";
+import { FolderIcon } from "../icons";
 import type { LengthTrial, RunCard, Setting } from "./types";
 import { Fold, OriginTag, SettingsList } from "./ui";
 
@@ -63,6 +64,9 @@ export function RunSummary({ card }: { card: RunCard }) {
   return (
     <section className="viz-card">
       <div className="viz-run-title">
+        <span className="card-icon">
+          <FolderIcon size={17} />
+        </span>
         <strong>{card.profile}</strong>
         {card.mode && (
           <span className="viz-chip" data-tip={"Processing mode"}>
@@ -72,7 +76,7 @@ export function RunSummary({ card }: { card: RunCard }) {
         {card.by && (
           <span
             className="viz-chip blue"
-            data-tip={card.by === "assistant" ? "Run by the assistant, checked stage by stage" : "Run by hand, from the computing pages"}
+            data-tip={card.by === "assistant" ? "By the assistant\nChecked stage by stage" : "By hand"}
           >
             {card.by === "assistant" ? "by the assistant" : "by hand"}
           </span>

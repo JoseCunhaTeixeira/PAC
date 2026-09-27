@@ -37,6 +37,6 @@ export function canvasFont(size: number, weight = 400): string {
   return `${weight} ${size}px ${FONT_FAMILY}`;
 }
 
-// Shared so every canvas-based plot (dispersion image, pseudo-section, mute
-// gather) renders axis/tick/title text at the same size.
-export const CANVAS_FONT = canvasFont(13);
+// Every plot's text (ticks, axes, colour bars, lanes) at one size: the pages' small text
+// (index.css's --fs-small, 0.82rem of 15px).
+export const CANVAS_FONT = canvasFont(12);

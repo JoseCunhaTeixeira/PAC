@@ -2,32 +2,7 @@
    canvases' (palette.ts). */
 
 .viz {
-  --ok: #1a9e4b;
-  --ok-soft: rgba(26, 158, 75, 0.12);
-  --warn: #b87404;
-  --warn-soft: rgba(217, 138, 4, 0.14);
-  --bad: #d63c3c;
-  --bad-soft: rgba(214, 60, 60, 0.12);
-  --none: #8a8a90;
-  --none-soft: rgba(138, 138, 144, 0.14);
-  --blue: #2a78d6;
-  --blue-soft: rgba(42, 120, 214, 0.12);
-  --card-radius: 14px;
-
-  font-size: 0.95rem;
-}
-
-[data-theme="dark"] .viz {
-  --ok: #34c46a;
-  --ok-soft: rgba(52, 196, 106, 0.16);
-  --warn: #f0b429;
-  --warn-soft: rgba(240, 180, 41, 0.16);
-  --bad: #f06a6a;
-  --bad-soft: rgba(240, 106, 106, 0.16);
-  --none: #8d9099;
-  --none-soft: rgba(141, 144, 153, 0.16);
-  --blue: #4f9cf5;
-  --blue-soft: rgba(79, 156, 245, 0.16);
+  font-size: var(--fs-body);
 }
 
 /* Header: the title, and the run to show. */
@@ -48,7 +23,7 @@
 .viz-sub {
   margin: 4px 0 0;
   color: var(--text-muted);
-  font-size: 0.92rem;
+  font-size: var(--fs-body);
 }
 
 .viz-picker {
@@ -70,21 +45,20 @@
 .viz-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--card-radius);
+  border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
-  padding: 16px 18px;
+  padding: 20px 22px;
 }
 
 .viz-card + .viz-card,
 .viz-section + .viz-section {
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .viz-section {
-  margin-top: 22px;
+  margin-top: 16px;
 }
 
-.viz h2.viz-h2,
 .viz h3.viz-h3 {
   margin: 0 0 10px;
   padding: 0;
@@ -92,14 +66,8 @@
   color: var(--text);
 }
 
-.viz h2.viz-h2 {
-  font-size: 1.05rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
-
 .viz h3.viz-h3 {
-  font-size: 0.8rem;
+  font-size: var(--fs-small);
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -119,7 +87,7 @@
 }
 
 .viz-small {
-  font-size: 0.82rem;
+  font-size: var(--fs-small);
 }
 
 /* The run: who made it, its windows at a glance, and each setting with why. */
@@ -129,11 +97,18 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 10px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+}
+
+/* A card's icon, as kit's card's (kit.css's .card-icon), then its title. */
+.viz-run-title > .card-icon,
+.viz-unit-head > .card-icon {
+  margin-right: 2px;
 }
 
 .viz-run-title strong {
-  font-size: 1.15rem;
+  font-size: var(--fs-h2);
+  font-weight: 650;
   letter-spacing: -0.01em;
 }
 
@@ -143,8 +118,8 @@
   gap: 5px;
   padding: 2px 9px;
   border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: var(--fs-caption);
+  font-weight: 650;
   line-height: 1.6;
   background: var(--none-soft);
   color: var(--text-muted);
@@ -171,7 +146,7 @@
 }
 
 .viz-tile-label {
-  font-size: 0.72rem;
+  font-size: var(--fs-micro);
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -180,7 +155,7 @@
 
 .viz-tile-value {
   margin-top: 3px;
-  font-size: 1.12rem;
+  font-size: var(--fs-value);
   font-weight: 650;
   line-height: 1.3;
   color: var(--text);
@@ -189,18 +164,18 @@
 
 .viz-tile-sub {
   margin-top: 2px;
-  font-size: 0.8rem;
+  font-size: var(--fs-small);
   color: var(--text-muted);
 }
 
 .viz-origin {
   display: inline-block;
   margin-top: 6px;
-  padding: 0 7px;
+  padding: 2px 9px;
   border-radius: 999px;
-  font-size: 0.7rem;
+  font-size: var(--fs-caption);
   font-weight: 650;
-  line-height: 1.7;
+  line-height: 1.6;
   background: var(--none-soft);
   color: var(--text-muted);
 }
@@ -229,7 +204,7 @@
   gap: 6px;
   cursor: pointer;
   list-style: none;
-  font-size: 0.86rem;
+  font-size: var(--fs-small);
   font-weight: 600;
   color: var(--text-muted);
   user-select: none;
@@ -247,7 +222,7 @@
   border-bottom: 2px solid currentColor;
   transform: rotate(-45deg);
   transition: transform 0.15s ease;
-  margin-right: 2px;
+  margin-right: 3px;
 }
 
 .viz-fold[open] > summary::before {
@@ -267,13 +242,13 @@
 
 .viz-settings dt {
   font-weight: 600;
-  font-size: 0.86rem;
+  font-size: var(--fs-small);
   color: var(--text-muted);
 }
 
 .viz-settings dd {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
 }
 
 .viz-settings dd b {
@@ -285,7 +260,7 @@
   display: block;
   margin-top: 1px;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--fs-small);
 }
 
 .viz-trials {
@@ -316,7 +291,7 @@
   background: transparent;
   color: var(--text-muted);
   box-shadow: none;
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
 }
 
 .viz button.viz-tab:hover:not(:disabled) {
@@ -336,7 +311,7 @@
 }
 
 .viz-tab small {
-  font-size: 0.74rem;
+  font-size: var(--fs-caption);
   font-weight: 600;
   padding: 0 7px;
   border-radius: 999px;
@@ -357,7 +332,7 @@
   flex-wrap: wrap;
   gap: 4px 14px;
   margin-top: 8px;
-  font-size: 0.8rem;
+  font-size: var(--fs-small);
   color: var(--text-muted);
 }
 
@@ -398,13 +373,13 @@
 
 .viz-hint {
   margin: 6px 0 0;
-  font-size: 0.78rem;
+  font-size: var(--fs-caption);
   color: var(--text-faint);
 }
 
 .viz-summary {
   margin: 0;
-  font-size: 0.98rem;
+  font-size: var(--fs-body);
   font-weight: 550;
 }
 
@@ -415,11 +390,12 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 10px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .viz-unit-head strong {
-  font-size: 1.05rem;
+  font-size: var(--fs-h2);
+  font-weight: 650;
   letter-spacing: -0.01em;
   margin-right: 4px;
 }
@@ -430,31 +406,15 @@
   gap: 4px;
 }
 
-.viz button.viz-icon {
-  padding: 3px 9px;
-  border-radius: 8px;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  box-shadow: none;
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-
-.viz button.viz-icon:hover:not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
 .viz-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 9px;
+  padding: 2px 9px;
   border-radius: 999px;
-  font-size: 0.76rem;
+  font-size: var(--fs-caption);
   font-weight: 650;
-  line-height: 1.7;
+  line-height: 1.6;
   white-space: nowrap;
 }
 
@@ -492,7 +452,7 @@
   grid-template-columns: 20px 1fr;
   gap: 8px;
   align-items: start;
-  font-size: 0.92rem;
+  font-size: var(--fs-body);
   line-height: 1.45;
 }
 
@@ -504,7 +464,7 @@
   height: 18px;
   margin-top: 1px;
   border-radius: 50%;
-  font-size: 0.68rem;
+  font-size: var(--fs-micro);
   font-weight: 800;
 }
 
@@ -541,16 +501,27 @@
   }
 }
 
+/* A plot's title line: its title, and at the right its switch; as tall without one, so that
+   plots side by side start level. */
+.viz-plot-head {
+  min-height: 32px;
+  margin-bottom: 4px;
+}
+
+.viz-plot-head .viz-plot-title {
+  margin: 0;
+}
+
 .viz-plot-title {
   margin: 0 0 4px;
-  font-size: 0.8rem;
+  font-size: var(--fs-small);
   font-weight: 650;
   color: var(--text-muted);
 }
 
 .viz-plot-note {
   margin: 4px 0 0;
-  font-size: 0.78rem;
+  font-size: var(--fs-small);
   color: var(--text-faint);
 }
 
@@ -559,7 +530,7 @@
   flex-wrap: wrap;
   gap: 2px 12px;
   margin-top: 4px;
-  font-size: 0.78rem;
+  font-size: var(--fs-small);
   color: var(--text-muted);
 }
 
@@ -595,7 +566,7 @@
 
 .viz table.viz-table {
   margin: 0;
-  font-size: 0.84rem;
+  font-size: var(--fs-body);
 }
 
 .viz table.viz-table th,
@@ -625,7 +596,7 @@
   align-items: center;
   gap: 8px;
   font-weight: 650;
-  font-size: 0.88rem;
+  font-size: var(--fs-body);
 }
 
 /* Display settings of a stage's line views. */
@@ -641,17 +612,14 @@
 .viz-field {
   display: grid;
   gap: 4px;
-  font-size: 0.78rem;
-  font-weight: 650;
+  font-size: var(--fs-small); /* as a card's field's name (kit's .field-label) */
+  font-weight: 600;
   color: var(--text-muted);
 }
 
 .viz-field select,
 .viz-field input:not([type="checkbox"]):not([type="radio"]) {
   margin-left: 0;
-  padding: 6px 9px;
-  border-radius: 9px;
-  font-size: 0.88rem;
 }
 
 .viz-field input[type="number"] {
@@ -662,45 +630,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.viz-segment {
-  display: inline-flex;
-  padding: 3px;
-  gap: 2px;
-  border-radius: 10px;
-  background: var(--surface-hover);
-  border: 1px solid var(--border);
-}
-
-.viz .viz-segment button {
-  padding: 4px 11px;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-muted);
-  box-shadow: none;
-  font-size: 0.84rem;
-  font-weight: 600;
-}
-
-.viz .viz-segment button.active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow-sm);
-}
-
-.viz button.viz-button {
-  padding: 7px 14px;
-  border-radius: 9px;
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-  box-shadow: none;
-  font-size: 0.86rem;
-}
-
-.viz button.viz-button:hover:not(:disabled) {
-  background: var(--surface-hover);
 }
 
 /* Soil column. */
@@ -724,7 +653,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 3px 10px 0;
-  font-size: 0.82rem;
+  font-size: var(--fs-small);
   color: #1a1a1a;
   overflow: hidden;
 }
@@ -750,7 +679,7 @@
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.85);
   color: #1f5fbf;
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 650;
 }
 
@@ -781,15 +710,10 @@
   padding: 26px 16px;
   text-align: center;
   color: var(--text-muted);
-  font-size: 0.92rem;
-}
-
-.viz-error {
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: var(--bad-soft);
-  color: var(--bad);
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
 }
 
 /* Canvases' overlays, and the chains' small multiples. */
@@ -802,7 +726,7 @@
   border-radius: 9px;
   background: #0f1728;
   color: #e7ebf2;
-  font-size: 0.78rem;
+  font-size: var(--fs-small);
   font-weight: 450;
   line-height: 1.45;
   white-space: nowrap;
@@ -880,10 +804,6 @@
 }
 
 /* A card's head: its verdict first, then each check's, set apart and quieter. */
-.viz-unit-head > .viz-badge {
-  font-size: 0.8rem;
-  padding: 3px 11px;
-}
 
 .viz-gate-list {
   display: inline-flex;
@@ -894,18 +814,7 @@
   border-left: 1px solid var(--border-strong);
 }
 
-.viz-gate-list .viz-badge {
-  font-size: 0.68rem;
-  padding: 1px 7px;
-}
-
 /* A field beside its label, in a card's head (the model shown). */
-.viz-field.viz-inline {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-}
 
 /* A profile not processed yet: its records counted as the computing pages count them, the one
    shown chosen beside. */

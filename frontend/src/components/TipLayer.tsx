@@ -4,7 +4,8 @@ import { TooltipLines } from "./HoverTooltip";
 // Every element with a `data-tip` says it on hover, as the plots' own tooltips do: its first line
 // in bold, then one bullet a line (the lines split on "\n"). One layer for the whole app, so that
 // every hover looks alike; the innermost element's tip wins. `data-tip-align="right"` opens it
-// leftward (an element at a card's right edge), `data-tip-place="above"` over the element.
+// leftward (an element at a card's right edge), `data-tip-place="above"` over the element,
+// `data-tip-tone="danger"` says what is wrong (a number field's issue) in red.
 
 interface Shown {
   lines: string[];
@@ -12,6 +13,7 @@ interface Shown {
   y: number;
   align: "center" | "right";
   above: boolean;
+  danger: boolean;
 }
 
 export function TipLayer() {
@@ -35,6 +37,7 @@ export function TipLayer() {
         y: above ? box.top - 8 : box.bottom + 8,
         align: right ? "right" : "center",
         above,
+        danger: element.dataset.tipTone === "danger",
       });
     }
     function hide() {
@@ -58,7 +61,7 @@ export function TipLayer() {
   const left = shown.align === "right" ? undefined : Math.min(Math.max(shown.x, half + 8), window.innerWidth - half - 8);
   return (
     <div
-      className="tip-layer"
+      className={shown.danger ? "tip-layer danger" : "tip-layer"}
       role="tooltip"
       style={{
         left,

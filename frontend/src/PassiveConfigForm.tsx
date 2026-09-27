@@ -32,6 +32,7 @@ import {
   NumberField,
   Segmented,
 } from "./components/kit";
+import { above, below, upTo } from "./components/numbers";
 import { RunPanel } from "./components/RunPanel";
 import { useStoredState } from "./components/stored";
 import {
@@ -118,6 +119,10 @@ function Form({
   const [workers, setWorkers] = useStoredState(`${kept}.workers`, 1);
   const [nPositions, setNPositions] = useState(0);
 
+  // At most one worker a window.
+  const maxWorkers = nPositions > 0 ? Math.min(nCpus, nPositions) : nCpus;
+  // Fewer windows than workers: as many workers, for good (more windows later do not raise them).
+  if (workers > maxWorkers) setWorkers(maxWorkers);
   const config = {
     profile,
     mode: "passive",
@@ -134,7 +139,6 @@ function Form({
     },
     workers,
   };
-  const maxWorkers = nPositions > 0 ? Math.min(nCpus, nPositions) : nCpus;
 
   return (
     <>
@@ -151,7 +155,7 @@ function Form({
         <Card
           step={2}
           title="Preprocessing"
-          hint="What each record goes through first."
+          hint="Applied to each record first."
         >
           <div className="rows">
             <MutingRow
@@ -198,6 +202,7 @@ function Form({
                   onChange={(v) => setSlicing({ ...slicing, segment_step: v })}
                   min={0.01}
                   max={maxTime}
+                  check={upTo(slicing.segment_duration)}
                   step={0.01}
                 />
               </Fields>
@@ -244,6 +249,7 @@ function Form({
                     value={selection.vmax}
                     onChange={(v) => setSelection({ ...selection, vmax: v })}
                     min={0}
+                    check={above(selection.vmin)}
                   />
                 </Fields>
               )}
@@ -284,6 +290,7 @@ function Form({
                     onChange={(v) => setWhitening({ ...whitening, fmax: v })}
                     min={0}
                     max={nyquist}
+                    check={above(whitening.fmin)}
                     step={5}
                   />
                   <NumberField
@@ -295,6 +302,12 @@ function Form({
                     }
                     min={0}
                     max={nyquist / 4}
+                    // Narrower than the band, when there is one (its "To" says otherwise).
+                    check={
+                      whitening.fmax > whitening.fmin
+                        ? below(whitening.fmax - whitening.fmin)
+                        : undefined
+                    }
                     step={1}
                   />
                 </Fields>
@@ -331,7 +344,7 @@ function Form({
         <Card
           step={4}
           title="Dispersion image"
-          hint="The stacked virtual shot's phase-shift image."
+          hint="The stacked virtual shot's dispersion image."
         >
           <div className="rows">
             <DispersionRows

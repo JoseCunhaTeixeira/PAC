@@ -1,12 +1,16 @@
+import { useState } from "react";
 import { API } from "../../api";
 import { terrain, viridis } from "../colormaps";
+import { FlaskIcon, LayersIcon, StrataIcon } from "../icons";
+import { Card, Segmented } from "../kit";
+import { ModeHead } from "../PseudoSectionCanvas";
 import { PetroSectionCanvas, type PetroSectionData } from "../PetroSectionCanvas";
 import { PseudoSectionComparisonCanvas, type PseudoSectionComparisonData } from "../PseudoSectionComparisonCanvas";
 import { useZoomLink } from "../useZoom";
 import { VelocitySectionCanvas } from "../VelocitySectionCanvas";
 import { xmidOf } from "./format";
 import { StageHead, UnitCard } from "./panel";
-import { CurveFitPlot, SoilColumnView } from "./plots";
+import { CurveFitPlot, SoilColumnView, type CurveAxis } from "./plots";
 import type { Overview, PetroCard } from "./types";
 import { Details, Empty, Skeleton } from "./ui";
 import { useJson } from "./useJson";
@@ -39,6 +43,10 @@ export function PetroPanel({
   onSelect: (key: string) => void;
 }) {
   const zoomLink = useZoomLink(folder);
+  // The picked and modelled pseudo-sections' vertical axis.
+  const [comparisonAxis, setComparisonAxis] = useState<"frequency" | "wavelength">("frequency");
+  // The window's curve's axis.
+  const [curveAxis, setCurveAxis] = useState<CurveAxis>("frequency");
   const xmid = selected ? xmidOf(selected) : null;
   const card = useJson<PetroCard>(xmid !== null ? `${API}/quality/petro/card/${at(folder)}/${xmid}` : null);
   const columns = (overview?.cells ?? []).filter((cell) => cell.status !== "none").length;
@@ -83,7 +91,23 @@ export function PetroPanel({
                   <div className="viz-plots-2">
                     <SoilColumnView column={petroCard.column} />
                     {petroCard.curve ? (
-                      <CurveFitPlot curve={petroCard.curve} axis="frequency" modelled="the soil column's" />
+                      <CurveFitPlot
+                        curve={petroCard.curve}
+                        axis={curveAxis}
+                        modelled="the soil column's"
+                        aside={
+                          <Segmented
+                            size="sm"
+                            label="Along"
+                            value={curveAxis}
+                            onChange={setCurveAxis}
+                            options={[
+                              { value: "frequency", label: "Frequency" },
+                              { value: "wavelength", label: "Wavelength" },
+                            ]}
+                          />
+                        }
+                      />
                     ) : (
                       <Empty>No picked curve.</Empty>
                     )}
@@ -92,13 +116,12 @@ export function PetroPanel({
               </UnitCard>
             </div>
           )}
-          <section className="viz-section viz-card">
-            <h2
-              className="viz-h2"
-              data-tip={"N\nThe blow count of the Standard Penetration Test (SPT)\nThe soil's resistance to a driven sampler"}
-            >
-              Soil types and penetration resistance (N)
-            </h2>
+          <Card
+            className="viz-section"
+            icon={<FlaskIcon size={17} />}
+            title="Soil type and penetration resistance (N) sections"
+            hint={"N (SPT)\nBlow count: the soil's resistance to a driven sampler"}
+          >
             {section.data ? (
               <PetroSectionCanvas section={section.data} marker={xmid ?? undefined} onPick={pick} />
             ) : !line || section.error ? (
@@ -106,15 +129,14 @@ export function PetroPanel({
             ) : (
               <Skeleton height={380} />
             )}
-          </section>
+          </Card>
           {(modulus.data || vs.data) && (
-            <section className="viz-section viz-card">
-              <h2
-                className="viz-h2"
-                data-tip={"Shear modulus and Vs\nHertz-Mindlin, forward-modelled from the soil columns\nBefore the fit to the picked curves"}
-              >
-                Shear modulus and Vs
-              </h2>
+            <Card
+              className="viz-section"
+              icon={<LayersIcon size={17} />}
+              title="Shear modulus and Vs sections"
+              hint={"From the soil columns (Hertz-Mindlin)\nBefore the fit to the picked curves"}
+            >
               {modulus.data && (
                 <VelocitySectionCanvas
                   positions={modulus.data.positions}
@@ -142,18 +164,35 @@ export function PetroPanel({
                   onPick={pick}
                 />
               )}
-            </section>
+            </Card>
           )}
           {comparison.data && (
-            <section className="viz-section viz-card">
-              <h2 className="viz-h2">Picked and modelled curves</h2>
+            <Card
+              className="viz-section"
+              icon={<StrataIcon size={17} />}
+              title="Picked and modelled pseudo-sections"
+              aside={
+                <Segmented
+                  size="sm"
+                  label="Vertical axis"
+                  value={comparisonAxis}
+                  onChange={setComparisonAxis}
+                  options={[
+                    { value: "frequency", label: "Frequency" },
+                    { value: "wavelength", label: "Wavelength" },
+                  ]}
+                />
+              }
+            >
+              <ModeHead label="M0" count={comparison.data.positions.length} total={overview?.cells.length ?? 0} unit="windows" />
               <PseudoSectionComparisonCanvas
                 comparison={comparison.data}
                 velocityLabel="Phase velocity (m/s)"
+                mode={comparisonAxis}
                 marker={xmid ?? undefined}
                 onPick={pick}
               />
-            </section>
+            </Card>
           )}
         </>
       )}

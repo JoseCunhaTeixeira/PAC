@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { API } from "../../api";
 import { afmhotR, terrain } from "../colormaps";
+import { LayersIcon, StrataIcon } from "../icons";
+import { Card, Segmented } from "../kit";
+import { ModeHead } from "../PseudoSectionCanvas";
 import { PseudoSectionComparisonCanvas, type PseudoSectionComparisonData } from "../PseudoSectionComparisonCanvas";
 import { useZoomLink } from "../useZoom";
 import { VelocitySectionCanvas } from "../VelocitySectionCanvas";
@@ -55,8 +58,8 @@ function ModelTable({ card }: { card: InversionCard }) {
             <tr>
               <th>Parameter</th>
               <th>Prior</th>
-              <th data-tip={"Result\nThe median of every chain's samples"}>Result</th>
-              <th data-tip={"10–90 %\nThe range holding the samples' middle 80 %"}>10–90 %</th>
+              <th data-tip="Median of all chains' models">Result</th>
+              <th data-tip="Where 80 % of the models lie">10–90 %</th>
               <th>R-hat</th>
               <th>Effective samples</th>
               <th>Lag-1 autocorr.</th>
@@ -123,9 +126,9 @@ function ChainsView({ folder, xmid }: { folder: string; xmid: number }) {
         </span>
       </div>
       {traces && <ChainTracesCanvas traces={traces} prior={marginal ? [marginal.low, marginal.high] : undefined} />}
-      <p className="viz-plot-title" style={{ marginTop: 12 }}>
-        Marginals within the priors (dashed: a flat posterior)
-      </p>
+      <div className="viz-row viz-plot-head" style={{ marginTop: 12 }}>
+        <p className="viz-plot-title">Marginals within the priors (dashed: a flat posterior)</p>
+      </div>
       <MarginalsGrid marginals={chains.data.marginals} />
     </div>
   );
@@ -150,8 +153,8 @@ export function InversionPanel({
   const [vsMax, setVsMax] = useState("");
   const [curveAxis, setCurveAxis] = useState<CurveAxis>("frequency");
   const [chainsOpen, setChainsOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState<string | null>(null);
+  // The picked and modelled pseudo-sections' vertical axis.
+  const [comparisonAxis, setComparisonAxis] = useState<"frequency" | "wavelength">("frequency");
   const zoomLink = useZoomLink(folder);
   const xmid = selected ? xmidOf(selected) : null;
   const card = useJson<InversionCard>(
@@ -161,10 +164,7 @@ export function InversionPanel({
     `${API}/inversion/velocity_section/${at(folder)}?model=${model}&lateral_smoothing=${smoothing}`,
   );
   const labels = useJson<Record<string, number>>(`${API}/dispersion_image_labels/${at(folder)}`);
-  const label = Object.keys(labels.data ?? {})[0] ?? null;
-  const comparison = useJson<PseudoSectionComparisonData>(
-    label ? `${API}/inversion/pseudo_section_comparison/${at(folder)}/${encodeURIComponent(label)}?model=${model}` : null,
-  );
+  const modes = Object.keys(labels.data ?? {});
   const modelLabel = MODELS.find((one) => one.value === model)?.label.toLowerCase() ?? model;
   const inverted = (overview?.cells ?? []).some((cell) => cell.status !== "none");
   const pick = (position: number) => {
@@ -176,29 +176,6 @@ export function InversionPanel({
     max: vsMax === "" ? undefined : Number(vsMax),
   };
 
-  function save() {
-    setSaving(true);
-    setSaved(null);
-    fetch(`${API}/inversion/save_images/${at(folder)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ labels: Object.keys(labels.data ?? {}), model, lateral_smoothing: smoothing }),
-    })
-      .then(async (res) => {
-        const body = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(body?.detail ?? `HTTP ${res.status}`);
-        return body as { saved_paths: string[]; errors: string[] };
-      })
-      .then((data) =>
-        setSaved(
-          `Saved ${data.saved_paths.length} image${data.saved_paths.length === 1 ? "" : "s"} in the run's folder` +
-            (data.errors.length ? `; ${data.errors.length} skipped: ${data.errors.join("; ")}` : "."),
-        ),
-      )
-      .catch((err) => setSaved(`Not saved: ${err instanceof Error ? err.message : String(err)}`))
-      .finally(() => setSaving(false));
-  }
-
   const inversionCard = card.data;
   return (
     <>
@@ -206,7 +183,7 @@ export function InversionPanel({
         overview={overview}
         error={overviewError}
         aside={
-          <label className="viz-field viz-inline" data-tip={"Model\nThe one the plots below show"}>
+          <label className="viz-field" data-tip="Shown in the plots below">
             Model
             <select value={model} onChange={(e) => setModel(e.target.value as ModelName)}>
               {MODELS.map((one) => (
@@ -279,14 +256,23 @@ export function InversionPanel({
                     {inversionCard.profile ? <VsProfilePlot profile={inversionCard.profile} /> : <Empty>No model saved.</Empty>}
                     {inversionCard.curve ? (
                       <div>
-                        <CurveFitPlot curve={inversionCard.curve} axis={curveAxis} modelled={`the ${modelLabel} model's`} />
-                        <div className="viz-segment" style={{ marginTop: 6 }} role="group" aria-label="Along">
-                          {(["frequency", "wavelength"] as const).map((one) => (
-                            <button key={one} type="button" className={curveAxis === one ? "active" : ""} onClick={() => setCurveAxis(one)}>
-                              {one === "frequency" ? "Frequency" : "Wavelength"}
-                            </button>
-                          ))}
-                        </div>
+                        <CurveFitPlot
+                          curve={inversionCard.curve}
+                          axis={curveAxis}
+                          modelled={`the ${modelLabel} model's`}
+                          aside={
+                            <Segmented
+                              size="sm"
+                              label="Along"
+                              value={curveAxis}
+                              onChange={setCurveAxis}
+                              options={[
+                                { value: "frequency", label: "Frequency" },
+                                { value: "wavelength", label: "Wavelength" },
+                              ]}
+                            />
+                          }
+                        />
                       </div>
                     ) : (
                       <Empty>No picked curve.</Empty>
@@ -296,36 +282,36 @@ export function InversionPanel({
               </UnitCard>
             </div>
           )}
-          <section className="viz-section viz-card">
-            <div className="viz-row" style={{ alignItems: "flex-end", marginBottom: 10 }}>
-              <h2 className="viz-h2" style={{ margin: 0 }}>
-                Vs section
-              </h2>
+          <Card
+            className="viz-section"
+            icon={<LayersIcon size={17} />}
+            title="Vs and Vs std sections"
+            aside={
               <div className="viz-toolbar" style={{ margin: 0 }}>
                 <div className="viz-field">
                   Lateral smoothing
-                  <div className="viz-segment" role="group" aria-label="Lateral smoothing">
-                    {[false, true].map((on) => (
-                      <button key={String(on)} type="button" className={smoothing === on ? "active" : ""} onClick={() => setSmoothing(on)}>
-                        {on ? "On" : "Off"}
-                      </button>
-                    ))}
-                  </div>
+                  <Segmented
+                    size="sm"
+                    label="Lateral smoothing"
+                    value={smoothing ? "on" : "off"}
+                    onChange={(one) => setSmoothing(one === "on")}
+                    options={[
+                      { value: "off", label: "Off" },
+                      { value: "on", label: "On" },
+                    ]}
+                  />
                 </div>
-                <div className="viz-field">
-                  Vs colours (m/s)
+                <div className="viz-field center">
+                  Vs range (m/s)
                   <div className="viz-range">
                     <input type="number" placeholder="Min" value={vsMin} onChange={(e) => setVsMin(e.target.value)} />
                     <span className="viz-muted">–</span>
                     <input type="number" placeholder="Max" value={vsMax} onChange={(e) => setVsMax(e.target.value)} />
                   </div>
                 </div>
-                <button type="button" className="viz-button" onClick={save} disabled={saving}>
-                  {saving ? "Saving…" : "Save images"}
-                </button>
               </div>
-            </div>
-            {saved && <p className="viz-small viz-muted" style={{ margin: "0 0 8px" }}>{saved}</p>}
+            }
+          >
             {section.data ? (
               <>
                 <VelocitySectionCanvas
@@ -357,28 +343,85 @@ export function InversionPanel({
             ) : (
               <Skeleton height={420} />
             )}
-          </section>
-          {label && (
-            <section className="viz-section viz-card">
-              <h2 className="viz-h2">
-                Picked and modelled {label}
-              </h2>
-              {comparison.data ? (
-                <PseudoSectionComparisonCanvas
-                  comparison={comparison.data}
-                  velocityLabel="Phase velocity (m/s)"
-                  marker={xmid ?? undefined}
-                  onPick={pick}
+          </Card>
+          {modes.length > 0 && (
+            <Card
+              className="viz-section"
+              icon={<StrataIcon size={17} />}
+              title="Picked and modelled pseudo-sections"
+              aside={
+                <Segmented
+                  size="sm"
+                  label="Vertical axis"
+                  value={comparisonAxis}
+                  onChange={setComparisonAxis}
+                  options={[
+                    { value: "frequency", label: "Frequency" },
+                    { value: "wavelength", label: "Wavelength" },
+                  ]}
                 />
-              ) : comparison.error ? (
-                <Empty>Needs 2 windows with a pick and a model.</Empty>
-              ) : (
-                <Skeleton height={420} />
-              )}
-            </section>
+              }
+            >
+              <div className="stack">
+                {modes.map((label) => (
+                  <ComparedSection
+                    key={label}
+                    folder={folder}
+                    label={label}
+                    model={model}
+                    axis={comparisonAxis}
+                    windows={overview?.cells.length ?? 0}
+                    marker={xmid ?? undefined}
+                    onPick={pick}
+                  />
+                ))}
+              </div>
+            </Card>
           )}
         </>
       )}
     </>
+  );
+}
+
+/** One mode's picked curves against the model's along the line (M0, M1…), as the picking page
+ * heads them: the windows holding both. */
+function ComparedSection({
+  folder,
+  label,
+  model,
+  axis,
+  windows,
+  marker,
+  onPick,
+}: {
+  folder: string;
+  label: string;
+  model: ModelName;
+  axis: "frequency" | "wavelength";
+  windows: number;
+  marker?: number;
+  onPick: (position: number) => void;
+}) {
+  const comparison = useJson<PseudoSectionComparisonData>(
+    `${API}/inversion/pseudo_section_comparison/${at(folder)}/${encodeURIComponent(label)}?model=${model}`,
+  );
+  return (
+    <div>
+      <ModeHead label={label} count={comparison.data?.positions.length} total={windows} unit="windows" />
+      {comparison.data ? (
+        <PseudoSectionComparisonCanvas
+          comparison={comparison.data}
+          velocityLabel="Phase velocity (m/s)"
+          mode={axis}
+          marker={marker}
+          onPick={onPick}
+        />
+      ) : comparison.error ? (
+        <p className="faint">Needs 2 windows with a pick and a model.</p>
+      ) : (
+        <Skeleton height={420} />
+      )}
+    </div>
   );
 }

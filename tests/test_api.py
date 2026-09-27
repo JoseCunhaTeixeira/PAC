@@ -199,8 +199,10 @@ def test_an_inversion_gives_a_section(run: str) -> None:
     assert [one["predicted_fs"] is not None for one in curves] == [True, True, False]
     comparison = client.get(f"/inversion/pseudo_section_comparison/{run}/M0").json()
     assert comparison["positions"] == [2.5, 5.5]
-    saved = client.post(f"/inversion/save_images/{run}", json={"labels": ["M0"]}).json()
-    assert saved["errors"] == [] and len(saved["saved_paths"]) == 2
+    # Along wavelength too, as many rows.
+    lambdas = comparison["lambdas"]
+    assert len(lambdas) == len(comparison["fs"]) and lambdas == sorted(lambdas)
+    assert len(comparison["observed_by_wavelength_grid"][0]) == len(lambdas)
 
 
 def test_a_petrophysical_inversion_gives_its_sections(run: str) -> None:

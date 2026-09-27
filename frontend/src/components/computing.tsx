@@ -4,8 +4,9 @@ import { API, type Acquisition, type Dispersion, type Masw } from "../api";
 import type { FilteringState, MutingState, StackingState } from "../presets";
 import { GeometryPlot } from "./GeometryPlot";
 import { ArrowRightIcon, ClockIcon, CpuIcon, FilterIcon, FolderIcon, RulerIcon, ScissorsIcon, SpectrumIcon, StackIcon } from "./icons";
-import { Callout, Card, Empty, Fields, NumberField, Page, Segmented, SelectField, Stat, Stats } from "./kit";
+import { Callout, Card, Empty, Fields, NumberField, NumberInput, Page, Segmented, SelectField, Stat, Stats } from "./kit";
 import { runningJob } from "./jobs";
+import { above, boundsOf, tipOf } from "./numbers";
 import { useStoredState } from "./stored";
 import { MuteGather } from "./MuteGather";
 import type { ArtKind } from "./PageArt";
@@ -263,7 +264,7 @@ export function WindowsCard({
           onChange={(v) => setMasw({ ...masw, length: v })}
           min={3}
           max={receivers}
-          hint={`${+((masw.length - 1) * spacing).toFixed(2)} m`}
+          hint={Number.isFinite(masw.length) ? `${+((masw.length - 1) * spacing).toFixed(2)} m` : undefined}
         />
         <NumberField
           label="Step"
@@ -272,7 +273,7 @@ export function WindowsCard({
           onChange={(v) => setMasw({ ...masw, step: v })}
           min={1}
           max={receivers}
-          hint={`${+(masw.step * spacing).toFixed(2)} m`}
+          hint={Number.isFinite(masw.step) ? `${+(masw.step * spacing).toFixed(2)} m` : undefined}
         />
         <NumberField
           label="Nearest shot"
@@ -289,6 +290,7 @@ export function WindowsCard({
           value={masw.distance_max}
           onChange={(v) => setMasw({ ...masw, distance_max: v })}
           min={0}
+          check={above(masw.distance_min)}
         />
       </Fields>
       <div style={{ marginTop: 18 }}>
@@ -300,7 +302,7 @@ export function WindowsCard({
 
 export function TriggerRow({ t0, setT0 }: { t0: number; setT0: (t0: number) => void }) {
   return (
-    <Row icon={<ClockIcon size={16} />} title="Trigger" hint="Shifts every record's time origin.">
+    <Row icon={<ClockIcon size={16} />} title="Trigger" hint="Shifts every shot's time origin.">
       <Fields>
         <NumberField label="Time shift t0" unit="s" value={t0} onChange={setT0} step={0.001} />
       </Fields>
@@ -325,7 +327,7 @@ export function MutingRow({
     <Row
       icon={<ScissorsIcon size={16} />}
       title="Signal muting"
-      hint="Keeps a time window, or the arrivals between two group velocities."
+      hint="Keeps a time window, or arrivals between two velocities."
       control={
         <Segmented
           size="sm"
@@ -343,9 +345,9 @@ export function MutingRow({
         <>
           <Fields>
             <NumberField label="From" unit="s" value={muting.tmin} onChange={(v) => setMuting({ ...muting, tmin: v })} min={0} max={maxTime} step={0.1} />
-            <NumberField label="To" unit="s" value={muting.tmax} onChange={(v) => setMuting({ ...muting, tmax: v })} min={0} max={maxTime} step={0.1} />
+            <NumberField label="To" unit="s" value={muting.tmax} onChange={(v) => setMuting({ ...muting, tmax: v })} min={0} max={maxTime} step={0.1} check={above(muting.tmin)} />
             <NumberField label="Slowest" unit="m/s" value={muting.vmin} onChange={(v) => setMuting({ ...muting, vmin: v })} min={0} />
-            <NumberField label="Fastest" unit="m/s" value={muting.vmax} onChange={(v) => setMuting({ ...muting, vmax: v })} min={0} />
+            <NumberField label="Fastest" unit="m/s" value={muting.vmax} onChange={(v) => setMuting({ ...muting, vmax: v })} min={0} check={above(muting.vmin)} />
             <NumberField label="Taper" unit="samples" value={muting.taper} onChange={(v) => setMuting({ ...muting, taper: v })} min={0} />
           </Fields>
           {gather && <MuteGather acquisition={acquisition} muting={muting} />}
@@ -368,7 +370,7 @@ export function FilteringRow({
     <Row
       icon={<FilterIcon size={16} />}
       title="Spectral filtering"
-      hint="A band-pass before the images."
+      hint="A band-pass before the dispersion images."
       control={
         <Segmented
           size="sm"
@@ -385,7 +387,7 @@ export function FilteringRow({
       {filtering.method === "iir" && (
         <Fields>
           <NumberField label="Low cut" unit="Hz" value={filtering.fmin} onChange={(v) => setFiltering({ ...filtering, fmin: v })} min={0} max={nyquist} step={5} />
-          <NumberField label="High cut" unit="Hz" value={filtering.fmax} onChange={(v) => setFiltering({ ...filtering, fmax: v })} min={0} max={nyquist} step={5} />
+          <NumberField label="High cut" unit="Hz" value={filtering.fmax} onChange={(v) => setFiltering({ ...filtering, fmax: v })} min={0} max={nyquist} step={5} check={above(filtering.fmin)} />
           <NumberField label="Order" value={filtering.order} onChange={(v) => setFiltering({ ...filtering, order: v })} min={4} step={1} />
         </Fields>
       )}
@@ -450,16 +452,16 @@ export function DispersionRows({
 }) {
   return (
     <>
-      <Row icon={<SpectrumIcon size={16} />} title="Frequencies" hint={`Up to Nyquist, ${+nyquist.toFixed(1)} Hz`}>
+      <Row icon={<SpectrumIcon size={16} />} title="Frequencies">
         <Fields>
           <NumberField label="From" unit="Hz" value={dispersion.fmin} onChange={(v) => setDispersion({ ...dispersion, fmin: v })} min={0} max={nyquist} />
-          <NumberField label="To" unit="Hz" value={dispersion.fmax} onChange={(v) => setDispersion({ ...dispersion, fmax: v })} min={0} max={nyquist} />
+          <NumberField label="To" unit="Hz" value={dispersion.fmax} onChange={(v) => setDispersion({ ...dispersion, fmax: v })} min={0} max={nyquist} check={above(dispersion.fmin)} />
         </Fields>
       </Row>
       <Row icon={<RulerIcon size={16} />} title="Phase velocities">
         <Fields>
           <NumberField label="From" unit="m/s" value={dispersion.vmin} onChange={(v) => setDispersion({ ...dispersion, vmin: v })} min={1} />
-          <NumberField label="To" unit="m/s" value={dispersion.vmax} onChange={(v) => setDispersion({ ...dispersion, vmax: v })} min={1} />
+          <NumberField label="To" unit="m/s" value={dispersion.vmax} onChange={(v) => setDispersion({ ...dispersion, vmax: v })} min={1} check={above(dispersion.vmin)} />
           <NumberField label="Steps" value={dispersion.nv} onChange={(v) => setDispersion({ ...dispersion, nv: v })} min={1000} />
         </Fields>
       </Row>
@@ -467,25 +469,23 @@ export function DispersionRows({
   );
 }
 
+/** The workers of a run bar, alike on every page: its icon, its number, its bounds on hover. */
 export function WorkersField({
   workers,
   setWorkers,
   maxWorkers,
+  tip = "Windows computed in parallel",
 }: {
   workers: number;
   setWorkers: (n: number) => void;
   maxWorkers: number;
+  tip?: string;
 }) {
+  // Its icon and its word say it as its number does: what it is, then its bounds.
   return (
-    <label className="workers" data-tip="Windows computed at once">
+    <label className="workers" data-tip={tipOf(tip, boundsOf(1, maxWorkers))}>
       <CpuIcon size={15} />
-      <input
-        type="number"
-        min={1}
-        max={maxWorkers}
-        value={workers}
-        onChange={(e) => setWorkers(Math.max(1, Math.min(Number(e.target.value), maxWorkers)))}
-      />
+      <NumberInput min={1} max={maxWorkers} value={workers} onChange={setWorkers} data-tip={tip} />
       <span>workers</span>
     </label>
   );

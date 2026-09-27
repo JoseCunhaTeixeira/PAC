@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Callout } from "../kit";
 import {
   capitalized,
   changes,
@@ -22,9 +23,9 @@ const VERDICT_STATUS: Record<Verdict, Status> = { pass: "pass", retry: "warn", r
 // What a badge means, on hover.
 const STATUS_MEANINGS: Record<Status, string> = {
   pass: "Passed every check.",
-  warn: "Kept, but a check flagged it after its retries: worth a look.",
+  warn: "Kept, but flagged: worth a look.",
   fail: "Rejected by a check.",
-  none: "Not judged.",
+  none: "No check judged it.",
 };
 const STATUS_TITLES: Record<Status, string> = { pass: "Pass", warn: "Flagged", fail: "Rejected", none: "Not judged" };
 const GATE_NAMES: Record<string, string> = {
@@ -39,7 +40,7 @@ const GATE_NAMES: Record<string, string> = {
 };
 const VERDICT_MEANINGS: Record<Verdict, string> = {
   pass: "passed",
-  retry: "still flagged once its retries were spent",
+  retry: "still flagged after its retries",
   reject: "rejected",
 };
 
@@ -353,5 +354,5 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 export function ErrorBox({ message }: { message: string }) {
-  return <div className="viz-error">{message}</div>;
+  return <Callout tone="error">{message}</Callout>;
 }

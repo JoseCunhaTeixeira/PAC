@@ -14,7 +14,7 @@ button.zoom-reset {
   position: absolute;
   z-index: 6;
   padding: 0 6px;
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 400;
   line-height: 13px;
   white-space: nowrap;

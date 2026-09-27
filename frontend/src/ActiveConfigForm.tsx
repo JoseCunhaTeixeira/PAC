@@ -90,6 +90,10 @@ function Form({
   const [workers, setWorkers] = useStoredState(`${kept}.workers`, 1);
   const [nPositions, setNPositions] = useState(0);
 
+  // At most one worker a window.
+  const maxWorkers = nPositions > 0 ? Math.min(nCpus, nPositions) : nCpus;
+  // Fewer windows than workers: as many workers, for good (more windows later do not raise them).
+  if (workers > maxWorkers) setWorkers(maxWorkers);
   const config = {
     profile,
     mode: "active",
@@ -105,7 +109,6 @@ function Form({
     },
     workers,
   };
-  const maxWorkers = nPositions > 0 ? Math.min(nCpus, nPositions) : nCpus;
 
   return (
     <>
@@ -121,7 +124,7 @@ function Form({
         <Card
           step={2}
           title="Preprocessing"
-          hint="What each record goes through before its image."
+          hint="Applied to each shot first."
         >
           <div className="rows">
             <TriggerRow t0={trigger.t0} setT0={(t0) => setTrigger({ t0 })} />
@@ -142,7 +145,7 @@ function Form({
         <Card
           step={3}
           title="Dispersion image"
-          hint="Each shot's phase-shift image, then the window's stack of them."
+          hint="Each shot's dispersion image, then their stack."
         >
           <div className="rows">
             <DispersionRows
@@ -152,8 +155,8 @@ function Form({
             />
             {preset.values.image_stacking && (
               <StackingRow
-                title="Image stacking"
-                hint="Linear keeps what any shot sees; root keeps what most shots agree on."
+                title="Dispersion image stacking"
+                hint={"How the shots' dispersion images add up\nLinear: every shot counts\nRoot: what most shots share"}
                 stacking={imageStacking}
                 setStacking={setImageStacking}
                 phaseWeighted={false}
