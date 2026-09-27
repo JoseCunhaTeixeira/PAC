@@ -1867,3 +1867,23 @@ table.layers:not(.sorting) tr:hover .layer-actions,
   margin-top: 14px;
   max-width: 220px;
 }
+
+/* The run bar's left side, nothing running: the next run's settings, the last run's outcome under
+   them. */
+.run-bar-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.run-bar-next,
+.run-bar-last {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+}
+
+.run-bar-last {
+  font-size: 0.82rem;
+}
