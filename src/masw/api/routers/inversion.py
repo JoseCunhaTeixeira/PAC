@@ -9,6 +9,7 @@ from masw.io import inversion as io
 from masw.io.inversion import ModelName
 from masw.models.inversion import InversionRunConfig
 from sigpipe.masw.inversion import InversionParameters, ThicknessLayer, VsLayer
+from sigpipe.masw.inversion.priors import PriorRules
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,11 @@ class InversionDefaultsOut(BaseModel):
     parameters: InversionParameters
     vs_layer: VsLayer  # a layer the form adds
     thickness_layer: ThicknessLayer
+    half_space_layer: VsLayer  # the half-space's: it may be faster than the layers above
+
+
+# The half-space as PACo's priors start it: up to 2,000 m/s, where the layers stop at 1,000.
+HALF_SPACE = VsLayer(vs_max=PriorRules().half_space_vs_max)
 
 
 class PositionStatusOut(BaseModel):
@@ -64,9 +70,16 @@ class PseudoSectionComparisonOut(BaseModel):
 
 @router.get("/inversion/defaults")
 def get_inversion_defaults() -> InversionDefaultsOut:
-    """The inversion form's starting values: sigpipe's, as PACo's agent gets them."""
+    """The inversion form's starting values: sigpipe's, as PACo's agent gets them, the
+    half-space up to 2,000 m/s as PACo's priors start it."""
+    parameters = InversionParameters()
     return InversionDefaultsOut(
-        parameters=InversionParameters(), vs_layer=VsLayer(), thickness_layer=ThicknessLayer()
+        parameters=parameters.model_copy(
+            update={"vs_layers": (*parameters.vs_layers[:-1], HALF_SPACE)}
+        ),
+        vs_layer=VsLayer(),
+        thickness_layer=ThicknessLayer(),
+        half_space_layer=HALF_SPACE,
     )
 
 

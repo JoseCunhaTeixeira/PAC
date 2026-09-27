@@ -13,7 +13,7 @@ PAC runs entirely **on your own computer**. You start it once, then use it throu
 - **Hybrid processing:** supports both passive and active MASW methods without needing source position information. Uses the package [sigpipe](https://github.com/JoseCunhaTeixeira/sigpipe), a signal processing Python pipeline.
 - **Signal processing tools:** uses an automatic source detection algorithm combined with seismic interferometry.
 - **Automated dispersion analysis:** extracts and visualizes dispersion images and curves.
-- **Seismic inversion:** computes shear-wave velocity profiles from dispersion data using the MCMC package [BayesBay](https://github.com/fmagrini/bayes-bay) and the forward modeling package [Disba](https://github.com/keurfonluu/disba).
+- **Seismic inversion:** turns dispersion curves into shear-wave velocity profiles by Bayesian inversion (sigpipe). The number of layers is chosen by the data, or set by you; each model's dispersion curve is computed with [Disba](https://github.com/keurfonluu/disba).
 - **Petrophysical inversion:** computes soil profiles from dispersion data using the AI inverison model from [silex](https://github.com/JoseCunhaTeixeira/silex).
 - **User-friendly interface:** streamlined workflow with visualization capabilities.
 - **Assistant (optional):** an AI agent, PACo, that processes profiles for you when you ask it in plain words, checking the quality of every step. It needs a graphics card with 16 GB of memory, on your computer or on another machine: see [The assistant](#the-assistant-optional).
@@ -177,6 +177,8 @@ PAC looks for your recordings in `data/input/` and writes its results to `data/o
 
 The Dispersion Picking, Seismic Inversion, Petrophysical Inversion and Visualization pages list the runs, the most recent first, and open on it. Results computed by earlier versions of PAC, straight in `output/<profile>/`, are listed too.
 
+The **Visualization** page shows one run at a time. First, what it was made with: who made it (you, or the assistant), the length and step of its windows, the shots they stack, the phase shift's band, and each setting with where it comes from and why. Then the line from above: the shots (stars), the receivers (inverted triangles) and the windows, coloured by their quality at the stage you choose (records, dispersion, seismic inversion, petrophysics). Click a window, or step with the ← and → keys, to see the shots its dispersion image stacks and why it leaves out the others, its image and picks, its velocity model against depth down to the depth its data inform, the model's fit to the picked curve, and every check's measures. The line's sections, below, mark the window you selected; a click on them selects another.
+
 To process your own data, simply drop a profile folder like the above into `data/input/` — no restart needed.
 
 **About the demo profiles:** an empty `data/input` (a freshly created folder, as in Option 1) gets seeded on first start with two demo profiles, `active_p1` and `passive_p1`, so there's something to try immediately. A `data/input` that already has content — your own profile folders, or the demo data committed with the source code in Option 2 — is left untouched; add your own profile folders alongside or instead of the demo ones.
@@ -194,7 +196,7 @@ To process your own data, simply drop a profile folder like the above into `data
 
 The assistant is an AI agent, **PACo**, that works PAC for you. You ask it in plain words — *"Process active_p1 and give me its dispersion curves"* — and it runs PAC's processing, checks the quality of every step (and retries what it can), picks the dispersion curves, inverts them into velocity models if you asked for them (or into soils and a water table, if you asked for those), then tells you what it did and which settings it changed. Its results are ordinary PAC runs: you open them in the other pages, to review or correct them.
 
-It runs a language model (Qwen3-8B), which needs a **graphics card (GPU) with at least 16 GB of memory**. Everything stays on your own machines: the model does not run on the internet, and it never sees your seismic records, only short summaries of PAC's results.
+It runs a language model (Qwen3-8B), which needs a **graphics card (GPU) with at least 16 GB of memory**. Everything stays on your own machines: the model does not run on the internet, and it never sees your seismic records, only short summaries of PAC's results. (A larger model, or one from an online service, is possible too: see [Another model](#another-model).)
 
 The assistant is optional. Without it, PAC works exactly as before, and its menu has no Assistant page.
 
@@ -205,7 +207,8 @@ The assistant is optional. Without it, PAC works exactly as before, and its menu
 | Your computer has a compatible GPU (see below) | [A: everything on your computer](#a-everything-on-your-computer) |
 | Your computer has no compatible GPU, but you can use a machine that has one (a lab workstation, a GPU server rented in the cloud) | [B: the model on a GPU machine](#b-the-model-on-a-gpu-machine) |
 | PAC runs on a server without a GPU, and you open it from your own computer | [C: PAC on a server](#c-pac-on-a-server) |
-| No compatible GPU anywhere | Nothing to do: PAC runs without the assistant |
+| No compatible GPU anywhere | Nothing to do: PAC runs without the assistant, or use an online service ([Another model](#another-model)) |
+| You want a more powerful model than Qwen3-8B | [Another model](#another-model), after setup A or B |
 
 **Compatible GPUs** — you don't need to work this out yourself: in every setup, the command `install_assistant.py` reads the GPU and tells you.
 - **NVIDIA**, with 16 GB of memory or more, from the RTX 30 series on (compute capability 8.0 or newer): for example RTX 3090, 4080, 4090, 5080, RTX A4000, A5000, A6000, L4, A10, A100. On Linux, or on Windows with Docker Desktop.
@@ -337,6 +340,49 @@ echo "PAC_WEB_URL=http://server:5173" >> .env
 Then start PAC with `docker compose up -d --build`, and open http://server:5173 from any computer of your network. For the assistant, follow setup A if the server has a compatible GPU, otherwise setup B, running the steps of "your computer" on the server.
 
 **Caution:** anyone who reaches the server's ports 5173 and 8000 can use PAC and its assistant. Keep the server on a private network (or behind a VPN), and never open these ports to the internet.
+
+### Another model
+
+The assistant works with any language model served behind an **OpenAI-compatible chat API** that supports **tool calling** (also called "function calling"). Qwen3-8B is the smallest that does the job well, so that a 16 GB GPU is enough; a larger model follows your requests more reliably and writes clearer answers. There are two ways to get one: a larger Qwen3 on your own GPU, or an online service.
+
+**A larger Qwen3 on your GPU** (setups A and B). After `install_assistant.py`, open the `.env` file in the `PAC` folder (on the GPU machine, for setup B), change the model's line, and restart:
+```sh
+PACO_LLM_MODEL=Qwen/Qwen3-14B-FP8
+```
+```sh
+docker compose up -d
+```
+The first start downloads the model (the "Weights" column below), which takes a while. Pick the largest model your GPU holds: it needs the model's weights plus 4 to 8 GB for the conversation.
+
+| Model | Weights | GPU memory, about |
+|---|---|---|
+| `Qwen/Qwen3-8B-FP8` (what 16 GB cards run) | 9.4 GB | 16 GB |
+| `Qwen/Qwen3-8B` (what 24 GB cards run) | 16.4 GB | 24 GB |
+| `Qwen/Qwen3-14B-FP8` | 16.3 GB | 24 GB |
+| `Qwen/Qwen3-14B` | 29.5 GB | 40 GB |
+| `Qwen/Qwen3-30B-A3B-FP8` (fast: it computes with 3B of its parameters at a time) | 32.5 GB | 48 GB, or two 24 GB GPUs |
+| `Qwen/Qwen3-32B-FP8` | 34.3 GB | 48 GB, or two 24 GB GPUs |
+| `Qwen/Qwen3-32B` | 65.5 GB | 80 GB, or two 48 GB GPUs |
+
+- **Several GPUs:** add `VLLM_TENSOR_PARALLEL_SIZE=2` to `.env` (the number of GPUs), and the model is spread over them.
+- **The model does not start** and `docker compose logs model` says the memory is too small: add `VLLM_MAX_MODEL_LEN=12288` to `.env` (the conversation's length, 16384 by default; below 12288, long requests may not fit), or choose a smaller model.
+- **Other model families** (Llama, Mistral, Gemma…) also run in vLLM, but each writes its tool calls its own way: in `docker-compose.yml`'s `model` service, replace `--tool-call-parser=hermes` with the family's parser, and remove `--reasoning-parser=qwen3` (see vLLM's documentation on tool calling).
+
+**An online service** (no GPU needed). Several companies serve large models behind an OpenAI-compatible API. From the service, you need three things: the API's address (it ends in `/v1`), the model's name, and an API key. Then, in the `PAC` folder:
+```sh
+python3 install_assistant.py --remote https://api.example.com/v1 --model <the model's name> --api-key <your key>
+docker compose up -d --build
+```
+The command checks that the service answers and serves that model, then writes the three into `.env`. The key stays in that file, on your computer: never share or commit it.
+
+What the service then receives: your messages to the assistant, the descriptions of PACo's tools, and what the tools return, that is the quality gates' summaries (profile and run names, settings, verdicts, velocities and depths). Your records, dispersion images and models stay on your computer. Check that this suits your data's rules before using an online service. Services charge by use: one request, such as processing and picking a profile, takes a few tens of thousands of tokens.
+
+**Without Docker** (developers): give the backend the three settings when you start it:
+```sh
+PACO_LLM_BASE_URL=https://api.example.com/v1 PACO_LLM_MODEL=<the model's name> PACO_LLM_API_KEY=<your key> uv run --extra agent uvicorn masw.api.main:app --host 127.0.0.1 --port 8000
+```
+
+**Try a model before relying on it.** Ask it a few requests from the Assistant page, and review its runs in the other pages. For a measure, PACo's repository has an evaluation that plays the assistant's test scenarios with a model and scores them: `uv run paco-evaluate --repeat 3`, with the model's three settings in PACo's `.env` (see [PACo's README](https://github.com/JoseCunhaTeixeira/PACo#run)). Compare its score with Qwen3-8B's.
 
 ### If something goes wrong
 

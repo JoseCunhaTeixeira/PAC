@@ -4,6 +4,8 @@ from pathlib import Path
 
 from masw.io.folders import get_xmid_folders
 from masw.io.paths import output_folder
+from masw.io.pick_origin import Origin, mark_edited, pick_origin
+from masw.io.quality.log import read_log
 from sigpipe.algorithms.picking.dispersion.curve import pick_curves
 from sigpipe.algorithms.picking.dispersion.lasso import pick_lasso as lasso
 from sigpipe.base.dispersion_curve import DispersionCurve, Mode
@@ -34,6 +36,7 @@ def pick_lasso(
     image = load_dispersion_image(folder, xmid)
     updated = lasso(image, polygon, Mode.from_label(label))
     save_curves(xmid_folder(folder, xmid), image, updated.dispersion_curves)
+    mark_edited(xmid_folder(folder, xmid))
     return updated
 
 
@@ -64,12 +67,14 @@ def pick_box(
         resample_over_wavelength=True,
     )
     save_curves(xmid_folder(folder, xmid), image, updated.dispersion_curves)
+    mark_edited(xmid_folder(folder, xmid))
     return updated
 
 
 def delete_curve(folder: str, xmid: float, label: str) -> DispersionImage:
     image = load_dispersion_image(folder, xmid)
     remaining = remove_pick(xmid_folder(folder, xmid), image, Mode.from_label(label))
+    mark_edited(xmid_folder(folder, xmid))
     return replace(image, dispersion_curves=remaining)
 
 
@@ -81,17 +86,17 @@ def list_labels(folder: str) -> dict[str, int]:
     return dict(sorted(counts.items(), key=lambda item: Mode.from_label(item[0])))
 
 
-def list_labels_by_position(folder: str) -> list[tuple[float, list[str]]]:
-    return [
-        (
-            xmid,
-            sorted(
-                (curve.mode.label for curve in load_curves(xmid_folder(folder, xmid)) or ()),
-                key=Mode.from_label,
-            ),
+def list_labels_by_position(folder: str) -> list[tuple[float, list[str], Origin | None]]:
+    """Each window's picked labels, and who picked them: PACo automatically, or by hand."""
+    log = read_log(output_folder(folder))
+    found: list[tuple[float, list[str], Origin | None]] = []
+    for xmid in get_xmid_folders(folder):
+        window = xmid_folder(folder, xmid)
+        labels = sorted(
+            (curve.mode.label for curve in load_curves(window) or ()), key=Mode.from_label
         )
-        for xmid in get_xmid_folders(folder)
-    ]
+        found.append((xmid, labels, pick_origin(window, log, bool(labels))))
+    return found
 
 
 def get_pseudo_section(folder: str, label: str) -> PseudoSection:

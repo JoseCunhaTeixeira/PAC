@@ -1,9 +1,33 @@
 import { useState } from "react";
-import { type Acquisition, type Dispersion, type Masw } from "./api";
-import { MaswPreview } from "./components/MaswPreview";
-import { MuteGather } from "./components/MuteGather";
+import { type Dispersion, type Masw } from "./api";
+import {
+  buildFilteringParams,
+  buildMutingParams,
+  buildStackingParams,
+  buildWindowParams,
+} from "./builders";
+import {
+  DispersionRows,
+  FilteringRow,
+  MutingRow,
+  NextSteps,
+  Row,
+  StackingRow,
+  TriggerRow,
+  WindowsCard,
+  WorkersField,
+  type FormProps,
+} from "./components/computing";
+import { ScissorsIcon } from "./components/icons";
+import {
+  Callout,
+  Card,
+  Fields,
+  NumberField,
+  Segmented,
+} from "./components/kit";
 import { RunPanel } from "./components/RunPanel";
-import { buildMutingParams, buildFilteringParams, buildStackingParams, buildWindowParams } from "./builders";
+import { useStoredState } from "./components/stored";
 import {
   type FilteringState,
   type MutingState,
@@ -14,67 +38,68 @@ import {
   usePreset,
 } from "./presets";
 
-
-function NumberField({
-  label,
-  value,
-  onChange,
-  min,
-  max,
-  step = 1,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  min?: number;
-  max?: number;
-  step?: number;
-}) {
-  return (
-    <label style={{ display: "block", margin: "4px 0" }}>
-      {label}:{" "}
-      <input
-        type="number"
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-    </label>
-  );
-}
-
-export function ConfigForm({ acquisition, profile }: { acquisition: Acquisition; profile: string }) {
+export function ConfigForm({ acquisition, profile, onRunning }: FormProps) {
   const { preset, error } = usePreset("passive-active", profile);
-  if (error) return <p style={{ color: "crimson" }}>Error: {error}</p>;
-  if (!preset) return <p>Loading settings…</p>;
-  return <Form acquisition={acquisition} profile={profile} preset={preset} />;
+  if (error)
+    return (
+      <Callout tone="error" title="The settings could not load">
+        {error}
+      </Callout>
+    );
+  if (!preset) return <p className="muted">Loading the settings…</p>;
+  return (
+    <Form
+      acquisition={acquisition}
+      profile={profile}
+      preset={preset}
+      onRunning={onRunning}
+    />
+  );
 }
 
 function Form({
   acquisition,
   profile,
   preset,
-}: {
-  acquisition: Acquisition;
-  profile: string;
-  preset: PresetDefaults;
-}) {
+  onRunning,
+}: FormProps & { preset: PresetDefaults }) {
+  // The settings, kept for this profile when the page is left; frozen while their job runs.
+  const kept = `pac.form.passive-active.${profile}`;
+  const [running, setRunning] = useState(false);
   const maxTime = Number(acquisition.durations[0]?.toFixed(2) ?? 0);
   const nyquist = (acquisition.sampling_frequencies[0] ?? 0) / 2;
   const nCpus = navigator.hardwareConcurrency || 1;
 
-  const [masw, setMasw] = useState(() => stage<Masw>(preset, "masw"));
-  const [trigger, setTrigger] = useState(() => stage<{ t0: number }>(preset, "trigger"));
-  const [muting, setMuting] = useState(() => stage<MutingState>(preset, "muting"));
-  const [filtering, setFiltering] = useState(() => stage<FilteringState>(preset, "filtering"));
-  const [surfaceWaves, setSurfaceWaves] = useState(() => stage<WindowState>(preset, "correlation_window"));
-  const [dispersion, setDispersion] = useState(() => stage<Dispersion>(preset, "dispersion"));
-  const [stacking, setStacking] = useState(() => stage<StackingState>(preset, "stacking"));
-  const [execution, setExecution] = useState({ n_workers: 1 });
+  const [masw, setMasw] = useStoredState(
+    `${kept}.masw`,
+    stage<Masw>(preset, "masw"),
+  );
+  const [trigger, setTrigger] = useStoredState(
+    `${kept}.trigger`,
+    stage<{ t0: number }>(preset, "trigger"),
+  );
+  const [muting, setMuting] = useStoredState(
+    `${kept}.muting`,
+    stage<MutingState>(preset, "muting"),
+  );
+  const [filtering, setFiltering] = useStoredState(
+    `${kept}.filtering`,
+    stage<FilteringState>(preset, "filtering"),
+  );
+  const [surfaceWaves, setSurfaceWaves] = useStoredState(
+    `${kept}.surfaceWaves`,
+    stage<WindowState>(preset, "correlation_window"),
+  );
+  const [dispersion, setDispersion] = useStoredState(
+    `${kept}.dispersion`,
+    stage<Dispersion>(preset, "dispersion"),
+  );
+  const [stacking, setStacking] = useStoredState(
+    `${kept}.stacking`,
+    stage<StackingState>(preset, "stacking"),
+  );
+  const [workers, setWorkers] = useStoredState(`${kept}.workers`, 1);
   const [nPositions, setNPositions] = useState(0);
-
 
   const config = {
     profile,
@@ -88,104 +113,144 @@ function Form({
       stacking: buildStackingParams(stacking),
       dispersion,
     },
-    workers: execution.n_workers,
+    workers,
   };
-
-
   const maxWorkers = nPositions > 0 ? Math.min(nCpus, nPositions) : nCpus;
 
   return (
-    <div>
+    <>
+      <fieldset className="frozen" disabled={running}>
+        <WindowsCard
+          acquisition={acquisition}
+          masw={masw}
+          setMasw={setMasw}
+          onCount={setNPositions}
+          showSources
+        />
 
-      <h2>MASW windows</h2>
-      <NumberField label="Length [#]" value={masw.length} onChange={(v) => setMasw({ ...masw, length: v })} min={3} max={acquisition.receiver_positions.length} />
-      <NumberField label="Step [#]" value={masw.step} onChange={(v) => setMasw({ ...masw, step: v })} min={1} max={acquisition.receiver_positions.length} />
-      <NumberField label="Min distance from sources [m]" value={masw.distance_min} onChange={(v) => setMasw({ ...masw, distance_min: v })} min={0} />
-      <NumberField label="Max distance from sources [m]" value={masw.distance_max} onChange={(v) => setMasw({ ...masw, distance_max: v })} min={0} />
-      <MaswPreview acquisition={acquisition} masw={masw} onCount={setNPositions} />
+        <Card
+          step={2}
+          title="Preprocessing"
+          hint="What each shot goes through first."
+        >
+          <div className="rows">
+            <TriggerRow t0={trigger.t0} setT0={(t0) => setTrigger({ t0 })} />
+            <MutingRow
+              acquisition={acquisition}
+              muting={muting}
+              setMuting={setMuting}
+              maxTime={maxTime}
+            />
+            <FilteringRow
+              filtering={filtering}
+              setFiltering={setFiltering}
+              nyquist={nyquist}
+            />
+          </div>
+        </Card>
 
-      <h2>Trigger</h2>
-      <NumberField label="Time origin shift t0 [s]" value={trigger.t0} onChange={(v) => setTrigger({ t0: v })} step={0.001} />
+        <Card
+          step={3}
+          title="Interferometry"
+          hint="Each shot correlated with its nearest receiver, then stacked into a virtual shot."
+        >
+          <div className="rows">
+            <Row
+              icon={<ScissorsIcon size={16} />}
+              title="Surface-wave window"
+              hint="Keeps each shot's arrivals between two velocities before it is correlated."
+              control={
+                <Segmented
+                  size="sm"
+                  label="Surface-wave window"
+                  value={surfaceWaves.method}
+                  onChange={(method) =>
+                    setSurfaceWaves({ ...surfaceWaves, method })
+                  }
+                  options={[
+                    { value: "none", label: "Off" },
+                    { value: "mute", label: "Mute" },
+                  ]}
+                />
+              }
+            >
+              {surfaceWaves.method === "mute" && (
+                <Fields>
+                  <NumberField
+                    label="Slowest"
+                    unit="m/s"
+                    value={surfaceWaves.vmin}
+                    onChange={(v) =>
+                      setSurfaceWaves({ ...surfaceWaves, vmin: v })
+                    }
+                    min={0}
+                  />
+                  <NumberField
+                    label="Fastest"
+                    unit="m/s"
+                    value={surfaceWaves.vmax}
+                    onChange={(v) =>
+                      setSurfaceWaves({ ...surfaceWaves, vmax: v })
+                    }
+                    min={0}
+                  />
+                  <NumberField
+                    label="Taper"
+                    unit="samples"
+                    value={surfaceWaves.taper}
+                    onChange={(v) =>
+                      setSurfaceWaves({ ...surfaceWaves, taper: v })
+                    }
+                    min={0}
+                  />
+                </Fields>
+              )}
+            </Row>
+            <StackingRow
+              title="Correlation stacking"
+              hint="How the shots' correlations add up."
+              stacking={stacking}
+              setStacking={setStacking}
+            />
+          </div>
+        </Card>
 
-      <h2>Signal muting</h2>
-      <label style={{ display: "block", margin: "4px 0" }}>
-        Method:{" "}
-        <select value={muting.method} onChange={(e) => setMuting({ ...muting, method: e.target.value })}>
-          <option value="none">None</option>
-          <option value="mute">Mute</option>
-        </select>
-      </label>
-      {muting.method === "mute" && (
-        <>
-          <NumberField label="Min time [s]" value={muting.tmin} onChange={(v) => setMuting({ ...muting, tmin: v })} min={0} max={maxTime} step={0.1} />
-          <NumberField label="Max time [s]" value={muting.tmax} onChange={(v) => setMuting({ ...muting, tmax: v })} min={0} max={maxTime} step={0.1} />
-          <NumberField label="Min group velocity [m/s]" value={muting.vmin} onChange={(v) => setMuting({ ...muting, vmin: v })} min={0} />
-          <NumberField label="Max group velocity [m/s]" value={muting.vmax} onChange={(v) => setMuting({ ...muting, vmax: v })} min={0} />
-          <NumberField label="Taper width [#]" value={muting.taper} onChange={(v) => setMuting({ ...muting, taper: v })} min={0} />
-          <MuteGather acquisition={acquisition} muting={muting} />
-        </>
-      )}
+        <Card
+          step={4}
+          title="Dispersion image"
+          hint="The stacked virtual shot's phase-shift image."
+        >
+          <div className="rows">
+            <DispersionRows
+              dispersion={dispersion}
+              setDispersion={setDispersion}
+              nyquist={nyquist}
+            />
+          </div>
+        </Card>
+      </fieldset>
 
-      <h2>Spectral filtering</h2>
-      <label style={{ display: "block", margin: "4px 0" }}>
-        Method:{" "}
-        <select value={filtering.method} onChange={(e) => setFiltering({ ...filtering, method: e.target.value })}>
-          <option value="none">None</option>
-          <option value="iir">IIR</option>
-        </select>
-      </label>
-      {filtering.method === "iir" && (
-        <>
-          <NumberField label="Min frequency [Hz]" value={filtering.fmin} onChange={(v) => setFiltering({ ...filtering, fmin: v })} min={0} max={nyquist} step={5} />
-          <NumberField label="Max frequency [Hz]" value={filtering.fmax} onChange={(v) => setFiltering({ ...filtering, fmax: v })} min={0} max={nyquist} step={5} />
-          <NumberField label="Max frequency [Hz]" value={filtering.order} onChange={(v) => setFiltering({ ...filtering, order: v })} min={4} step={1} />
-        </>
-      )}
-
-      <h2>Surface-wave window</h2>
-      <p style={{ margin: "4px 0" }}>Each shot kept between the arrivals at these velocities before it is correlated.</p>
-      <label style={{ display: "block", margin: "4px 0" }}>
-        Method:{" "}
-        <select value={surfaceWaves.method} onChange={(e) => setSurfaceWaves({ ...surfaceWaves, method: e.target.value })}>
-          <option value="none">None</option>
-          <option value="mute">Mute</option>
-        </select>
-      </label>
-      {surfaceWaves.method === "mute" && (
-        <>
-          <NumberField label="Min group velocity [m/s]" value={surfaceWaves.vmin} onChange={(v) => setSurfaceWaves({ ...surfaceWaves, vmin: v })} min={0} />
-          <NumberField label="Max group velocity [m/s]" value={surfaceWaves.vmax} onChange={(v) => setSurfaceWaves({ ...surfaceWaves, vmax: v })} min={0} />
-          <NumberField label="Taper width [#]" value={surfaceWaves.taper} onChange={(v) => setSurfaceWaves({ ...surfaceWaves, taper: v })} min={0} />
-        </>
-      )}
-
-      <h2>Stacking</h2>
-      <label style={{ display: "block", margin: "4px 0" }}>
-        Method :{" "}
-        <select value={stacking.method} onChange={(e) => setStacking({ ...stacking, method: e.target.value })}>
-          <option value="linear">Linear</option>
-          <option value="phase_weighted">Phase-weighted</option>
-          <option value="root">Root</option>
-        </select>
-      </label>
-      {stacking.method === "phase_weighted" && (
-        <NumberField label="Power" value={stacking.nu} onChange={(v) => setStacking({ ...stacking, nu: v })} />
-      )}
-      {stacking.method === "root" && (
-        <NumberField label="Power" value={stacking.n} onChange={(v) => setStacking({ ...stacking, n: v })} />
-      )}
-
-      <h2>Dispersion</h2>
-      <NumberField label="Min frequency [Hz]" value={dispersion.fmin} onChange={(v) => setDispersion({ ...dispersion, fmin: v })} min={0} max={nyquist} />
-      <NumberField label="Max frequency [Hz]" value={dispersion.fmax} onChange={(v) => setDispersion({ ...dispersion, fmax: v })} min={0} max={nyquist} />
-      <NumberField label="Min phase velocity [m/s]" value={dispersion.vmin} onChange={(v) => setDispersion({ ...dispersion, vmin: v })} min={1} />
-      <NumberField label="Max phase velocity [m/s]" value={dispersion.vmax} onChange={(v) => setDispersion({ ...dispersion, vmax: v })} min={1} />
-      <NumberField label="Number of samples [#]" value={dispersion.nv} onChange={(v) => setDispersion({ ...dispersion, nv: v })} min={1_000} />
-
-      <h2>Execution</h2>
-      <NumberField label="Number of workers" value={execution.n_workers} onChange={(v) => setExecution({ n_workers: Math.min(v, maxWorkers) })} min={1} />
-
-      <RunPanel config={config} />
-    </div>
+      <RunPanel
+        onRunning={(now) => {
+          setRunning(now);
+          onRunning?.(now);
+        }}
+        config={config}
+        missing={nPositions === 0 ? ["a window with a shot"] : []}
+        summary={
+          <>
+            <span>
+              <b>{nPositions}</b> windows to compute
+            </span>
+            <WorkersField
+              workers={workers}
+              setWorkers={setWorkers}
+              maxWorkers={maxWorkers}
+            />
+          </>
+        }
+        after={(job) => <NextSteps job={job} />}
+      />
+    </>
   );
 }

@@ -1,18 +1,27 @@
+"""Seismic inversions of a run's positions, as PAC's inversion job does them: each position in a
+worker process, into a staging folder whose files replace the window's only once it succeeded,
+then the line's section and comparison figures. Stoppable: see sigpipe.masw.runs.stopping."""
+
 import json
 import logging
+import os
+import threading
 import time
 import traceback
 from collections.abc import Callable, Sequence
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import asdict
+from pathlib import Path
 from typing import cast
 
 from masw.io import inversion as io
+from masw.io.dispersion_images import xmid_folder
 from masw.io.paths import output_folder
 from masw.logging_config import setup_logging
 from masw.models.inversion import InversionRunConfig
 from masw.runners.computing import WindowError
 from sigpipe.masw.inversion import InversionParameters
+from sigpipe.masw.runs.stopping import Stopped, commit, finished, staging, undo
 
 logger = logging.getLogger(__name__)
 
@@ -20,17 +29,25 @@ ProgressCallback = Callable[[int, int, "WindowError | None"], None]
 
 
 def _invert_position_timed(
-    folder: str, xmid: float, labels: Sequence[str], parameters: InversionParameters
+    folder: str,
+    xmid: float,
+    labels: Sequence[str],
+    parameters: InversionParameters,
+    output: Path,
+    chain_jobs: int,
 ) -> float:
     start = time.perf_counter()
-    io.invert_position(folder, xmid, labels, parameters)
+    io.invert_position(folder, xmid, labels, parameters, output, chain_jobs)
     return time.perf_counter() - start
 
 
 def run_inversion(
     config: InversionRunConfig,
     on_progress: ProgressCallback | None = None,
+    stop: threading.Event | None = None,
 ) -> list[WindowError]:
+    """The failed positions; Stopped once `stop` is set: the positions that finished kept, the
+    others as they were, the line's figures left as they were."""
     total = len(config.positions)
 
     logger.info(
@@ -46,6 +63,9 @@ def run_inversion(
     errors: list[WindowError] = []
     results: list[dict[str, object]] = []
     completed = 0
+    # Each window's chains in the cores its share of the workers leaves: a few windows, their
+    # chains side by side; as many windows as cores, one after the other.
+    chain_jobs = max(1, (os.cpu_count() or 1) // max(1, min(config.n_workers, total)))
     if on_progress is not None:
         on_progress(completed, total, None)
 
@@ -53,38 +73,54 @@ def run_inversion(
         max_workers=config.n_workers,
         initializer=setup_logging,
     ) as executor:
-        futures = {
-            executor.submit(
-                _invert_position_timed, config.folder, xmid, config.labels, config.parameters
-            ): xmid
-            for xmid in config.positions
-        }
-        for future in as_completed(futures):
-            xmid = futures[future]
-            pos_err = None
-            try:
-                duration_s = future.result()
-                logger.info("Finished xmid=%.2f", xmid)
-                results.append({"xmid": xmid, "status": "success", "duration_s": duration_s})
-            except Exception as exc:
-                logger.exception("Inversion failed for xmid=%.2f", xmid)
-                pos_err = WindowError(
-                    xmid=xmid,
-                    error_type=type(exc).__name__,
-                    message=str(exc),
-                    traceback=traceback.format_exc(),
-                )
-                errors.append(pos_err)
-                results.append(
-                    {"xmid": xmid, "status": "failed", "duration_s": None, **asdict(pos_err)}
-                )
-            finally:
-                completed += 1
-                if on_progress is not None:
-                    on_progress(completed, total, pos_err)
+        futures: dict[Future[float], float] = {}
+        for xmid in config.positions:
+            output = staging(xmid_folder(config.folder, xmid))
+            future = executor.submit(
+                _invert_position_timed,
+                config.folder,
+                xmid,
+                config.labels,
+                config.parameters,
+                output,
+                chain_jobs,
+            )
+            futures[future] = xmid
+        try:
+            for future in finished(executor, futures, stop):
+                xmid = futures.pop(future)
+                pos_err = None
+                try:
+                    duration_s = future.result()
+                    commit(xmid_folder(config.folder, xmid))
+                    logger.info("Finished xmid=%.2f", xmid)
+                    results.append({"xmid": xmid, "status": "success", "duration_s": duration_s})
+                except Exception as exc:
+                    # The window keeps the files it had: a failed inversion's are not kept.
+                    undo(xmid_folder(config.folder, xmid), created=False)
+                    logger.exception("Inversion failed for xmid=%.2f", xmid)
+                    pos_err = WindowError(
+                        xmid=xmid,
+                        error_type=type(exc).__name__,
+                        message=str(exc),
+                        traceback=traceback.format_exc(),
+                    )
+                    errors.append(pos_err)
+                    results.append(
+                        {"xmid": xmid, "status": "failed", "duration_s": None, **asdict(pos_err)}
+                    )
+                finally:
+                    completed += 1
+                    if on_progress is not None:
+                        on_progress(completed, total, pos_err)
+        except Stopped:
+            for xmid in futures.values():
+                undo(xmid_folder(config.folder, xmid), created=False)
+            _write_outcome(out_dir, results)
+            logger.info("Inversion stopped: %d of %d positions finished", completed, total)
+            raise
 
-    results.sort(key=lambda r: cast(float, r["xmid"]))
-    (out_dir / "seismic_inversion_outcome.json").write_text(json.dumps(results, indent=2))
+    _write_outcome(out_dir, results)
 
     n_failed = len(errors)
     logger.info("%d/%d succeeded, %d failed", total - n_failed, total, n_failed)
@@ -110,3 +146,9 @@ def run_inversion(
             )
 
     return errors
+
+
+def _write_outcome(out_dir: Path, results: list[dict[str, object]]) -> None:
+    """The positions that finished, by xmid, with their status and duration."""
+    results.sort(key=lambda r: cast(float, r["xmid"]))
+    (out_dir / "seismic_inversion_outcome.json").write_text(json.dumps(results, indent=2))

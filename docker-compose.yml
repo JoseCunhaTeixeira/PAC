@@ -61,6 +61,8 @@ services:
     command:
       - --model=${PACO_LLM_MODEL:-Qwen/Qwen3-8B}
       - --max-model-len=${VLLM_MAX_MODEL_LEN:-16384}
+      # A model larger than one GPU, spread over several: their number.
+      - --tensor-parallel-size=${VLLM_TENSOR_PARALLEL_SIZE:-1}
       # One user: preparing for few conversations at once leaves the GPU's memory to the context.
       - --max-num-seqs=${VLLM_MAX_NUM_SEQS:-8}
       # Qwen3's tool calls, and its thinking kept out of the answers.

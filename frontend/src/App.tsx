@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Routes, Route, NavLink } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
+import { Routes, Route, NavLink, Link, useLocation } from "react-router-dom";
 import HomePage from "./HomePage";
 import ActiveComputingPage from "./ActiveComputingPage";
 import PassiveComputingPage from "./PassiveComputingPage";
@@ -10,38 +10,74 @@ import PetroInversionPage from "./PetroInversionPage";
 import VisualizationPage from "./VisualizationPage";
 import ChatPage from "./ChatPage";
 import { API } from "./api";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { TipLayer } from "./components/TipLayer";
+import { runsAt, useRunning } from "./components/running";
 import { applyTheme, getInitialTheme, ThemeContext, type Theme } from "./theme";
-import { ChatIcon, CrosshairIcon, DepthIcon, EyeIcon, FlaskIcon, HomeIcon, LayersIcon, MoonIcon, SunIcon, WavesIcon, ZapIcon } from "./components/icons";
+import {
+  CrosshairIcon,
+  DepthIcon,
+  EyeIcon,
+  FlaskIcon,
+  HomeIcon,
+  LayersIcon,
+  MoonIcon,
+  SparklesIcon,
+  SunIcon,
+  WavesIcon,
+  ZapIcon,
+} from "./components/icons";
+// PAC's version in the sidebar: the frontend's own, kept in step with pyproject.toml.
+import packageJson from "../package.json";
 import logoDeepWaveLight from "./assets/logo_DeepWave_lightmode.png";
 import logoDeepWaveDark from "./assets/logo_DeepWave_darkmode.png";
 
-const NAV_ITEMS = [
-  { to: "/", end: true, label: "Home", icon: <HomeIcon /> },
-  { to: "/active", end: false, label: "Active Computing", icon: <ZapIcon /> },
-  { to: "/passive", end: false, label: "Passive Computing", icon: <WavesIcon /> },
-  { to: "/passive-active", end: false, label: "Passive-Active Computing", icon: <LayersIcon /> },
-  { to: "/dispersion_picking", end: false, label: "Dispersion Picking", icon: <CrosshairIcon /> },
-  { to: "/seismic_inversion", end: false, label: "Seismic Inversion", icon: <DepthIcon /> },
-  { to: "/petro_inversion", end: false, label: "Petrophysical Inversion", icon: <FlaskIcon /> },
-  { to: "/visualization", end: false, label: "Visualization", icon: <EyeIcon /> },
-  { to: "/assistant", end: false, label: "Assistant", icon: <ChatIcon /> },
+interface NavItem {
+  to: string;
+  label: string;
+  icon: ReactNode;
+}
+
+// The sidebar: home, the AI assistant who can do it all (where PAC was installed with PACo),
+// then the workflow's order: records to images, images to curves and models, what came out.
+const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
+  { label: null, items: [{ to: "/", label: "Home", icon: <HomeIcon /> }] },
+  { label: "Automate", items: [{ to: "/assistant", label: "AI assistant", icon: <SparklesIcon /> }] },
+  {
+    label: "Compute",
+    items: [
+      { to: "/active", label: "Active", icon: <ZapIcon /> },
+      { to: "/passive", label: "Passive", icon: <WavesIcon /> },
+      { to: "/passive-active", label: "Passive-active", icon: <LayersIcon /> },
+    ],
+  },
+  {
+    label: "Analyse",
+    items: [
+      { to: "/dispersion_picking", label: "Dispersion picking", icon: <CrosshairIcon /> },
+      { to: "/seismic_inversion", label: "Seismic inversion", icon: <DepthIcon /> },
+      { to: "/petro_inversion", label: "Petrophysical inversion", icon: <FlaskIcon /> },
+    ],
+  },
+  {
+    label: "Review",
+    items: [{ to: "/visualization", label: "Visualization", icon: <EyeIcon /> }],
+  },
 ];
 
 export default function App() {
+  const location = useLocation();
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme());
-  const [version, setVersion] = useState<string | null>(null);
   // The assistant's page, only where PAC was installed with it.
   const [assistant, setAssistant] = useState(false);
+  // What runs, beside each page in the menu.
+  const running = useRunning(assistant);
 
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
 
   useEffect(() => {
-    fetch(`${API}/version`)
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data: { version: string }) => setVersion(data.version))
-      .catch(() => setVersion(null));
     fetch(`${API}/agent/installed`)
       .then((res) => (res.ok ? res.json() : Promise.reject()))
       .then((data: { installed: boolean }) => setAssistant(data.installed))
@@ -50,62 +86,77 @@ export default function App() {
 
   return (
     <ThemeContext.Provider value={theme}>
-      <div style={{ display: "flex", minHeight: "100vh" }}>
-        <aside
-          style={{
-            width: 270,
-            flexShrink: 0,
-            position: "sticky",
-            top: 0,
-            alignSelf: "flex-start",
-            height: "100vh",
-            display: "flex",
-            flexDirection: "column",
-            borderRight: "1px solid var(--border)",
-            background: "var(--surface)",
-            padding: "20px 12px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", marginBottom: 28 }}>
-            <img
-              src={theme === "dark" ? logoDeepWaveDark : logoDeepWaveLight}
-              alt="DeepWave logo"
-              style={{ height: 24, width: "auto" }}
-            />
-            <span style={{ fontWeight: 700, fontSize: "1.05rem", letterSpacing: "-0.01em", color: "var(--text)" }}>
-              PAC
-            </span>
-            {version && (
-              <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>v{version}</span>
-            )}
-          </div>
+      <div className="app">
+        <aside className="sidebar">
+          <Link to="/" className="sidebar-brand">
+            <img src={theme === "dark" ? logoDeepWaveDark : logoDeepWaveLight} alt="DeepWave logo" />
+            <div>
+              <strong>PAC</strong>
+              <small>Surface-wave imaging</small>
+            </div>
+          </Link>
 
-          <nav style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-            {NAV_ITEMS.filter((item) => assistant || item.to !== "/assistant").map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) => "sidebar-link" + (isActive ? " active" : "")}
-              >
-                {item.icon}
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
+          <nav className="sidebar-nav">
+            {NAV_GROUPS.map((group) => {
+              const items = group.items.filter((item) => assistant || item.to !== "/assistant");
+              if (items.length === 0) return null; // the assistant's group, without PACo
+              return (
+                <div key={group.label ?? "top"} className="sidebar-group">
+                  {group.label && <div className="sidebar-group-label">{group.label}</div>}
+                  {items.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.to === "/"}
+                      title={item.label}
+                      className={({ isActive }) => "sidebar-link" + (isActive ? " active" : "")}
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                      {runsAt(item.to, running) && (
+                        <i
+                          className="sidebar-running"
+                          aria-label="Running"
+                          data-tip={item.to === "/assistant" ? "Answering\nOpen it to follow or stop it" : "Running\nOpen the page to follow or stop it"}
+                        />
+                      )}
+                    </NavLink>
+                  ))}
+                </div>
+              );
+            })}
           </nav>
 
-          <button
-            className="sidebar-toggle"
-            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-          >
-            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-            <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
-          </button>
+          <div className="sidebar-footer">
+            <span>v{packageJson.version}</span>
+            <div className="theme-switch" role="group" aria-label="Theme">
+              <button
+                type="button"
+                title="Light mode"
+                aria-pressed={theme === "light"}
+                className={theme === "light" ? "active" : ""}
+                onClick={() => setTheme("light")}
+              >
+                <SunIcon size={15} />
+              </button>
+              <button
+                type="button"
+                title="Dark mode"
+                aria-pressed={theme === "dark"}
+                className={theme === "dark" ? "active" : ""}
+                onClick={() => setTheme("dark")}
+              >
+                <MoonIcon size={15} />
+              </button>
+            </div>
+          </div>
         </aside>
 
-        <main style={{ flex: 1, minWidth: 0, width: "100%", maxWidth: 900, margin: "0 auto" }}>
+        <TipLayer />
+        <main className="app-main">
+          <ErrorBoundary resetKey={location.pathname}>
           <Routes>
-            <Route path="/" element={<HomePage />} />
+            <Route path="/" element={<HomePage assistant={assistant} />} />
             <Route path="/active" element={<ActiveComputingPage />} />
             <Route path="/passive" element={<PassiveComputingPage />} />
             <Route path="/passive-active" element={<PassiveActiveComputingPage />} />
@@ -115,6 +166,7 @@ export default function App() {
             <Route path="/visualization" element={<VisualizationPage />} />
             <Route path="/assistant" element={<ChatPage />} />
           </Routes>
+          </ErrorBoundary>
         </main>
       </div>
     </ThemeContext.Provider>

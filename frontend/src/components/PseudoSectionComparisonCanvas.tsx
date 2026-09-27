@@ -4,6 +4,18 @@ import { HoverTooltip } from "./HoverTooltip";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { nearestIndex, useCanvasHover } from "./useCanvasHover";
 import { useContainerWidth } from "./useContainerWidth";
+import {
+  evenTicks,
+  positionTicks,
+  tickDecimals,
+  useZoom,
+  valueRange,
+  visibleCells,
+  visibleColumns,
+  type PlotRect,
+} from "./useZoom";
+import { ZoomReset, ZoomSelection } from "./ZoomOverlay";
+import { drawMarker, useClick } from "./sectionPick";
 
 export interface PseudoSectionComparisonData {
   positions: number[];
@@ -14,10 +26,22 @@ export interface PseudoSectionComparisonData {
 }
 
 const ML = 60, MR = 130, MT = 16, MB = 40, PANEL_GAP = 30;
-const PLOT_W = 640, PLOT_H = 130;
+const PLOT_H = 130;
+const BASE_W = 830; // the drawing's width until its card is measured
 const FONT = CANVAS_FONT;
-const TOTAL_W = ML + PLOT_W + MR;
 const TOTAL_H = MT + 3 * PLOT_H + 2 * PANEL_GAP + MB;
+// The three panels share their axes: a zoom in one zooms them all. Each has
+// its own ticks, in the gap under it and the margin left of it.
+function panels(plotW: number): PlotRect[] {
+  return [0, 1, 2].map((i) => ({
+    left: ML,
+    top: MT + i * (PLOT_H + PANEL_GAP),
+    width: plotW,
+    height: PLOT_H,
+    xAxis: i < 2 ? PANEL_GAP : MB,
+    yAxis: ML,
+  }));
+}
 
 // Observed/predicted/residual pseudo-sections stacked vertically, like
 // sigpipe's `plot_pseudo_section_comparison` (obs+pred share one viridis
@@ -25,23 +49,46 @@ const TOTAL_H = MT + 3 * PLOT_H + 2 * PANEL_GAP + MB;
 export function PseudoSectionComparisonCanvas({
   comparison,
   velocityLabel,
+  marker,
+  onPick,
 }: {
   comparison: PseudoSectionComparisonData;
   velocityLabel: string;
+  // A position to mark down the panels (the selected window), and what a click on a column
+  // (not a zoom's drag) selects: its position.
+  marker?: number;
+  onPick?: (position: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
   const palette = useMemo(() => canvasPalette(theme), [theme]);
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
-  const scale = containerWidth > 0 ? Math.min(containerWidth / TOTAL_W, 1) : 1;
+  // As wide as its card, the text at its own size.
+  const TOTAL_W = Math.max(480, Math.round(containerWidth || BASE_W));
+  const PLOT_W = TOTAL_W - ML - MR;
+  const PANELS = panels(PLOT_W);
+  const scale = 1;
   const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(scale);
+
+  const xFirst = comparison.positions[0];
+  const xExtent = comparison.positions[comparison.positions.length - 1] - xFirst || 1;
+  const fFirst = comparison.fs[0];
+  const fExtent = comparison.fs[comparison.fs.length - 1] - fFirst || 1;
+  const zoom = useZoom({
+    extent: { x: [xFirst, xFirst + xExtent], y: [fFirst, fFirst + fExtent] },
+    plots: PANELS,
+    width: TOTAL_W,
+    height: TOTAL_H,
+  });
+  // The positions and frequencies on show, in all three panels.
+  const [x0, x1] = zoom.view.x;
+  const [f0, f1] = zoom.view.y;
 
   const hover = useMemo(() => {
     if (!hoverPos) return null;
     if (hoverPos.x < ML || hoverPos.x > ML + PLOT_W) return null;
 
     const { positions, fs, observed_grid, predicted_grid, residual_grid } = comparison;
-    const np = positions.length;
 
     const top1 = MT;
     const top2 = top1 + PLOT_H + PANEL_GAP;
@@ -53,28 +100,21 @@ export function PseudoSectionComparisonCanvas({
     if (hoverPos.y >= top1 && hoverPos.y <= top1 + PLOT_H) {
       top = top1;
       grid = observed_grid;
-      label = `Obs ${velocityLabel}`;
+      label = `Picked ${velocityLabel.toLowerCase()}`;
     } else if (hoverPos.y >= top2 && hoverPos.y <= top2 + PLOT_H) {
       top = top2;
       grid = predicted_grid;
-      label = `Pred ${velocityLabel}`;
+      label = `Modelled ${velocityLabel.toLowerCase()}`;
     } else if (hoverPos.y >= top3 && hoverPos.y <= top3 + PLOT_H) {
       top = top3;
       grid = residual_grid;
-      label = "Residuals [%]";
+      label = "Residual (%)";
     } else {
       return null;
     }
 
-    const xMin = positions[0];
-    const xMax = positions[np - 1];
-    const xSpan = xMax - xMin || 1;
-    const position = xMin + ((hoverPos.x - ML) / PLOT_W) * xSpan;
-
-    const fMin = fs[0];
-    const fMax = fs[fs.length - 1];
-    const fSpan = fMax - fMin || 1;
-    const freq = fMin + ((top + PLOT_H - hoverPos.y) / PLOT_H) * fSpan;
+    const position = x0 + ((hoverPos.x - ML) / PLOT_W) * (x1 - x0);
+    const freq = f0 + ((top + PLOT_H - hoverPos.y) / PLOT_H) * (f1 - f0);
 
     const posIdx = nearestIndex(positions, position);
     const fIdx = nearestIndex(fs, freq);
@@ -84,12 +124,12 @@ export function PseudoSectionComparisonCanvas({
       px: hoverPos.x * scale,
       py: hoverPos.y * scale,
       lines: [
-        `Position: ${positions[posIdx].toFixed(2)} m`,
-        `Frequency: ${fs[fIdx].toFixed(2)} Hz`,
+        `xmid ${positions[posIdx].toFixed(2)} m`,
+        `frequency ${fs[fIdx].toFixed(2)} Hz`,
         `${label}: ${value === null ? "—" : value.toFixed(1)}`,
       ],
     };
-  }, [hoverPos, comparison, velocityLabel, scale]);
+  }, [hoverPos, comparison, velocityLabel, scale, PLOT_W, x0, x1, f0, f1]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -115,10 +155,9 @@ export function PseudoSectionComparisonCanvas({
 
     const xMin = positions[0];
     const xMax = positions[np - 1];
-    const xSpan = xMax - xMin || 1;
 
     const xOf = (p: number) =>
-      ML + ((p - xMin) / xSpan) * PLOT_W;
+      ML + ((p - x0) / (x1 - x0)) * PLOT_W;
 
     // Cell boundaries clipped to the actual position range
     const cellEdges: number[] = new Array(np + 1);
@@ -130,27 +169,25 @@ export function PseudoSectionComparisonCanvas({
       cellEdges[i] = (positions[i - 1] + positions[i]) / 2;
     }
 
-    // Obs and pred share one color scale so the two panels are directly comparable.
-    let zMin = Infinity, zMax = -Infinity;
-    for (const grid of [observed_grid, predicted_grid]) {
-      for (const row of grid) {
-        for (const v of row) {
-          if (v !== null) {
-            if (v < zMin) zMin = v;
-            if (v > zMax) zMax = v;
-          }
-        }
-      }
-    }
-    if (!Number.isFinite(zMin)) { zMin = 0; zMax = 1; }
+    // Only the cells on show, the same in the three panels: a column's rows
+    // run from the highest frequency at the top down (the data's entries
+    // bottom up), and each panel's edges clip those they cut through.
+    const [i0, i1] = visibleColumns(cellEdges, x0, x1);
+    const [k0, k1] = visibleCells(nf, fMin + fSpan, fMin, f0, f1);
+    const [j0, j1] = [nf - k1, nf - k0];
 
-    let resLim = 0;
-    for (const row of residual_grid) {
-      for (const v of row) {
-        if (v !== null) resLim = Math.max(resLim, Math.abs(v));
-      }
-    }
-    if (resLim === 0) resLim = 1;
+    // The colour scales span the values on show: all of them in the full
+    // view, those in the window when zoomed.
+    const merge = (a: [number, number] | null, b: [number, number] | null): [number, number] | null =>
+      a && b ? [Math.min(a[0], b[0]), Math.max(a[1], b[1])] : (a ?? b);
+    // Obs and pred share one color scale so the two panels are directly comparable.
+    const [zMin, zMax] =
+      merge(valueRange(observed_grid, i0, i1, j0, j1), valueRange(predicted_grid, i0, i1, j0, j1)) ??
+      merge(valueRange(observed_grid, 0, np, 0, nf), valueRange(predicted_grid, 0, np, 0, nf)) ??
+      [0, 1];
+    // The residuals' scale stays symmetric about zero.
+    const residuals = valueRange(residual_grid, i0, i1, j0, j1) ?? valueRange(residual_grid, 0, np, 0, nf);
+    const resLim = (residuals && Math.max(Math.abs(residuals[0]), Math.abs(residuals[1]))) || 1;
 
     function drawPanel(
       ctx: CanvasRenderingContext2D,
@@ -162,9 +199,15 @@ export function PseudoSectionComparisonCanvas({
       legendLabel: string,
     ) {
       const vSpan = vMax - vMin || 1;
-      const yOf = (f: number) => top + PLOT_H - ((f - fMin) / fSpan) * PLOT_H;
+      const yOf = (f: number) => top + PLOT_H - ((f - f0) / (f1 - f0)) * PLOT_H;
 
-      for (let i = 0; i < np; i++) {
+      const yTop = yOf(fMin + fSpan - (k0 / nf) * fSpan);
+      const yBottom = yOf(fMin + fSpan - (k1 / nf) * fSpan);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(ML, top, PLOT_W, PLOT_H);
+      ctx.clip();
+      for (let i = i0; i < i1 && k1 > k0; i++) {
         const xLeft = xOf(cellEdges[i]);
         const xRight = xOf(cellEdges[i + 1]);
         const off = document.createElement("canvas");
@@ -188,8 +231,10 @@ export function PseudoSectionComparisonCanvas({
           imgData.data[idx + 3] = 255;
         }
         octx.putImageData(imgData, 0, 0);
-        ctx.drawImage(off, 0, 0, 1, nf, xLeft, top, Math.max(1, xRight - xLeft), PLOT_H);
+        ctx.drawImage(off, 0, k0, 1, k1 - k0, xLeft, yTop, Math.max(1, xRight - xLeft), yBottom - yTop);
       }
+      ctx.restore();
+      if (marker !== undefined && marker >= x0 && marker <= x1) drawMarker(ctx, xOf(marker), top, top + PLOT_H);
 
       ctx.strokeStyle = palette.axis;
       ctx.lineWidth = 1;
@@ -199,28 +244,25 @@ export function PseudoSectionComparisonCanvas({
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
       const nfTicks = 4;
-      for (let i = 0; i <= nfTicks; i++) {
-        const f = fMin + (i / nfTicks) * fSpan;
+      const fDecimals = tickDecimals((f1 - f0) / nfTicks, 1);
+      for (const f of evenTicks(f0, f1, nfTicks)) {
         const py = yOf(f);
         ctx.beginPath();
         ctx.moveTo(ML - 4, py);
         ctx.lineTo(ML, py);
         ctx.stroke();
-        ctx.fillText(f.toFixed(1), ML - 7, py);
+        ctx.fillText(f.toFixed(fDecimals), ML - 7, py);
       }
 
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      const nxTicks = Math.min(8, np - 1);
-      for (let i = 0; i <= nxTicks; i++) {
-        const idx = nxTicks > 0 ? Math.round((i / nxTicks) * (np - 1)) : 0;
-        const p = positions[idx];
+      for (const { p, label } of positionTicks(positions, x0, x1)) {
         const x = xOf(p);
         ctx.beginPath();
         ctx.moveTo(x, top + PLOT_H);
         ctx.lineTo(x, top + PLOT_H + 4);
         ctx.stroke();
-        ctx.fillText(p.toFixed(1), x, top + PLOT_H + 6);
+        ctx.fillText(label, x, top + PLOT_H + 6);
       }
 
       // color legend — offscreen image + drawImage, like the pcolormesh
@@ -271,7 +313,7 @@ export function PseudoSectionComparisonCanvas({
       ctx.translate(16, top + PLOT_H / 2);
       ctx.rotate(-Math.PI / 2);
       ctx.textAlign = "center";
-      ctx.fillText("Frequency [Hz]", 0, 0);
+      ctx.fillText("Frequency (Hz)", 0, 0);
       ctx.restore();
     }
 
@@ -279,24 +321,44 @@ export function PseudoSectionComparisonCanvas({
     const top2 = top1 + PLOT_H + PANEL_GAP;
     const top3 = top2 + PLOT_H + PANEL_GAP;
 
-    drawPanel(ctx, top1, observed_grid, zMin, zMax, viridis, `Obs ${velocityLabel}`);
-    drawPanel(ctx, top2, predicted_grid, zMin, zMax, viridis, `Pred ${velocityLabel}`);
-    drawPanel(ctx, top3, residual_grid, -resLim, resLim, bwr, "Residuals [%]");
+    drawPanel(ctx, top1, observed_grid, zMin, zMax, viridis, `Picked ${velocityLabel.toLowerCase()}`);
+    drawPanel(ctx, top2, predicted_grid, zMin, zMax, viridis, `Modelled ${velocityLabel.toLowerCase()}`);
+    drawPanel(ctx, top3, residual_grid, -resLim, resLim, bwr, "Residual (%)");
 
     ctx.fillStyle = palette.title;
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText("Position [m]", ML + PLOT_W / 2, TOTAL_H - 4);
-  }, [comparison, velocityLabel, palette, scale]);
+    ctx.fillText("Position (m)", ML + PLOT_W / 2, TOTAL_H - 4);
+  }, [comparison, velocityLabel, palette, scale, TOTAL_W, PLOT_W, x0, x1, f0, f1, marker]);
+
+  const click = useClick(
+    TOTAL_W,
+    TOTAL_H,
+    onPick &&
+      ((x, y) => {
+        const inside = PANELS.some(
+          (panel) => x >= panel.left && x <= panel.left + panel.width && y >= panel.top && y <= panel.top + panel.height,
+        );
+        if (!inside) return;
+        const positions = comparison.positions;
+        onPick(positions[nearestIndex(positions, x0 + ((x - ML) / PLOT_W) * (x1 - x0))]);
+      }),
+    zoom.onMouseDown,
+  );
 
   return (
-    <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W, position: "relative" }}>
+    <div ref={containerRef} style={{ width: "100%", position: "relative" }}>
       <canvas
         ref={canvasRef}
-        style={{ display: "block" }}
+        style={{ display: "block", cursor: zoom.cursorAt(hoverPos) }}
         onMouseMove={onMouseMove}
         onMouseLeave={onMouseLeave}
+        onMouseDown={click.onMouseDown}
+        onClick={click.onClick}
+        onDoubleClick={zoom.onDoubleClick}
       />
+      <ZoomSelection box={zoom.selection} />
+      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: 0, right: MR * scale }} />
       {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
     </div>
   );

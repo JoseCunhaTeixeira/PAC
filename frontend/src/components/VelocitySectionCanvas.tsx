@@ -4,11 +4,22 @@ import { HoverTooltip } from "./HoverTooltip";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { nearestIndex, useCanvasHover } from "./useCanvasHover";
 import { useContainerWidth } from "./useContainerWidth";
+import {
+  evenTicks,
+  positionTicks,
+  tickDecimals,
+  useZoom,
+  valueRange,
+  visibleCells,
+  visibleColumns,
+  type ZoomLink,
+} from "./useZoom";
+import { ZoomReset, ZoomSelection } from "./ZoomOverlay";
+import { drawMarker, useClick } from "./sectionPick";
 
 const ML = 60, MR = 120, MT = 16, MB = 40;
-const PLOT_W = 640;
+const BASE_W = 820; // the drawing's width until its card is measured
 const FONT = CANVAS_FONT;
-const TOTAL_W = ML + PLOT_W + MR;
 
 // Module-level (not inline) so it's referentially stable across renders when
 // callers don't override it, matching `colormap`'s default (cividis) --
@@ -24,6 +35,10 @@ export function VelocitySectionCanvas({
   colormap = cividis,
   height = 320,
   formatValue = DEFAULT_FORMAT_VALUE,
+  link,
+  colorRange,
+  marker,
+  onPick,
 }: {
   positions: number[];
   elevations: number[];
@@ -37,15 +52,47 @@ export function VelocitySectionCanvas({
   // everything to "0.0" -- callers with a different value scale should
   // override this.
   formatValue?: (v: number) => string;
+  // One zoom with the sections of the same grid shown beside it (a Vs
+  // section and its std): zooming or resetting one does both.
+  link?: ZoomLink;
+  // Ends of the colour scale the user fixed. An end left out follows the
+  // data: all of it in the full view, the values on show when zoomed.
+  colorRange?: { min?: number; max?: number };
+  // A position to mark down the section (the selected window), and what a click on a column
+  // (not a zoom's drag) selects: its position.
+  marker?: number;
+  onPick?: (position: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
   const palette = useMemo(() => canvasPalette(theme), [theme]);
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
-  const scale = containerWidth > 0 ? Math.min(containerWidth / TOTAL_W, 1) : 1;
+  // As wide as its card, the text at its own size.
+  const TOTAL_W = Math.max(480, Math.round(containerWidth || BASE_W));
+  const PLOT_W = TOTAL_W - ML - MR;
+  const scale = 1;
   const PLOT_H = height;
   const TOTAL_H = MT + PLOT_H + MB;
   const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(scale);
+
+  // The full view: positions left to right, elevations from the highest at
+  // the top down.
+  const xFirst = positions[0];
+  const xExtent = positions[positions.length - 1] - xFirst || 1;
+  const zTop = elevations[0];
+  const zExtent = zTop - elevations[elevations.length - 1] || 1;
+  const zoom = useZoom({
+    extent: { x: [xFirst, xFirst + xExtent], y: [zTop - zExtent, zTop] },
+    plots: [{ left: ML, top: MT, width: PLOT_W, height: PLOT_H, xAxis: MB, yAxis: ML }],
+    width: TOTAL_W,
+    height: TOTAL_H,
+    link,
+  });
+  // The positions and elevations on show: the whole section, or the zoom.
+  const [x0, x1] = zoom.view.x;
+  const [z0, z1] = zoom.view.y;
+  const fixedMin = colorRange?.min;
+  const fixedMax = colorRange?.max;
 
   const hover = useMemo(() => {
     if (!hoverPos) return null;
@@ -56,16 +103,8 @@ export function VelocitySectionCanvas({
       return null;
     }
 
-    const np = positions.length;
-    const xMin = positions[0];
-    const xMax = positions[np - 1];
-    const xSpan = xMax - xMin || 1;
-    const position = xMin + ((hoverPos.x - ML) / PLOT_W) * xSpan;
-
-    const zMin = elevations[elevations.length - 1];
-    const zMax = elevations[0];
-    const zSpan = zMax - zMin || 1;
-    const elevation = zMax - ((hoverPos.y - MT) / PLOT_H) * zSpan;
+    const position = x0 + ((hoverPos.x - ML) / PLOT_W) * (x1 - x0);
+    const elevation = z1 - ((hoverPos.y - MT) / PLOT_H) * (z1 - z0);
 
     const posIdx = nearestIndex(positions, position);
     const zIdx = nearestIndex(elevations, elevation);
@@ -75,12 +114,12 @@ export function VelocitySectionCanvas({
       px: hoverPos.x * scale,
       py: hoverPos.y * scale,
       lines: [
-        `Position: ${positions[posIdx].toFixed(2)} m`,
-        `Elevation: ${elevations[zIdx].toFixed(2)} m`,
+        `xmid ${positions[posIdx].toFixed(2)} m`,
+        `elevation ${elevations[zIdx].toFixed(2)} m`,
         `${colorLabel}: ${value === null ? "—" : formatValue(value)}`,
       ],
     };
-  }, [hoverPos, positions, elevations, values, colorLabel, scale, PLOT_H, formatValue]);
+  }, [hoverPos, positions, elevations, values, colorLabel, scale, PLOT_H, PLOT_W, formatValue, x0, x1, z0, z1]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -105,26 +144,13 @@ export function VelocitySectionCanvas({
     const zMin = elevations[elevations.length - 1];
     const zMax = elevations[0];
     const zSpan = zMax - zMin || 1;
-    const yOf = (z: number) => MT + ((zMax - z) / zSpan) * PLOT_H;
-
-    let vMin = Infinity, vMax = -Infinity;
-    for (const row of values) {
-      for (const v of row) {
-        if (v !== null) {
-          if (v < vMin) vMin = v;
-          if (v > vMax) vMax = v;
-        }
-      }
-    }
-    if (!Number.isFinite(vMin)) { vMin = 0; vMax = 1; }
-    const vSpan = vMax - vMin || 1;
+    const yOf = (z: number) => MT + ((z1 - z) / (z1 - z0)) * PLOT_H;
 
     // Plot exactly between min(position) and max(position), like
     // PseudoSectionCanvas/PseudoSectionComparisonCanvas.
     const xMin = positions[0];
     const xMax = positions[np - 1];
-    const xSpan = xMax - xMin || 1;
-    const xOf = (p: number) => ML + ((p - xMin) / xSpan) * PLOT_W;
+    const xOf = (p: number) => ML + ((p - x0) / (x1 - x0)) * PLOT_W;
 
     // Midpoint boundaries, clipped to plot limits
     const cellEdges: number[] = new Array(np + 1);
@@ -132,8 +158,28 @@ export function VelocitySectionCanvas({
     cellEdges[np] = xMax;
     for (let i = 1; i < np; i++) cellEdges[i] = (positions[i - 1] + positions[i]) / 2;
 
+    // Only the cells on show: a column's rows run from zMax at the top down
+    // by zSpan, and the plot's edges clip those they cut through.
+    const [i0, i1] = visibleColumns(cellEdges, x0, x1);
+    const [k0, k1] = visibleCells(nz, zMax, zMax - zSpan, z0, z1);
+    const yTop = yOf(zMax - (k0 / nz) * zSpan);
+    const yBottom = yOf(zMax - (k1 / nz) * zSpan);
+
+    // The colour scale spans the values on show: all of them in the full
+    // view, those in the window when zoomed. An end the user fixed stays.
+    const [autoMin, autoMax] =
+      valueRange(values, i0, i1, k0, k1) || valueRange(values, 0, np, 0, nz) || [0, 1];
+    const vMin = fixedMin ?? autoMin;
+    const vMax = fixedMax ?? autoMax;
+    // (A fixed end beyond all the values on show leaves them at one end of the colours.)
+    const vSpan = vMax > vMin ? vMax - vMin : 1;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ML, MT, PLOT_W, PLOT_H);
+    ctx.clip();
     ctx.imageSmoothingEnabled = false;
-    for (let i = 0; i < np; i++) {
+    for (let i = i0; i < i1 && k1 > k0; i++) {
       // Rounded to whole pixels so adjacent columns share an exact integer
       // boundary -- left as floats, each column's edge gets anti-aliased
       // against the background independently, leaving a thin seam of
@@ -160,9 +206,11 @@ export function VelocitySectionCanvas({
         imgData.data[idx + 3] = 255;
       }
       octx.putImageData(imgData, 0, 0);
-      ctx.drawImage(off, 0, 0, 1, nz, xLeft, MT, Math.max(1, xRight - xLeft), PLOT_H);
+      ctx.drawImage(off, 0, k0, 1, k1 - k0, xLeft, yTop, Math.max(1, xRight - xLeft), yBottom - yTop);
     }
     ctx.imageSmoothingEnabled = true;
+    ctx.restore();
+    if (marker !== undefined && marker >= x0 && marker <= x1) drawMarker(ctx, xOf(marker), MT, MT + PLOT_H);
 
     // axes
     ctx.strokeStyle = palette.axis;
@@ -174,28 +222,25 @@ export function VelocitySectionCanvas({
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     const nzTicks = 6;
-    for (let i = 0; i <= nzTicks; i++) {
-      const z = zMin + (i / nzTicks) * zSpan;
+    const zDecimals = tickDecimals((z1 - z0) / nzTicks, 1);
+    for (const z of evenTicks(z0, z1, nzTicks)) {
       const py = yOf(z);
       ctx.beginPath();
       ctx.moveTo(ML - 4, py);
       ctx.lineTo(ML, py);
       ctx.stroke();
-      ctx.fillText(z.toFixed(1), ML - 7, py);
+      ctx.fillText(z.toFixed(zDecimals), ML - 7, py);
     }
 
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    const nxTicks = Math.min(8, np - 1);
-    for (let i = 0; i <= nxTicks; i++) {
-      const idx = nxTicks > 0 ? Math.round((i / nxTicks) * (np - 1)) : 0;
-      const p = positions[idx];
+    for (const { p, label } of positionTicks(positions, x0, x1)) {
       const x = xOf(p);
       ctx.beginPath();
       ctx.moveTo(x, MT + PLOT_H);
       ctx.lineTo(x, MT + PLOT_H + 4);
       ctx.stroke();
-      ctx.fillText(p.toFixed(1), x, MT + PLOT_H + 6);
+      ctx.fillText(label, x, MT + PLOT_H + 6);
     }
 
     // color legend
@@ -235,11 +280,11 @@ export function VelocitySectionCanvas({
     ctx.fillStyle = palette.title;
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText("Position [m]", ML + PLOT_W / 2, TOTAL_H - 4);
+    ctx.fillText("Position (m)", ML + PLOT_W / 2, TOTAL_H - 4);
     ctx.save();
     ctx.translate(16, MT + PLOT_H / 2);
     ctx.rotate(-Math.PI / 2);
-    ctx.fillText("Elevation [m]", 0, 0);
+    ctx.fillText("Elevation (m)", 0, 0);
     ctx.restore();
     ctx.save();
     ctx.translate(TOTAL_W - 14, MT + PLOT_H / 2);
@@ -247,16 +292,32 @@ export function VelocitySectionCanvas({
     ctx.textAlign = "center";
     ctx.fillText(colorLabel, 0, 0);
     ctx.restore();
-  }, [positions, elevations, values, colorLabel, colormap, PLOT_H, TOTAL_H, palette, scale, formatValue]);
+  }, [positions, elevations, values, colorLabel, colormap, PLOT_H, TOTAL_H, TOTAL_W, PLOT_W, palette, scale, formatValue, fixedMin, fixedMax, x0, x1, z0, z1, marker]);
+
+  const click = useClick(
+    TOTAL_W,
+    TOTAL_H,
+    onPick &&
+      ((x, y) => {
+        if (x < ML || x > ML + PLOT_W || y < MT || y > MT + PLOT_H) return;
+        onPick(positions[nearestIndex(positions, x0 + ((x - ML) / PLOT_W) * (x1 - x0))]);
+      }),
+    zoom.onMouseDown,
+  );
 
   return (
-    <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W, position: "relative" }}>
+    <div ref={containerRef} style={{ width: "100%", position: "relative" }}>
       <canvas
         ref={canvasRef}
-        style={{ display: "block" }}
+        style={{ display: "block", cursor: zoom.cursorAt(hoverPos) }}
         onMouseMove={onMouseMove}
         onMouseLeave={onMouseLeave}
+        onMouseDown={click.onMouseDown}
+        onClick={click.onClick}
+        onDoubleClick={zoom.onDoubleClick}
       />
+      <ZoomSelection box={zoom.selection} />
+      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: 0, right: MR * scale }} />
       {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
     </div>
   );

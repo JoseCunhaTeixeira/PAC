@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from masw.io import dispersion_images as io
 from masw.io.folders import get_output_folders, get_xmid_folders
+from masw.io.pick_origin import Origin
 from sigpipe.algorithms.picking.dispersion.curve import (
     max_resolvable_wavelength,
     min_resolvable_wavelength,
@@ -55,6 +56,7 @@ class BoxPickRequest(BaseModel):
 class PositionPicksOut(BaseModel):
     xmid: float
     labels: list[str]
+    picked_by: Origin | None = None  # PACo's picker ("auto") or a person in PAC ("hand")
 
 
 class PseudoSectionOut(BaseModel):
@@ -178,7 +180,10 @@ def get_dispersion_picks_by_position(folder: str) -> list[PositionPicksOut]:
         picks = io.list_labels_by_position(folder)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return [PositionPicksOut(xmid=xmid, labels=labels) for xmid, labels in picks]
+    return [
+        PositionPicksOut(xmid=xmid, labels=labels, picked_by=origin)
+        for xmid, labels, origin in picks
+    ]
 
 
 @router.get("/dispersion_pseudo_section/{folder:path}/{label}")

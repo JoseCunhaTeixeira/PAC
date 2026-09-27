@@ -1,13 +1,45 @@
 import { useCallback, useEffect, useState } from "react";
 import { API } from "./api";
-import { DispersionImageCanvas, type DispersionImage } from "./components/DispersionImageCanvas";
-import { PseudoSectionCanvas, type PseudoSection } from "./components/PseudoSectionCanvas";
+import {
+  DispersionImageCanvas,
+  type DispersionImage,
+  type DragMode,
+} from "./components/DispersionImageCanvas";
+import {
+  PseudoSectionCanvas,
+  type PseudoSection,
+} from "./components/PseudoSectionCanvas";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  CheckIcon,
+  CrosshairIcon,
+  LassoIcon,
+  RulerIcon,
+  StrataIcon,
+  TrashIcon,
+  ZoomIcon,
+} from "./components/icons";
+import { Badge, Callout, Card, Empty, Page, Segmented } from "./components/kit";
+import { RunSelect } from "./components/RunSelect";
+import {
+  PositionRail,
+  RailLegend,
+  type RailCell,
+  type RailTone,
+} from "./components/PositionRail";
+import { useStoredState } from "./components/stored";
+import { judged, useStageStates, xmidKey } from "./components/railStates";
+import { num } from "./components/viz/format";
 
 const LABEL_PATTERN = /^[A-Z]{1,3}[0-9]+$/;
 const LABEL_PARTS = /^([A-Z]{1,3})([0-9]+)$/;
 
 function sanitizeLabel(raw: string): string {
-  return raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  return raw
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 8);
 }
 
 function labelPrefix(currentLabel: string): string {
@@ -26,54 +58,76 @@ function nextLabel(prefix: string, curves: { label: string }[]): string {
   return `${prefix}${next}`;
 }
 
+// A position's picks, and who made them: PACo's picker, automatically, or a person, by hand.
+interface PositionPicks {
+  xmid: number;
+  labels: string[];
+  picked_by?: "auto" | "hand" | null;
+}
+
 export default function DispersionPickingPage() {
-  const [folders, setFolders] = useState<string[]>([]);
-  const [folder, setFolder] = useState("");
+  // The run and the position, kept when the page is left.
+  const [folder, setFolder] = useStoredState("pac.picking.folder", "");
 
   const [xmids, setXmids] = useState<number[]>([]);
-  const [xmid, setXmid] = useState<number | null>(null);
+  const [xmid, setXmid] = useStoredState<number | null>(
+    "pac.picking.xmid",
+    null,
+  );
 
   const [image, setImage] = useState<DispersionImage | null>(null);
-  const [pendingPolygon, setPendingPolygon] = useState<[number, number][] | null>(null);
+  const [pendingPolygon, setPendingPolygon] = useState<
+    [number, number][] | null
+  >(null);
   const [label, setLabel] = useState("M0");
+  // What a drag on the image does; the zoom itself stays from one position to the next.
+  const [dragMode, setDragMode] = useStoredState<DragMode>(
+    "pac.picking.drag",
+    "lasso",
+  );
 
   const [labelCounts, setLabelCounts] = useState<Record<string, number>>({});
-  const [pseudoMode, setPseudoMode] = useState<"frequency" | "wavelength">("frequency");
-  const [pseudoSections, setPseudoSections] = useState<Record<string, PseudoSection>>({});
-  const [positionPicks, setPositionPicks] = useState<{ xmid: number; labels: string[] }[]>([]);
+  const [pseudoMode, setPseudoMode] = useStoredState<
+    "frequency" | "wavelength"
+  >("pac.picking.axis", "frequency");
+  const [pseudoSections, setPseudoSections] = useState<
+    Record<string, PseudoSection>
+  >({});
+  const [positionPicks, setPositionPicks] = useState<PositionPicks[]>([]);
+  // Each window's checks, as Visualization shows them; again after every pick and deletion.
+  const [picks, setPicks] = useState(0);
+  const { states, loading: statesLoading } = useStageStates(
+    folder,
+    "dispersion",
+    picks,
+  );
 
   const [error, setError] = useState<string | null>(null);
-  const [loadingFolders, setLoadingFolders] = useState(true);
   // Starts true so the first render after picking a folder shows "Loading…"
   // instead of flashing "No positions found" before the effect below runs.
   const [loadingXmids, setLoadingXmids] = useState(true);
 
-  useEffect(() => {
-    fetch(`${API}/output_folders`)
-      .then((res) => res.json())
-      .then((data: string[]) => {
-        setFolders(data);
-        // The latest run by default: the output folders list the newest first.
-        setFolder((current) => current || (data[0] ?? ""));
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
-      .finally(() => setLoadingFolders(false));
-  }, []);
-
-  const loadPseudoSection = useCallback((folderName: string, labelValue: string) => {
-    fetch(`${API}/dispersion_pseudo_section/${encodeURIComponent(folderName)}/${encodeURIComponent(labelValue)}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => null);
-          throw new Error(body?.detail ?? `HTTP ${res.status}`);
-        }
-        return res.json();
-      })
-      .then((data: PseudoSection) => setPseudoSections((prev) => ({ ...prev, [labelValue]: data })))
-      // Best-effort per label: a failure here shouldn't blank out the rest
-      // of the page (picking, other labels).
-      .catch(() => {});
-  }, []);
+  const loadPseudoSection = useCallback(
+    (folderName: string, labelValue: string) => {
+      fetch(
+        `${API}/dispersion_pseudo_section/${encodeURIComponent(folderName)}/${encodeURIComponent(labelValue)}`,
+      )
+        .then(async (res) => {
+          if (!res.ok) {
+            const body = await res.json().catch(() => null);
+            throw new Error(body?.detail ?? `HTTP ${res.status}`);
+          }
+          return res.json();
+        })
+        .then((data: PseudoSection) =>
+          setPseudoSections((prev) => ({ ...prev, [labelValue]: data })),
+        )
+        // Best-effort per label: a failure here shouldn't blank out the rest
+        // of the page (picking, other labels).
+        .catch(() => {});
+    },
+    [],
+  );
 
   const refreshLabels = useCallback(
     (folderName: string) => {
@@ -88,19 +142,27 @@ export default function DispersionPickingPage() {
         .then((data: Record<string, number>) => {
           setLabelCounts(data);
           setPseudoSections((prev) =>
-            Object.fromEntries(Object.entries(prev).filter(([lbl]) => lbl in data))
+            Object.fromEntries(
+              Object.entries(prev).filter(([lbl]) => lbl in data),
+            ),
           );
           Object.entries(data)
             .filter(([, count]) => count >= 2)
-            .forEach(([labelValue]) => loadPseudoSection(folderName, labelValue));
+            .forEach(([labelValue]) =>
+              loadPseudoSection(folderName, labelValue),
+            );
         })
-        .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+        .catch((err) =>
+          setError(err instanceof Error ? err.message : String(err)),
+        );
     },
-    [loadPseudoSection]
+    [loadPseudoSection],
   );
 
   const refreshPositionPicks = useCallback((folderName: string) => {
-    fetch(`${API}/dispersion_picks_by_position/${encodeURIComponent(folderName)}`)
+    fetch(
+      `${API}/dispersion_picks_by_position/${encodeURIComponent(folderName)}`,
+    )
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => null);
@@ -108,13 +170,15 @@ export default function DispersionPickingPage() {
         }
         return res.json();
       })
-      .then((data: { xmid: number; labels: string[] }[]) => setPositionPicks(data))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .then((data: PositionPicks[]) => setPositionPicks(data))
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : String(err)),
+      );
   }, []);
 
   useEffect(() => {
+    // The position is the run's own: choosing another run clears it (chooseRun).
     Promise.resolve().then(() => {
-      setXmid(null);
       setImage(null);
       setLabelCounts({});
       setPseudoSections({});
@@ -134,7 +198,9 @@ export default function DispersionPickingPage() {
         return res.json();
       })
       .then((data: number[]) => setXmids(data))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : String(err)),
+      )
       .finally(() => setLoadingXmids(false));
     refreshLabels(folder);
     refreshPositionPicks(folder);
@@ -142,7 +208,9 @@ export default function DispersionPickingPage() {
 
   function loadImage(folderName: string, xmidValue: number) {
     Promise.resolve().then(() => setError(null));
-    fetch(`${API}/dispersion_images/${encodeURIComponent(folderName)}/${xmidValue}`)
+    fetch(
+      `${API}/dispersion_images/${encodeURIComponent(folderName)}/${xmidValue}`,
+    )
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => null);
@@ -155,7 +223,9 @@ export default function DispersionPickingPage() {
         setPendingPolygon(null);
         setLabel(nextLabel("M", data.curves));
       })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : String(err)),
+      );
   }
 
   useEffect(() => {
@@ -165,11 +235,14 @@ export default function DispersionPickingPage() {
   function handlePick() {
     if (!pendingPolygon || folder === "" || xmid === null) return;
     setError(null);
-    fetch(`${API}/dispersion_images/${encodeURIComponent(folder)}/${xmid}/pick/lasso`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ polygon: pendingPolygon, label }),
-    })
+    fetch(
+      `${API}/dispersion_images/${encodeURIComponent(folder)}/${xmid}/pick/lasso`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ polygon: pendingPolygon, label }),
+      },
+    )
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => null);
@@ -183,16 +256,22 @@ export default function DispersionPickingPage() {
         setLabel(nextLabel(labelPrefix(label), data.curves));
         refreshLabels(folder);
         refreshPositionPicks(folder);
+        setPicks((n) => n + 1);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : String(err)),
+      );
   }
 
   function handleDelete(curveLabel: string) {
     if (folder === "" || xmid === null) return;
     setError(null);
-    fetch(`${API}/dispersion_images/${encodeURIComponent(folder)}/${xmid}/pick/${encodeURIComponent(curveLabel)}`, {
-      method: "DELETE",
-    })
+    fetch(
+      `${API}/dispersion_images/${encodeURIComponent(folder)}/${xmid}/pick/${encodeURIComponent(curveLabel)}`,
+      {
+        method: "DELETE",
+      },
+    )
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => null);
@@ -205,165 +284,333 @@ export default function DispersionPickingPage() {
         setLabel(nextLabel(labelPrefix(label), data.curves));
         refreshLabels(folder);
         refreshPositionPicks(folder);
+        setPicks((n) => n + 1);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : String(err)),
+      );
   }
 
+  // ← and → step along the line, unless a field has the focus.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      const target = event.target as HTMLElement | null;
+      if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName))
+        return;
+      if (xmids.length === 0) return;
+      event.preventDefault();
+      const at = xmid === null ? -1 : xmids.indexOf(xmid);
+      const next =
+        event.key === "ArrowRight"
+          ? Math.min(xmids.length - 1, at + 1)
+          : Math.max(0, at - 1);
+      setXmid(xmids[next]);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [xmids, xmid, setXmid]);
+
+  const picked = positionPicks.filter((position) => position.labels.length > 0);
+  // An automatic pick by its checks' verdict, a window the picker rejected without a curve as
+  // rejected, a pick by hand as the user's; the hover as Visualization's.
+  const cells: RailCell[] = positionPicks.map((position) => {
+    const state = states.get(xmidKey(position.xmid));
+    const verdict = judged(state);
+    const hasCurve = position.labels.length > 0;
+    const hand = hasCurve && position.picked_by === "hand";
+    const tone: RailTone = hand
+      ? "hand"
+      : hasCurve
+        ? (verdict ?? "auto")
+        : verdict === "fail"
+          ? "fail"
+          : "none";
+    const lines = state
+      ? [...state.hover]
+      : [
+          `xmid ${num(position.xmid, 4)} m`,
+          hasCurve
+            ? hand
+              ? "picked by hand"
+              : "picked automatically"
+            : "not picked yet",
+        ];
+    if (hasCurve && (hand || position.labels.length > 1))
+      lines.splice(1, 0, position.labels.join(", "));
+    return { xmid: position.xmid, tone, title: lines.join("\n") };
+  });
+  const index = xmid === null ? -1 : xmids.indexOf(xmid);
+  const chooseRun = useCallback(
+    (next: string) => {
+      setXmid(null);
+      setFolder(next);
+    },
+    [setFolder, setXmid],
+  );
+
   return (
-    <div style={{ padding: 24 }}>
-      <h1>Dispersion Picking</h1>
-
-      <div style={{ marginBottom: 32 }}>
-        <label>
-          <h2>Loading</h2>
-          Data folder:{" "}
-          <select
-            value={folder}
-            onChange={(e) => {
-              setXmid(null);
-              setFolder(e.target.value);
-            }}
-          >
-            <option value="">— choose —</option>
-            {folders.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {!loadingFolders && folders.length === 0 && <p>❌ No folders found.</p>}
-      </div>
-
-      {folder && !loadingXmids && xmids.length === 0 && <p>❌ No positions found.</p>}
+    <Page
+      icon={<CrosshairIcon size={24} />}
+      title="Dispersion picking"
+      subtitle="Pick the dispersion curves on each image"
+      art="picking"
+      actions={<RunSelect folder={folder} onChange={chooseRun} />}
+    >
+      {error && <Callout tone="error">{error}</Callout>}
+      {folder && !loadingXmids && xmids.length === 0 && (
+        <Callout tone="warn">This run has no window.</Callout>
+      )}
 
       {folder && positionPicks.length > 0 && (
-        <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {positionPicks.map(({ xmid: posXmid, labels }) => {
-            const picked = labels.length > 0;
-            const selected = xmid === posXmid;
-            return (
-              <div
-                key={posXmid}
-                onClick={() => setXmid(posXmid)}
-                title={picked ? `Picked: ${labels.join(", ")}` : "Not picked yet"}
-                style={{
-                  cursor: "pointer",
-                  minWidth: 64,
-                  padding: "6px 10px",
-                  borderRadius: 6,
-                  textAlign: "center",
-                  background: picked ? "var(--success-bg)" : "var(--surface-hover)",
-                  border: selected ? "2px solid var(--success-text)" : "2px solid transparent",
-                  boxShadow: selected ? "0 0 0 1px var(--success-text)" : "none",
-                }}
+        <div className="stack">
+          <Card
+            icon={<RulerIcon size={17} />}
+            title="Positions"
+            hint="Click one, or step with ← →."
+            aside={
+              <RailLegend
+                groups={[
+                  {
+                    title: "Automatic",
+                    items: [
+                      ["pass", "passed"],
+                      ["warn", "flagged"],
+                      ["fail", "rejected"],
+                    ],
+                  },
+                  {
+                    items: [
+                      ["hand", "By hand"],
+                      ["none", "Not picked"],
+                    ],
+                  },
+                ]}
               >
-                <div style={{ fontWeight: 600 }}>{posXmid.toFixed(2)} m</div>
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {picked ? labels.join(", ") : "—"}
+                <Badge
+                  tone={
+                    picked.length === positionPicks.length ? "ok" : "neutral"
+                  }
+                >
+                  {picked.length}/{positionPicks.length} picked
+                </Badge>
+              </RailLegend>
+            }
+          >
+            {/* Once the checks are in, so that no cell changes colour as they come. */}
+            {!statesLoading && (
+              <PositionRail
+                cells={cells}
+                isActive={(x) => x === xmid}
+                onClick={setXmid}
+              />
+            )}
+          </Card>
+
+          {!image && (
+            <Empty
+              icon={<CrosshairIcon size={22} />}
+              title="Choose a position"
+            />
+          )}
+
+          {image && xmid !== null && (
+            <div className="pick-grid">
+              <Card
+                title={`xmid ${xmid.toFixed(2)} m`}
+                hint={
+                  dragMode === "lasso"
+                    ? "Draw a lasso around a mode: the picker tracks the ridge inside."
+                    : "Drag to zoom, along an axis or a box; double-click to go back."
+                }
+                aside={
+                  <>
+                    <button
+                      type="button"
+                      className="secondary icon"
+                      data-tip="Previous position (←)"
+                      disabled={index <= 0}
+                      onClick={() => setXmid(xmids[index - 1])}
+                    >
+                      <ArrowLeftIcon size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary icon"
+                      data-tip="Next position (→)"
+                      disabled={index < 0 || index >= xmids.length - 1}
+                      onClick={() => setXmid(xmids[index + 1])}
+                    >
+                      <ArrowRightIcon size={16} />
+                    </button>
+                    <Segmented
+                      size="sm"
+                      label="What a drag does"
+                      value={dragMode}
+                      onChange={setDragMode}
+                      options={[
+                        {
+                          value: "lasso",
+                          label: (
+                            <>
+                              <LassoIcon size={14} /> Lasso
+                            </>
+                          ),
+                        },
+                        {
+                          value: "zoom",
+                          label: (
+                            <>
+                              <ZoomIcon size={14} /> Zoom
+                            </>
+                          ),
+                        },
+                      ]}
+                    />
+                  </>
+                }
+              >
+                <DispersionImageCanvas
+                  image={image}
+                  pendingPolygon={pendingPolygon}
+                  onLassoComplete={setPendingPolygon}
+                  dragMode={dragMode}
+                />
+                <div className="pick-bar" aria-label="Pick a new curve">
+                  <button
+                    type="button"
+                    className={`pick-step${pendingPolygon ? " done" : dragMode === "lasso" ? " current" : ""}`}
+                    data-tip={
+                      "Lasso a ridge\nDraw around one mode's ridge on the image\nThe picker follows the ridge inside"
+                    }
+                    onClick={() => setDragMode("lasso")}
+                  >
+                    <i>{pendingPolygon ? <CheckIcon size={12} /> : 1}</i> Lasso
+                    a ridge
+                  </button>
+                  <ArrowRightIcon size={14} />
+                  <label
+                    className={`pick-step${pendingPolygon && LABEL_PATTERN.test(label) ? " done" : pendingPolygon ? " current" : ""}`}
+                    data-tip={
+                      "Name it\nM0 for the fundamental mode, M1 the next, and so on"
+                    }
+                  >
+                    <i>
+                      {pendingPolygon && LABEL_PATTERN.test(label) ? (
+                        <CheckIcon size={12} />
+                      ) : (
+                        2
+                      )}
+                    </i>{" "}
+                    Name it
+                    <input
+                      value={label}
+                      onChange={(e) => setLabel(sanitizeLabel(e.target.value))}
+                    />
+                  </label>
+                  <ArrowRightIcon size={14} />
+                  <button
+                    type="button"
+                    onClick={handlePick}
+                    disabled={!pendingPolygon || !LABEL_PATTERN.test(label)}
+                  >
+                    <span className="pick-number">3</span> Pick
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => setPendingPolygon(null)}
+                    disabled={!pendingPolygon}
+                  >
+                    Clear lasso
+                  </button>
                 </div>
+              </Card>
+
+              <Card title="Picked curves">
+                {image.curves.length === 0 ? (
+                  <p className="faint">None yet.</p>
+                ) : (
+                  <ul className="curve-list">
+                    {image.curves.map((curve) => (
+                      <li key={curve.label}>
+                        <span className="curve-dot" />
+                        <strong>{curve.label}</strong>
+                        <span className="faint">{curve.fs.length} points</span>
+                        <button
+                          type="button"
+                          className="danger icon"
+                          data-tip={`Delete ${curve.label}`}
+                          onClick={() => handleDelete(curve.label)}
+                        >
+                          <TrashIcon size={15} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            </div>
+          )}
+
+          {Object.keys(labelCounts).length > 0 && (
+            <Card
+              icon={<StrataIcon size={17} />}
+              title="Pseudo-sections"
+              hint="Click a column to open its position."
+              aside={
+                <Segmented
+                  size="sm"
+                  label="Vertical axis"
+                  value={pseudoMode}
+                  onChange={setPseudoMode}
+                  options={[
+                    { value: "frequency", label: "Frequency" },
+                    { value: "wavelength", label: "Wavelength" },
+                  ]}
+                />
+              }
+            >
+              <div className="stack">
+                {Object.entries(labelCounts).map(([lbl, count]) => (
+                  <div key={lbl}>
+                    <div className="section-label">
+                      <strong>{lbl}</strong>
+                      <Badge tone={count === xmids.length ? "ok" : "neutral"}>
+                        {count}/{xmids.length} positions
+                      </Badge>
+                    </div>
+                    {count < 2 ? (
+                      <p className="faint">Needs 2 picked positions.</p>
+                    ) : (
+                      pseudoSections[lbl] && (
+                        <PseudoSectionCanvas
+                          section={pseudoSections[lbl]}
+                          mode={pseudoMode}
+                          height={220}
+                          marker={xmid ?? undefined}
+                          onPick={(position) =>
+                            setXmid(
+                              xmids.reduce(
+                                (best, x) =>
+                                  Math.abs(x - position) <
+                                  Math.abs(best - position)
+                                    ? x
+                                    : best,
+                                xmids[0],
+                              ),
+                            )
+                          }
+                        />
+                      )
+                    )}
+                  </div>
+                ))}
               </div>
-            );
-          })}
+            </Card>
+          )}
         </div>
       )}
-
-      {error && <p style={{ color: "var(--accent)" }}>Error: {error}</p>}
-
-      {image && (
-        <>
-          <h2>Picking</h2>
-          <p>🛈 Draw a lasso on the dispersion image to auto-pick the curve inside it.</p>
-          <DispersionImageCanvas
-            image={image}
-            pendingPolygon={pendingPolygon}
-            onLassoComplete={setPendingPolygon}
-          />
-          <div style={{ marginTop: 8 }}>
-            <label>
-              Label:{" "}
-              <input
-                value={label}
-                onChange={(e) => setLabel(sanitizeLabel(e.target.value))}
-                style={{ width: 80 }}
-              />
-            </label>{" "}
-            <button onClick={handlePick} disabled={!pendingPolygon || !LABEL_PATTERN.test(label)}>
-              Pick
-            </button>{" "}
-            <button onClick={() => setPendingPolygon(null)} disabled={!pendingPolygon}>
-              Clear selection
-            </button>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4, marginBottom: 40 }}>
-              Format: up to 3 capital letters followed by a number (e.g. M0)
-            </div>
-          </div>
-
-          <h3>Picked curves</h3>
-          {image.curves.length === 0 ? (
-            <p>No curve picked yet for this position.</p>
-          ) : (
-            <ul style={{ listStyle: "none", padding: 0 }}>
-              {image.curves.map((curve) => (
-                <li
-                  key={curve.label}
-                  style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}
-                >
-                  <span>• {curve.label} ({curve.fs.length} points)</span>
-                  <button onClick={() => handleDelete(curve.label)}>Delete</button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
-
-      {folder && Object.keys(labelCounts).length > 0 && (
-        <>
-          <h2>Picked pseudo-sections</h2>
-          <div style={{ display: "inline-flex", border: "1px solid var(--border)", borderRadius: 8 }}>
-            {(["frequency", "wavelength"] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setPseudoMode(m)}
-                style={{
-                  borderRadius: 0,
-                  background: pseudoMode === m ? "var(--accent)" : "var(--surface)",
-                  color: pseudoMode === m ? "var(--accent-text)" : "var(--text-muted)",
-                  boxShadow: "none",
-                }}
-              >
-                {m === "frequency" ? "Frequency" : "Wavelength"}
-              </button>
-            ))}
-          </div>
-
-          {Object.entries(labelCounts).map(([lbl, count]) => (
-            <div
-              key={lbl}
-              style={{
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                padding: 12,
-                marginTop: 12,
-                background: "var(--surface)",
-              }}
-            >
-              <h3 style={{ marginTop: 0 }}>{lbl}</h3>
-              <p>{count}/{xmids.length} positions picked</p>
-              {count < 2 ? (
-                <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  🛈 At least 2 picked positions are required to build a pseudo-section.
-                </p>
-              ) : (
-                pseudoSections[lbl] && (
-                  <PseudoSectionCanvas section={pseudoSections[lbl]} mode={pseudoMode} height={200} />
-                )
-              )}
-            </div>
-          ))}
-        </>
-      )}
-    </div>
+    </Page>
   );
 }

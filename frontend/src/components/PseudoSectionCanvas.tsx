@@ -3,7 +3,18 @@ import { cividis } from "./colormaps";
 import { HoverTooltip } from "./HoverTooltip";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { nearestIndex, useCanvasHover } from "./useCanvasHover";
+import { drawMarker, useClick } from "./sectionPick";
 import { useContainerWidth } from "./useContainerWidth";
+import {
+  evenTicks,
+  positionTicks,
+  tickDecimals,
+  useZoom,
+  valueRange,
+  visibleCells,
+  visibleColumns,
+} from "./useZoom";
+import { ZoomReset, ZoomSelection } from "./ZoomOverlay";
 
 export interface PseudoSection {
   positions: number[];
@@ -14,27 +25,54 @@ export interface PseudoSection {
 }
 
 const ML = 60, MR = 120, MT = 16, MB = 40;
-const PLOT_W = 640;
+const BASE_W = 820; // the drawing's width until its card is measured
 const FONT = CANVAS_FONT;
-const TOTAL_W = ML + PLOT_W + MR;
 
 export function PseudoSectionCanvas({
   section,
   mode,
   height = 320,
+  marker,
+  onPick,
 }: {
   section: PseudoSection;
   mode: "frequency" | "wavelength";
   height?: number;
+  // A position to mark down the section (the selected window), and what a click on a column
+  // (not a zoom's drag) selects: its position.
+  marker?: number;
+  onPick?: (position: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
   const palette = useMemo(() => canvasPalette(theme), [theme]);
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
-  const scale = containerWidth > 0 ? Math.min(containerWidth / TOTAL_W, 1) : 1;
+  // As wide as its card, the text at its own size.
+  const TOTAL_W = Math.max(480, Math.round(containerWidth || BASE_W));
+  const PLOT_W = TOTAL_W - ML - MR;
+  const scale = 1;
   const PLOT_H = height;
   const TOTAL_H = MT + PLOT_H + MB;
   const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(scale);
+
+  // The full view. Wavelengths run down like depths, frequencies up; a
+  // switch between the two starts from the full view again.
+  const xFirst = section.positions[0];
+  const xExtent = section.positions[section.positions.length - 1] - xFirst || 1;
+  const yAxisGrid = mode === "frequency" ? section.fs_grid : section.lambdas_grid;
+  const yFirst = yAxisGrid[0];
+  const yExtent = yAxisGrid[yAxisGrid.length - 1] - yFirst || 1;
+  const zoom = useZoom({
+    extent: { x: [xFirst, xFirst + xExtent], y: [yFirst, yFirst + yExtent] },
+    plots: [{ left: ML, top: MT, width: PLOT_W, height: PLOT_H, xAxis: MB, yAxis: ML }],
+    width: TOTAL_W,
+    height: TOTAL_H,
+    yDown: mode === "wavelength",
+    resetKey: mode,
+  });
+  // The positions and frequencies (or wavelengths) on show.
+  const [x0, x1] = zoom.view.x;
+  const [y0, y1] = zoom.view.y;
 
   const hover = useMemo(() => {
     if (!hoverPos) return null;
@@ -51,19 +89,11 @@ export function PseudoSectionCanvas({
     const yUnit = mode === "frequency" ? "Hz" : "m";
     const invertY = mode === "wavelength";
     const positions = section.positions;
-    const np = positions.length;
 
-    const xMin = positions[0];
-    const xMax = positions[np - 1];
-    const xSpan = xMax - xMin || 1;
-    const position = xMin + ((hoverPos.x - ML) / PLOT_W) * xSpan;
-
-    const yMin = yGrid[0];
-    const yMax = yGrid[yGrid.length - 1];
-    const ySpan = yMax - yMin || 1;
+    const position = x0 + ((hoverPos.x - ML) / PLOT_W) * (x1 - x0);
     const yValue = invertY
-      ? yMin + ((hoverPos.y - MT) / PLOT_H) * ySpan
-      : yMin + ((MT + PLOT_H - hoverPos.y) / PLOT_H) * ySpan;
+      ? y0 + ((hoverPos.y - MT) / PLOT_H) * (y1 - y0)
+      : y0 + ((MT + PLOT_H - hoverPos.y) / PLOT_H) * (y1 - y0);
 
     const posIdx = nearestIndex(positions, position);
     const yIdx = nearestIndex(yGrid, yValue);
@@ -73,12 +103,12 @@ export function PseudoSectionCanvas({
       px: hoverPos.x * scale,
       py: hoverPos.y * scale,
       lines: [
-        `Position: ${positions[posIdx].toFixed(2)} m`,
-        `${yLabel}: ${yGrid[yIdx].toFixed(2)} ${yUnit}`,
-        `Velocity: ${value === null ? "—" : value.toFixed(1)} m/s`,
+        `xmid ${positions[posIdx].toFixed(2)} m`,
+        `${yLabel.toLowerCase()} ${yGrid[yIdx].toFixed(2)} ${yUnit}`,
+        `phase velocity ${value === null ? "—" : value.toFixed(1)} m/s`,
       ],
     };
-  }, [hoverPos, section, mode, scale, PLOT_H]);
+  }, [hoverPos, section, mode, scale, PLOT_H, PLOT_W, x0, x1, y0, y1]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -96,7 +126,7 @@ export function PseudoSectionCanvas({
 
     const yGrid = mode === "frequency" ? section.fs_grid : section.lambdas_grid;
     const velocities = mode === "frequency" ? section.velocities_by_frequency : section.velocities_by_wavelength;
-    const yLabel = mode === "frequency" ? "Frequency [Hz]" : "Wavelength [m]";
+    const yLabel = mode === "frequency" ? "Frequency (Hz)" : "Wavelength (m)";
     const positions = section.positions;
     const np = positions.length;
     const ny = yGrid.length;
@@ -110,28 +140,15 @@ export function PseudoSectionCanvas({
     const ySpan = yMax - yMin || 1;
     const yOf = (y: number) =>
       invertY
-        ? MT + ((y - yMin) / ySpan) * PLOT_H
-        : MT + PLOT_H - ((y - yMin) / ySpan) * PLOT_H;
-
-    let vMin = Infinity, vMax = -Infinity;
-    for (const row of velocities) {
-      for (const v of row) {
-        if (v !== null) {
-          if (v < vMin) vMin = v;
-          if (v > vMax) vMax = v;
-        }
-      }
-    }
-    if (!Number.isFinite(vMin)) { vMin = 0; vMax = 1; }
-    const vSpan = vMax - vMin || 1;
+        ? MT + ((y - y0) / (y1 - y0)) * PLOT_H
+        : MT + PLOT_H - ((y - y0) / (y1 - y0)) * PLOT_H;
 
     // Plot exactly between min(position) and max(position)
     const xMin = positions[0];
     const xMax = positions[np - 1];
-    const xSpan = xMax - xMin || 1;
 
     const xOf = (p: number) =>
-      ML + ((p - xMin) / xSpan) * PLOT_W;
+      ML + ((p - x0) / (x1 - x0)) * PLOT_W;
 
     // Midpoint boundaries, clipped to plot limits
     const columnEdges: number[] = new Array(np + 1);
@@ -143,7 +160,29 @@ export function PseudoSectionCanvas({
       columnEdges[i] = (positions[i - 1] + positions[i]) / 2;
     }
 
-    for (let i = 0; i < np; i++) {
+    // Only the cells on show: a column's rows run from rowTop at the top of
+    // the plot to rowBottom, and the plot's edges clip those they cut through.
+    const [i0, i1] = visibleColumns(columnEdges, x0, x1);
+    const rowTop = invertY ? yMin : yMin + ySpan;
+    const rowBottom = invertY ? yMin + ySpan : yMin;
+    const [k0, k1] = visibleCells(ny, rowTop, rowBottom, y0, y1);
+    const yTop = yOf(rowTop + (k0 / ny) * (rowBottom - rowTop));
+    const yBottom = yOf(rowTop + (k1 / ny) * (rowBottom - rowTop));
+
+    // The colour scale spans the values on show: all of them in the full
+    // view, those in the window when zoomed. The image's rows are the data's
+    // entries top down for wavelengths, bottom up for frequencies.
+    const [j0, j1] = invertY ? [k0, k1] : [ny - k1, ny - k0];
+    const [vMin, vMax] =
+      valueRange(velocities, i0, i1, j0, j1) || valueRange(velocities, 0, np, 0, ny) || [0, 1];
+    const vSpan = vMax - vMin || 1;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ML, MT, PLOT_W, PLOT_H);
+    ctx.clip();
+
+    for (let i = i0; i < i1 && k1 > k0; i++) {
       const xLeft = xOf(columnEdges[i]);
       const xRight = xOf(columnEdges[i + 1]);
 
@@ -179,15 +218,17 @@ export function PseudoSectionCanvas({
       ctx.drawImage(
         off,
         0,
-        0,
+        k0,
         1,
-        ny,
+        k1 - k0,
         xLeft,
-        MT,
+        yTop,
         Math.max(1, xRight - xLeft),
-        PLOT_H
+        yBottom - yTop
       );
     }
+    ctx.restore();
+    if (marker !== undefined && marker >= x0 && marker <= x1) drawMarker(ctx, xOf(marker), MT, MT + PLOT_H);
 
     // axes
     ctx.strokeStyle = palette.axis;
@@ -199,28 +240,25 @@ export function PseudoSectionCanvas({
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     const nyTicks = 6;
-    for (let i = 0; i <= nyTicks; i++) {
-      const y = yMin + (i / nyTicks) * ySpan;
+    const yDecimals = tickDecimals((y1 - y0) / nyTicks, 1);
+    for (const y of evenTicks(y0, y1, nyTicks)) {
       const py = yOf(y);
       ctx.beginPath();
       ctx.moveTo(ML - 4, py);
       ctx.lineTo(ML, py);
       ctx.stroke();
-      ctx.fillText(y.toFixed(1), ML - 7, py);
+      ctx.fillText(y.toFixed(yDecimals), ML - 7, py);
     }
 
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    const nxTicks = Math.min(8, np - 1);
-    for (let i = 0; i <= nxTicks; i++) {
-      const idx = nxTicks > 0 ? Math.round((i / nxTicks) * (np - 1)) : 0;
-      const p = positions[idx];
+    for (const { p, label } of positionTicks(positions, x0, x1)) {
       const x = xOf(p);
       ctx.beginPath();
       ctx.moveTo(x, MT + PLOT_H);
       ctx.lineTo(x, MT + PLOT_H + 4);
       ctx.stroke();
-      ctx.fillText(p.toFixed(1), x, MT + PLOT_H + 6);
+      ctx.fillText(label, x, MT + PLOT_H + 6);
     }
 
     // color legend — rendered through an offscreen image + drawImage (like
@@ -263,7 +301,7 @@ export function PseudoSectionCanvas({
     ctx.fillStyle = palette.title;
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText("Position [m]", ML + PLOT_W / 2, TOTAL_H - 4);
+    ctx.fillText("Position (m)", ML + PLOT_W / 2, TOTAL_H - 4);
     ctx.save();
     ctx.translate(16, MT + PLOT_H / 2);
     ctx.rotate(-Math.PI / 2);
@@ -273,18 +311,35 @@ export function PseudoSectionCanvas({
     ctx.translate(TOTAL_W - 14, MT + PLOT_H / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.textAlign = "center";
-    ctx.fillText("Phase velocity [m/s]", 0, 0);
+    ctx.fillText("Phase velocity (m/s)", 0, 0);
     ctx.restore();
-  }, [section, mode, PLOT_H, TOTAL_H, palette, scale]);
+  }, [section, mode, PLOT_H, TOTAL_H, TOTAL_W, PLOT_W, palette, scale, x0, x1, y0, y1, marker]);
+
+  const click = useClick(
+    TOTAL_W,
+    TOTAL_H,
+    onPick &&
+      ((x, y) => {
+        if (x < ML || x > ML + PLOT_W || y < MT || y > MT + PLOT_H) return;
+        const positions = section.positions;
+        onPick(positions[nearestIndex(positions, x0 + ((x - ML) / PLOT_W) * (x1 - x0))]);
+      }),
+    zoom.onMouseDown,
+  );
 
   return (
-    <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W, position: "relative" }}>
+    <div ref={containerRef} style={{ width: "100%", position: "relative" }}>
       <canvas
         ref={canvasRef}
-        style={{ display: "block" }}
+        style={{ display: "block", cursor: zoom.cursorAt(hoverPos) }}
         onMouseMove={onMouseMove}
         onMouseLeave={onMouseLeave}
+        onMouseDown={click.onMouseDown}
+        onClick={click.onClick}
+        onDoubleClick={zoom.onDoubleClick}
       />
+      <ZoomSelection box={zoom.selection} />
+      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: 0, right: MR * scale }} />
       {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
     </div>
   );

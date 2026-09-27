@@ -10,6 +10,7 @@ from masw.agent import (
     AgentUnavailable,
     Event,
     SessionBusy,
+    SessionInfo,
     installed,
     sessions,
     status,
@@ -31,6 +32,7 @@ class MessageIn(BaseModel):
 class EventsOut(BaseModel):
     events: list[Event]  # after the index asked for
     busy: bool  # the agent is answering
+    stopping: bool = False  # a stop was asked, and the answer has not ended yet
     progress: str | None  # the running tool's latest progress
     closed: bool  # the conversation ended (an error stopped it): start a new one
 
@@ -44,6 +46,12 @@ def get_installed() -> dict[str, bool]:
 @router.get("/agent/status")
 def get_status() -> AgentStatus:
     return status()
+
+
+@router.get("/agent/sessions")
+def list_sessions() -> list[SessionInfo]:
+    """The conversations this server keeps, the latest first: the page finds the one it left."""
+    return sessions.listed()
 
 
 @router.post("/agent/sessions", status_code=201)
@@ -76,9 +84,21 @@ def get_events(session_id: str, after: int = 0) -> EventsOut:
     return EventsOut(
         events=session.events_after(after),
         busy=session.busy,
+        stopping=session.stopping,
         progress=session.progress,
         closed=session.closed,
     )
+
+
+@router.post("/agent/sessions/{session_id}/stop", status_code=204)
+def stop_session(session_id: str) -> Response:
+    """Stop the answer running and everything it started: at once, what had finished kept,
+    nothing half-written. Nothing to stop is no error."""
+    session = sessions.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"Unknown conversation: {session_id}")
+    session.stop()
+    return Response(status_code=204)
 
 
 @router.delete("/agent/sessions/{session_id}", status_code=204)

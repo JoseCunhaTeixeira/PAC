@@ -3,6 +3,9 @@ import { HoverTooltip } from "./HoverTooltip";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { nearestIndex, useCanvasHover } from "./useCanvasHover";
 import { useContainerWidth } from "./useContainerWidth";
+import { evenTicks, positionTicks, tickDecimals, useZoom, visibleCells, type PlotRect } from "./useZoom";
+import { ZoomReset, ZoomSelection } from "./ZoomOverlay";
+import { drawMarker, useClick } from "./sectionPick";
 
 export interface PetroSectionData {
   positions: number[];
@@ -48,22 +51,64 @@ function nValueColors(values: number[]): Record<number, string> {
 }
 
 const ML = 60, MR = 130, MT = 16, MB = 40, PANEL_GAP = 40, LEGEND_ITEM_H = 18;
-const PLOT_W = 640, PLOT_H = 170;
+const PLOT_H = 170;
+const BASE_W = 830; // the drawing's width until its card is measured
 const FONT = CANVAS_FONT;
-const TOTAL_W = ML + PLOT_W + MR;
 const TOTAL_H = MT + 2 * PLOT_H + PANEL_GAP + MB;
+// The two panels share their axes: a zoom in one zooms both. Each has its
+// elevation ticks on the left; the position ticks are under the lower one only.
+function panels(plotW: number): PlotRect[] {
+  return [0, 1].map((i) => ({
+    left: ML,
+    top: MT + i * (PLOT_H + PANEL_GAP),
+    width: plotW,
+    height: PLOT_H,
+    xAxis: i === 1 ? MB : 0,
+    yAxis: ML,
+  }));
+}
 
 // Soil-type and N-value depth section, like sigpipe's
 // plot_petro_models_section (two stacked panels, water table as a dashed
 // step per position on both panels) as an interactive canvas instead of a
 // static plot.
-export function PetroSectionCanvas({ section }: { section: PetroSectionData }) {
+export function PetroSectionCanvas({
+  section,
+  marker,
+  onPick,
+}: {
+  section: PetroSectionData;
+  // A position to mark down both panels (the selected window), and what a click on a column
+  // (not a zoom's drag) selects: its position.
+  marker?: number;
+  onPick?: (position: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
   const palette = useMemo(() => canvasPalette(theme), [theme]);
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
-  const scale = containerWidth > 0 ? Math.min(containerWidth / TOTAL_W, 1) : 1;
+  // As wide as its card, the text at its own size.
+  const TOTAL_W = Math.max(480, Math.round(containerWidth || BASE_W));
+  const PLOT_W = TOTAL_W - ML - MR;
+  const PANELS = panels(PLOT_W);
+  const scale = 1;
   const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(scale);
+
+  // The full view: positions left to right, elevations from the highest at
+  // the top down.
+  const xFirst = section.positions[0];
+  const xExtent = section.positions[section.positions.length - 1] - xFirst || 1;
+  const zTop = section.elevations[0];
+  const zExtent = zTop - section.elevations[section.elevations.length - 1] || 1;
+  const zoom = useZoom({
+    extent: { x: [xFirst, xFirst + xExtent], y: [zTop - zExtent, zTop] },
+    plots: PANELS,
+    width: TOTAL_W,
+    height: TOTAL_H,
+  });
+  // The positions and elevations on show, in both panels.
+  const [x0, x1] = zoom.view.x;
+  const [z0, z1] = zoom.view.y;
 
   const nColors = useMemo(() => {
     const values = section.n_grid.flatMap((row) => row.filter((v): v is number => v !== null));
@@ -75,7 +120,6 @@ export function PetroSectionCanvas({ section }: { section: PetroSectionData }) {
     if (hoverPos.x < ML || hoverPos.x > ML + PLOT_W) return null;
 
     const { positions, elevations, soil_grid, n_grid } = section;
-    const np = positions.length;
 
     const top1 = MT;
     const top2 = top1 + PLOT_H + PANEL_GAP;
@@ -92,15 +136,8 @@ export function PetroSectionCanvas({ section }: { section: PetroSectionData }) {
       return null;
     }
 
-    const xMin = positions[0];
-    const xMax = positions[np - 1];
-    const xSpan = xMax - xMin || 1;
-    const position = xMin + ((hoverPos.x - ML) / PLOT_W) * xSpan;
-
-    const zMin = elevations[elevations.length - 1];
-    const zMax = elevations[0];
-    const zSpan = zMax - zMin || 1;
-    const elevation = zMax - ((hoverPos.y - top) / PLOT_H) * zSpan;
+    const position = x0 + ((hoverPos.x - ML) / PLOT_W) * (x1 - x0);
+    const elevation = z1 - ((hoverPos.y - top) / PLOT_H) * (z1 - z0);
 
     const posIdx = nearestIndex(positions, position);
     const zIdx = nearestIndex(elevations, elevation);
@@ -114,12 +151,12 @@ export function PetroSectionCanvas({ section }: { section: PetroSectionData }) {
       px: hoverPos.x * scale,
       py: hoverPos.y * scale,
       lines: [
-        `Position: ${positions[posIdx].toFixed(2)} m`,
-        `Elevation: ${elevations[zIdx].toFixed(2)} m`,
+        `xmid ${positions[posIdx].toFixed(2)} m`,
+        `elevation ${elevations[zIdx].toFixed(2)} m`,
         line,
       ],
     };
-  }, [hoverPos, section, scale]);
+  }, [hoverPos, section, scale, PLOT_W, x0, x1, z0, z1]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -146,8 +183,7 @@ export function PetroSectionCanvas({ section }: { section: PetroSectionData }) {
 
     const xMin = positions[0];
     const xMax = positions[np - 1];
-    const xSpan = xMax - xMin || 1;
-    const xOf = (p: number) => ML + ((p - xMin) / xSpan) * PLOT_W;
+    const xOf = (p: number) => ML + ((p - x0) / (x1 - x0)) * PLOT_W;
 
     const cellEdges: number[] = new Array(np + 1);
     cellEdges[0] = xMin;
@@ -159,10 +195,20 @@ export function PetroSectionCanvas({ section }: { section: PetroSectionData }) {
       grid: (T | null)[][],
       colorOf: (v: T) => string,
     ) {
-      const yOf = (z: number) => top + ((zMax - z) / zSpan) * PLOT_H;
+      const yOf = (z: number) => top + ((z1 - z) / (z1 - z0)) * PLOT_H;
 
+      // Only the cells on show: a column's rows run from zMax at the top
+      // down by zSpan, and the panel's edges clip those they cut through.
+      const [k0, k1] = visibleCells(nz, zMax, zMax - zSpan, z0, z1);
+      const yTop = yOf(zMax - (k0 / nz) * zSpan);
+      const yBottom = yOf(zMax - (k1 / nz) * zSpan);
+      ctx!.save();
+      ctx!.beginPath();
+      ctx!.rect(ML, top, PLOT_W, PLOT_H);
+      ctx!.clip();
       ctx!.imageSmoothingEnabled = false;
       for (let i = 0; i < np; i++) {
+        if (k1 <= k0 || cellEdges[i + 1] < x0 || cellEdges[i] > x1) continue;
         const xLeft = Math.round(xOf(cellEdges[i]));
         const xRight = Math.round(xOf(cellEdges[i + 1]));
         const off = document.createElement("canvas");
@@ -185,9 +231,10 @@ export function PetroSectionCanvas({ section }: { section: PetroSectionData }) {
           imgData.data[idx + 3] = 255;
         }
         octx.putImageData(imgData, 0, 0);
-        ctx!.drawImage(off, 0, 0, 1, nz, xLeft, top, Math.max(1, xRight - xLeft), PLOT_H);
+        ctx!.drawImage(off, 0, k0, 1, k1 - k0, xLeft, yTop, Math.max(1, xRight - xLeft), yBottom - yTop);
       }
       ctx!.imageSmoothingEnabled = true;
+      ctx!.restore();
 
       ctx!.strokeStyle = palette.axis;
       ctx!.lineWidth = 1;
@@ -197,14 +244,14 @@ export function PetroSectionCanvas({ section }: { section: PetroSectionData }) {
       ctx!.textAlign = "right";
       ctx!.textBaseline = "middle";
       const nzTicks = 5;
-      for (let i = 0; i <= nzTicks; i++) {
-        const z = zMin + (i / nzTicks) * zSpan;
+      const zDecimals = tickDecimals((z1 - z0) / nzTicks, 1);
+      for (const z of evenTicks(z0, z1, nzTicks)) {
         const py = yOf(z);
         ctx!.beginPath();
         ctx!.moveTo(ML - 4, py);
         ctx!.lineTo(ML, py);
         ctx!.stroke();
-        ctx!.fillText(z.toFixed(1), ML - 7, py);
+        ctx!.fillText(z.toFixed(zDecimals), ML - 7, py);
       }
 
       ctx!.save();
@@ -212,10 +259,10 @@ export function PetroSectionCanvas({ section }: { section: PetroSectionData }) {
       ctx!.rotate(-Math.PI / 2);
       ctx!.textAlign = "center";
       ctx!.fillStyle = palette.title;
-      ctx!.fillText("Elevation [m]", 0, 0);
+      ctx!.fillText("Elevation (m)", 0, 0);
       ctx!.restore();
 
-      return { yOf };
+      return { yOf, top };
     }
 
     // Water table as a dashed step, flat across each position's own cell
@@ -223,8 +270,11 @@ export function PetroSectionCanvas({ section }: { section: PetroSectionData }) {
     // continuous line interpolated between positions -- each position's
     // water table depth is its own discrete value, not a slope toward its
     // neighbors'.
-    function drawWaterTable(yOf: (z: number) => number) {
+    function drawWaterTable({ yOf, top }: { yOf: (z: number) => number; top: number }) {
       ctx!.save();
+      ctx!.beginPath();
+      ctx!.rect(ML, top, PLOT_W, PLOT_H);
+      ctx!.clip();
       ctx!.strokeStyle = "darkblue";
       ctx!.lineWidth = 1.5;
       ctx!.setLineDash([5, 4]);
@@ -261,31 +311,28 @@ export function PetroSectionCanvas({ section }: { section: PetroSectionData }) {
     const top1 = MT;
     const top2 = top1 + PLOT_H + PANEL_GAP;
 
-    const { yOf: yOfSoil } = drawCategoricalPanel(top1, soil_grid, (s) => SOIL_COLORS[s] ?? "#999999");
-    drawWaterTable(yOfSoil);
-
-    const { yOf: yOfN } = drawCategoricalPanel(top2, n_grid, (n) => nColors[Math.round(n)] ?? "#999999");
-    drawWaterTable(yOfN);
+    drawWaterTable(drawCategoricalPanel(top1, soil_grid, (s) => SOIL_COLORS[s] ?? "#999999"));
+    drawWaterTable(drawCategoricalPanel(top2, n_grid, (n) => nColors[Math.round(n)] ?? "#999999"));
+    if (marker !== undefined && marker >= x0 && marker <= x1) {
+      for (const top of [top1, top2]) drawMarker(ctx, xOf(marker), top, top + PLOT_H);
+    }
 
     // x-axis ticks only on the bottom (N) panel.
     ctx.fillStyle = palette.tick;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    const nxTicks = Math.min(8, np - 1);
-    for (let i = 0; i <= nxTicks; i++) {
-      const idx = nxTicks > 0 ? Math.round((i / nxTicks) * (np - 1)) : 0;
-      const p = positions[idx];
+    for (const { p, label } of positionTicks(positions, x0, x1)) {
       const x = xOf(p);
       ctx.beginPath();
       ctx.moveTo(x, top2 + PLOT_H);
       ctx.lineTo(x, top2 + PLOT_H + 4);
       ctx.stroke();
-      ctx.fillText(p.toFixed(1), x, top2 + PLOT_H + 6);
+      ctx.fillText(label, x, top2 + PLOT_H + 6);
     }
     ctx.fillStyle = palette.title;
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText("Position [m]", ML + PLOT_W / 2, TOTAL_H - 4);
+    ctx.fillText("Position (m)", ML + PLOT_W / 2, TOTAL_H - 4);
 
     // Categorical legends: swatch + label, stacked vertically.
     function drawLegend(top: number, items: { color: string; label: string }[]) {
@@ -316,16 +363,36 @@ export function PetroSectionCanvas({ section }: { section: PetroSectionData }) {
       .reverse();
     drawLegend(top2, nItems);
     drawWaterTableLegend(top2, nItems.length);
-  }, [section, palette, scale, nColors]);
+  }, [section, palette, scale, TOTAL_W, PLOT_W, nColors, x0, x1, z0, z1, marker]);
+
+  const click = useClick(
+    TOTAL_W,
+    TOTAL_H,
+    onPick &&
+      ((x, y) => {
+        const inside = PANELS.some(
+          (panel) => x >= panel.left && x <= panel.left + panel.width && y >= panel.top && y <= panel.top + panel.height,
+        );
+        if (!inside) return;
+        const positions = section.positions;
+        onPick(positions[nearestIndex(positions, x0 + ((x - ML) / PLOT_W) * (x1 - x0))]);
+      }),
+    zoom.onMouseDown,
+  );
 
   return (
-    <div ref={containerRef} style={{ width: "100%", maxWidth: TOTAL_W, position: "relative" }}>
+    <div ref={containerRef} style={{ width: "100%", position: "relative" }}>
       <canvas
         ref={canvasRef}
-        style={{ display: "block" }}
+        style={{ display: "block", cursor: zoom.cursorAt(hoverPos) }}
         onMouseMove={onMouseMove}
         onMouseLeave={onMouseLeave}
+        onMouseDown={click.onMouseDown}
+        onClick={click.onClick}
+        onDoubleClick={zoom.onDoubleClick}
       />
+      <ZoomSelection box={zoom.selection} />
+      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: 0, right: MR * scale }} />
       {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
     </div>
   );

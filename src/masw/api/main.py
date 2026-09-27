@@ -27,6 +27,7 @@ from masw.api.routers import (
     gather,
     inversion,
     petro_inversion,
+    quality,
     run,
     windows,
 )
@@ -70,6 +71,7 @@ app.include_router(gather.router)
 app.include_router(dispersion_images.router)
 app.include_router(inversion.router)
 app.include_router(petro_inversion.router)
+app.include_router(quality.router)
 app.include_router(agent.router)
 
 

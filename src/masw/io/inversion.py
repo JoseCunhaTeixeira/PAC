@@ -42,10 +42,20 @@ def invert_position(
     xmid: float,
     labels: Sequence[str],
     parameters: InversionParameters,
+    output_folder: Path | None = None,
+    chain_jobs: int = 1,
 ) -> InversionResult:
-    """Invert the window's curves of `labels`, and write PAC's files beside them."""
+    """Invert the window's curves of `labels`, its chains in `chain_jobs` processes, and write
+    PAC's files beside them, or in `output_folder` (a staging folder: see
+    sigpipe.masw.runs.stopping)."""
     modes = {Mode.from_label(label) for label in labels}
-    return invert_window(xmid_folder(folder, xmid), parameters, modes)
+    return invert_window(
+        xmid_folder(folder, xmid),
+        parameters,
+        modes,
+        chain_jobs=chain_jobs,
+        output_folder=output_folder,
+    )
 
 
 def list_inversion_status(folder: str) -> list[tuple[float, bool]]:
