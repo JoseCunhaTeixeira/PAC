@@ -10,6 +10,7 @@ from masw.io.inversion import ModelName
 from masw.models.inversion import InversionRunConfig
 from sigpipe.masw.inversion import InversionParameters, ThicknessLayer, VsLayer
 from sigpipe.masw.inversion.priors import PriorRules
+from sigpipe.masw.inversion.section import DEFAULT_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,9 @@ class VelocitySectionOut(BaseModel):
     positions: list[float]
     elevations: list[float]
     vs_grid: list[list[float | None]]
-    vs_std_grid: list[list[float | None]]
+    vs_std_grid: list[list[float | None]]  # % of Vs
+    # The share of the kept models with an interface, % (None: not known).
+    interface_grid: list[list[float | None]]
     windows: list[SectionWindowOut]
     # Per column: the elevation down to which the data inform it (None: not known).
     informed_levels: list[float | None]
@@ -108,7 +111,7 @@ def get_inversion_status(folder: str) -> list[PositionStatusOut]:
 
 @router.get("/inversion/velocity_section/{folder:path}")
 def get_velocity_section(
-    folder: str, model: ModelName = "smooth_median", lateral_smoothing: bool = False
+    folder: str, model: ModelName = DEFAULT_MODEL, lateral_smoothing: bool = False
 ) -> VelocitySectionOut:
     try:
         section = io.get_velocity_section(folder, model, lateral_smoothing)
@@ -119,7 +122,8 @@ def get_velocity_section(
         positions=rounded(grid.positions, 3),
         elevations=rounded(grid.elevations, 3),
         vs_grid=nan_to_none(grid.vs, 1),
-        vs_std_grid=nan_to_none(grid.vs_std, 1),
+        vs_std_grid=nan_to_none(100 * grid.vs_std / grid.vs, 1),
+        interface_grid=nan_to_none(100 * section.interfaces, 1),
         windows=[
             SectionWindowOut(x=one.x, top=one.top, depth=one.depth, informed=one.informed)
             for one in section.windows
@@ -130,7 +134,7 @@ def get_velocity_section(
 
 @router.get("/inversion/curves/{folder:path}/{label}")
 def get_curves_by_position(
-    folder: str, label: str, model: ModelName = "smooth_median"
+    folder: str, label: str, model: ModelName = DEFAULT_MODEL
 ) -> list[PositionCurvesOut]:
     try:
         curves = io.get_curves_by_position(folder, label, model)
@@ -152,7 +156,7 @@ def get_curves_by_position(
 
 @router.get("/inversion/pseudo_section_comparison/{folder:path}/{label}")
 def get_pseudo_section_comparison(
-    folder: str, label: str, model: ModelName = "smooth_median"
+    folder: str, label: str, model: ModelName = DEFAULT_MODEL
 ) -> PseudoSectionComparisonOut:
     try:
         comparison = io.get_pseudo_section_comparison(folder, label, model)

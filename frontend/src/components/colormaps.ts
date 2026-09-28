@@ -43,3 +43,20 @@ export function bwr(t: number): [number, number, number] {
 export function viridis(t: number): [number, number, number] {
   return sample(VIRIDIS, t);
 }
+
+// matplotlib's Purples, by its three anchors: white where nothing is, a deep purple at the most.
+const PURPLES: [number, [number, number, number]][] = [
+  [0, [252, 251, 253]],
+  [0.5, [158, 154, 200]],
+  [1, [63, 0, 125]],
+];
+
+export function purples(t: number): [number, number, number] {
+  const clamped = Math.min(Math.max(t, 0), 1);
+  const upper = PURPLES.findIndex(([at]) => at >= clamped);
+  if (upper <= 0) return PURPLES[0][1];
+  const [a, from] = PURPLES[upper - 1];
+  const [b, to] = PURPLES[upper];
+  const w = (clamped - a) / (b - a);
+  return [0, 1, 2].map((i) => Math.round(from[i] + (to[i] - from[i]) * w)) as [number, number, number];
+}

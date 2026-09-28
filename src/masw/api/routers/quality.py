@@ -15,7 +15,7 @@ from masw.io.quality.records import RecordCard, RecordGather
 from masw.io.quality.runs import ProfileRuns, RunCard
 from masw.io.quality.sources import WindowSources
 from masw.io.quality.view import Overview
-from sigpipe.masw.inversion.section import ModelName
+from sigpipe.masw.inversion.section import DEFAULT_MODEL, ModelName
 
 router = APIRouter(tags=["quality"])
 
@@ -80,9 +80,7 @@ def get_inversion_overview(folder: str) -> Overview:
 
 
 @router.get("/quality/inversion/card/{folder:path}/{xmid}")
-def get_inversion_card(
-    folder: str, xmid: float, model: ModelName = "smooth_median"
-) -> InversionCard:
+def get_inversion_card(folder: str, xmid: float, model: ModelName = DEFAULT_MODEL) -> InversionCard:
     """The window's model (`model`, against depth), its fit, its chains' convergence, and what
     it ran with."""
     return _found(lambda: inversion.inversion_card(folder, xmid, model))
