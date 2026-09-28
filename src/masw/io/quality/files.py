@@ -2,6 +2,7 @@
 its preset gave each stage, each window's picked fundamental mode and window.json (the records it
 stacks), and the line's geometry: where every receiver and every shot of the profile lies."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -35,6 +36,18 @@ def read_manifest(folder: Path) -> RunManifest | None:
     """The run's manifest; None for a folder of the older layout, which has none."""
     path = folder / MANIFEST_FILE
     return RunManifest.model_validate_json(path.read_text()) if path.exists() else None
+
+
+# The farthest distance older runs recorded for none (sigpipe's stand-in before 2026-09-28).
+FORMER_UNBOUNDED_M = 1_000.0
+
+
+def shot_distances(masw: Mapping[str, Any]) -> tuple[float, float | None]:
+    """The distances from a window's middle its shots lie within: the nearest (0 for none), the
+    farthest (None for none, as an older run's 1,000 m)."""
+    near, far = masw.get("distance_min"), masw.get("distance_max")
+    farthest = None if far is None or float(far) >= FORMER_UNBOUNDED_M else float(far)
+    return (0.0 if near is None else float(near)), farthest
 
 
 def preset_stage(manifest: RunManifest | None, stage: str) -> dict[str, Any]:

@@ -74,7 +74,8 @@ export interface RunCard {
   receivers: number[];
   sources: Record<string, number>;
   windows: LineWindow[];
-  reach: [number, number] | null;
+  // The shots a window stacks: from, to this far from its middle (to null: any distance).
+  reach: [number, number | null] | null;
 }
 
 export type Use = "used" | "part" | "excluded" | "failed" | "inside" | "near" | "far" | "traces";

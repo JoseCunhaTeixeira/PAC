@@ -93,8 +93,8 @@ export function MuteGather({
       tmax: Math.min(given(muting?.tmax, duration), duration - Math.max(0, shift)),
       vmin: given(muting?.vmin, 0),
       vmax: given(muting?.vmax, 0),
-      width: muting?.width ?? 0,
-      taper: (muting?.taper ?? 0) * raw.dt,
+      width: given(muting?.width, raw.dt),
+      taper: given(muting?.taper, 0) * raw.dt,
       shift,
     };
   }, [muting, shift, raw, acquisition, index]);

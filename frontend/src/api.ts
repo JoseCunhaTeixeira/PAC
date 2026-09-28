@@ -25,8 +25,10 @@ export function profileName(acquisition: Acquisition): string {
 export interface Masw {
   length: number;
   step: number;
-  distance_min: number;
-  distance_max: number;
+  // m from a window's middle; null (NaN in its field): none, the nearest from 0, the farthest at
+  // any distance.
+  distance_min: number | null;
+  distance_max: number | null;
 }
 
 export interface Muting {
@@ -34,8 +36,8 @@ export interface Muting {
   tmax: number | null;
   vmin: number | null;
   vmax: number | null;
-  width: number;
-  taper: number;
+  width: number | null; // null: one sample
+  taper: number | null; // null: none
 }
 
 export interface Dispersion {

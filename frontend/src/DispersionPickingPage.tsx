@@ -18,6 +18,7 @@ import {
   ImageIcon,
   LassoIcon,
   RulerIcon,
+  SparklesIcon,
   SpectrumIcon,
   StrataIcon,
   TrashIcon,
@@ -126,6 +127,8 @@ export default function DispersionPickingPage() {
   const { receivers, loading: receiversLoading } = useReceivers(folder);
 
   const [error, setError] = useState<string | null>(null);
+  // The window's M0 being picked automatically.
+  const [autoPicking, setAutoPicking] = useState(false);
   // Starts true so the first render after picking a folder shows "Loading…"
   // instead of flashing "No positions found" before the effect below runs.
   const [loadingXmids, setLoadingXmids] = useState(true);
@@ -254,6 +257,31 @@ export default function DispersionPickingPage() {
   useEffect(() => {
     if (folder && xmid !== null) loadImage(folder, xmid);
   }, [folder, xmid]);
+
+  // The window's M0 picked automatically, as the assistant picks it: its M0 replaced, its other
+  // modes kept.
+  function handleAutoPick() {
+    if (folder === "" || xmid === null) return;
+    setAutoPicking(true);
+    setError(null);
+    fetch(`${API}/dispersion_images/${encodeURIComponent(folder)}/${xmid}/pick/auto`, { method: "POST" })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail ?? `HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data: DispersionImage) => {
+        setImage(data);
+        setLabel(nextLabel(labelPrefix(label), data.curves));
+        refreshLabels(folder);
+        refreshPositionPicks(folder);
+        setPicks((n) => n + 1);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setAutoPicking(false));
+  }
 
   function handlePick() {
     if (!pendingPolygon || folder === "" || xmid === null) return;
@@ -558,6 +586,19 @@ export default function DispersionPickingPage() {
                   >
                     Clear lasso
                   </button>
+                  {/* Apart from the lasso's steps, and wrapped with its "or". */}
+                  <span className="pick-auto">
+                    or
+                    <button
+                      type="button"
+                      className="tinted"
+                      onClick={handleAutoPick}
+                      disabled={autoPicking}
+                      data-tip="Replaces this window's M0"
+                    >
+                      <SparklesIcon size={14} /> {autoPicking ? "Picking…" : "Auto-pick M0"}
+                    </button>
+                  </span>
                 </div>
               </Card>
 

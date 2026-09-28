@@ -42,7 +42,7 @@ export function stage<T>(preset: PresetDefaults, name: string): T {
 }
 
 // A bound may be empty (null, or NaN in its field): none, no stand-in value.
-export interface MutingState { method: string; tmin: number | null; tmax: number | null; vmin: number | null; vmax: number | null; width: number; taper: number; }
+export interface MutingState { method: string; tmin: number | null; tmax: number | null; vmin: number | null; vmax: number | null; width: number | null; taper: number | null; }
 // Null: each record's own trigger, from its file.
 export interface TriggerState { t0: number | null; }
 

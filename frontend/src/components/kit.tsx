@@ -102,9 +102,11 @@ export function Card({
 }
 
 /** Fields side by side, as many as fit. */
-export function Fields({ children, min = 170 }: { children: ReactNode; min?: number }) {
+/** Fields in columns at least `min` wide; `fit`: the columns stretched over the line (no empty
+ * one after the last field), for a line of fields to read as one. */
+export function Fields({ children, min = 170, fit = false }: { children: ReactNode; min?: number; fit?: boolean }) {
   return (
-    <div className="fields" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${min}px, 1fr))` }}>
+    <div className="fields" style={{ gridTemplateColumns: `repeat(${fit ? "auto-fit" : "auto-fill"}, minmax(${min}px, 1fr))` }}>
       {children}
     </div>
   );
@@ -118,27 +120,32 @@ export function NumberInput({
   onChange,
   min,
   max,
+  gt,
+  lt,
   optional,
-  check,
   unit,
+  whole,
   onFocus,
   onBlur,
   ...rest
 }: {
   value: number;
   onChange: (value: number) => void;
+  /** Its bounds: inclusive, or strict (most often a pair's other value, which moves). */
   min?: number;
   max?: number;
+  gt?: number;
+  lt?: number;
   /** May be left empty (NaN): the word shown then, such as "auto". */
   optional?: string;
-  /** A rule another field moves (numbers.ts's `above`, `below`, `upTo`). */
-  check?: (n: number) => string | null;
   /** The value's unit, for its hover's bounds and its issues. */
   unit?: string;
+  /** A count: a fraction is wrong. */
+  whole?: boolean;
 } & Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "min" | "max" | "type">) {
-  const { input, issue } = useNumberDraft({ value, onChange, min, max, optional, check, unit });
+  const { input, issue } = useNumberDraft({ value, onChange, min, max, gt, lt, optional, unit, whole });
   // What it means (its data-tip), then its bounds.
-  const tip = tipOf((rest as { "data-tip"?: string })["data-tip"], boundsOf(min, max, unit));
+  const tip = tipOf((rest as { "data-tip"?: string })["data-tip"], boundsOf({ min, max, gt, lt }, unit));
   return (
     <input
       {...rest}
@@ -166,19 +173,24 @@ export function NumberField({
   onChange,
   min,
   max,
+  gt,
+  lt,
   step = 1,
   hint,
   title,
   disabled = false,
   optional,
-  check,
+  whole,
 }: {
   label: ReactNode;
   unit?: string;
   value: number;
   onChange: (value: number) => void;
+  /** Its bounds: inclusive, or strict (most often a pair's other value, which moves). */
   min?: number;
   max?: number;
+  gt?: number;
+  lt?: number;
   step?: number;
   /** A short read-out under the field (the length in metres). */
   hint?: ReactNode;
@@ -187,15 +199,14 @@ export function NumberField({
   disabled?: boolean;
   /** May be left empty (NaN): the word shown then, such as "auto". */
   optional?: string;
-  /** A rule another field moves (numbers.ts's `above`, `below`, `upTo`). */
-  check?: (n: number) => string | null;
+  /** A count (samples, steps, an order): a fraction is wrong. */
+  whole?: boolean;
 }) {
-  // Wrong (left empty, beyond its bounds, against its rule): red, and why under it, in place of
-  // its hint.
-  const { input, issue } = useNumberDraft({ value, onChange, min, max, optional, check, unit });
-  // What the field means, then its bounds; right by what is hovered: over its name, under its
-  // box.
-  const tip = tipOf(title, boundsOf(min, max, unit));
+  // Wrong (left empty, beyond its bounds): red, and why under it, in place of its hint.
+  const { input, issue } = useNumberDraft({ value, onChange, min, max, gt, lt, optional, unit, whole });
+  // What the field means, then its bounds, a side a line ("≥ 0 s", "≤ 2.999 s"); right by what
+  // is hovered: over its name, under its box.
+  const tip = tipOf(title, boundsOf({ min, max, gt, lt }, unit));
   return (
     <label className="field">
       <span className="field-label" data-tip={tip} data-tip-place="above">
@@ -259,15 +270,18 @@ export function Segmented<T extends string>({
   onChange,
   label,
   size = "md",
+  after,
 }: {
   value: T;
   options: SegmentOption<T>[];
   onChange: (value: T) => void;
   label?: string;
   size?: "sm" | "md";
+  /** Inside the box, after the options: what explains them (an info). */
+  after?: ReactNode;
 }) {
   return (
-    <div className={`segmented ${size}`} role="group" aria-label={label}>
+    <div className={`segmented ${size}${after ? " with-after" : ""}`} role="group" aria-label={label}>
       {options.map((option) => (
         <button
           key={option.value}
@@ -280,6 +294,7 @@ export function Segmented<T extends string>({
           {option.label}
         </button>
       ))}
+      {after && <span className="segmented-after">{after}</span>}
     </div>
   );
 }

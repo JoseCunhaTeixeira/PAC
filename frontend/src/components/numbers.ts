@@ -15,28 +15,59 @@ export function useWrongCount(): number {
   return useContext(WrongNumbers)?.count ?? 0;
 }
 
-/** What is wrong with `n`, in a few words; null when nothing is. */
-export function issueOf(
-  n: number,
-  min?: number,
-  max?: number,
-  optional?: string,
-  unit?: string,
-): string | null {
-  const u = unit ? ` ${unit}` : "";
-  if (Number.isNaN(n)) return optional === undefined ? "Required" : null;
-  if (min !== undefined && n < min) return `At least ${written(min)}${u}`;
-  if (max !== undefined && n > max) return `At most ${written(max)}${u}`;
-  return null;
+/** A number's bounds: inclusive (`min`, `max`) or strict (`gt`, `lt`: most often a pair's
+ * other value, which moves); unset or NaN, none. */
+export interface Bounds {
+  min?: number;
+  max?: number;
+  gt?: number;
+  lt?: number;
 }
 
-/** A field's bounds, in its issues' words, for its hover: every number field says them. */
-export function boundsOf(min?: number, max?: number, unit?: string): string | undefined {
+const finite = (n: number | undefined): n is number => n !== undefined && Number.isFinite(n);
+
+/** Each side's tighter bound: its value, and whether the value itself is out. */
+function sidesOf({ min, max, gt, lt }: Bounds) {
+  const low = finite(gt) && !(finite(min) && min > gt) ? { at: gt, strict: true } : finite(min) ? { at: min, strict: false } : null;
+  const high = finite(lt) && !(finite(max) && max < lt) ? { at: lt, strict: true } : finite(max) ? { at: max, strict: false } : null;
+  return { low, high };
+}
+
+/** Whether `n` keeps to `bounds`. */
+export function within(n: number, bounds: Bounds): boolean {
+  const { low, high } = sidesOf(bounds);
+  return (!low || (low.strict ? n > low.at : n >= low.at)) && (!high || (high.strict ? n < high.at : n <= high.at));
+}
+
+/** A field's bounds in symbols, a side a line, as its hover says them ("≥ 0 s", then "≤ 2.999
+ * s"; "> 300 m/s") and its issue the side it breaks. */
+export function boundsOf(bounds: Bounds, unit?: string): string | undefined {
   const u = unit ? ` ${unit}` : "";
-  if (min !== undefined && max !== undefined) return `From ${written(min)} to ${written(max)}${u}`;
-  if (min !== undefined) return `At least ${written(min)}${u}`;
-  if (max !== undefined) return `At most ${written(max)}${u}`;
-  return undefined;
+  const { low, high } = sidesOf(bounds);
+  const said = [
+    low && `${low.strict ? ">" : "≥"} ${written(low.at)}${u}`,
+    high && `${high.strict ? "<" : "≤"} ${written(high.at)}${u}`,
+  ].filter(Boolean);
+  return said.length ? said.join("\n") : undefined;
+}
+
+/** What is wrong with `n`, in a few words; null when nothing is: a bound broken, said as its
+ * line of the hover ("≤ 2.999 s"). */
+export function issueOf(
+  n: number,
+  bounds: Bounds,
+  { optional, unit, whole = false }: { optional?: string; unit?: string; whole?: boolean },
+): string | null {
+  if (Number.isNaN(n)) return optional === undefined ? "Required" : null;
+  if (whole && !Number.isInteger(n)) return "A whole number";
+  const { low, high } = sidesOf(bounds);
+  if (low && !within(n, low.strict ? { gt: low.at } : { min: low.at })) {
+    return boundsOf(low.strict ? { gt: low.at } : { min: low.at }, unit) ?? null;
+  }
+  if (high && !within(n, high.strict ? { lt: high.at } : { max: high.at })) {
+    return boundsOf(high.strict ? { lt: high.at } : { max: high.at }, unit) ?? null;
+  }
+  return null;
 }
 
 /** A hover's lines: what the field means, then its bounds. */
@@ -44,22 +75,8 @@ export function tipOf(...lines: (string | undefined)[]): string | undefined {
   return lines.filter(Boolean).join("\n") || undefined;
 }
 
-const written = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 6 });
-
-// A field's rule that another field moves (a pair's upper value above its lower one), for
-// NumberField's and NumberInput's `check`. The lower value unset (NaN): no rule.
-
-/** More than `low`. */
-export const above = (low: number) => (n: number) =>
-  Number.isFinite(low) && n <= low ? `More than ${written(low)}` : null;
-
-/** Less than `high`. */
-export const below = (high: number) => (n: number) =>
-  Number.isFinite(high) && n >= high ? `Less than ${written(high)}` : null;
-
-/** At most `high`. */
-export const upTo = (high: number) => (n: number) =>
-  Number.isFinite(high) && n > high ? `At most ${written(high)}` : null;
+/** A number as a hover or a field writes it: no trailing zeros, six decimals at most. */
+export const written = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 6 });
 
 const same = (a: number, b: number) => a === b || (Number.isNaN(a) && Number.isNaN(b));
 
@@ -72,20 +89,25 @@ export function useNumberDraft({
   onChange,
   min,
   max,
+  gt,
+  lt,
   optional,
-  check,
   unit,
+  whole = false,
 }: {
   value: number;
   onChange: (value: number) => void;
+  /** Its bounds (see Bounds): a pair's other value, a strict one, that moves. */
   min?: number;
   max?: number;
+  gt?: number;
+  lt?: number;
   /** May be left empty (NaN): the word shown then, such as "auto". */
   optional?: string;
-  /** A rule another field moves (`above`, `below`, `upTo`): its number is taken, wrong. */
-  check?: (n: number) => string | null;
   /** The value's unit, in its issues' words. */
   unit?: string;
+  /** A count (samples, steps, an order): a fraction is wrong. */
+  whole?: boolean;
 }) {
   // The text typed and the value it goes with: set aside once the value changes elsewhere.
   const [draft, setDraft] = useState<{ text: string; value: number } | null>(null);
@@ -94,7 +116,8 @@ export function useNumberDraft({
   const [flagged, setFlagged] = useState(false);
   const typed = draft !== null && same(draft.value, value) ? draft.text : null;
   const n = typed === null ? value : typed === "" ? Number.NaN : Number(typed);
-  const issue = issueOf(n, min, max, optional, unit) ?? (Number.isFinite(n) ? (check?.(n) ?? null) : null);
+  const bounds = { min, max, gt, lt };
+  const issue = issueOf(n, bounds, { optional, unit, whole });
   const shown = issue !== null && (!focused || flagged) ? issue : null;
 
   const mark = useContext(WrongNumbers)?.mark;
@@ -108,8 +131,7 @@ export function useNumberDraft({
 
   // A number typed beyond a bound that has moved since (the workers' when more windows are
   // selected), within it now: taken.
-  const within = (m: number) => (min === undefined || m >= min) && (max === undefined || m <= max);
-  const due = typed !== null && Number.isFinite(n) && within(n) && !same(n, value);
+  const due = typed !== null && Number.isFinite(n) && within(n, bounds) && !same(n, value);
   useEffect(() => {
     if (due) onChange(n);
   });
@@ -127,7 +149,7 @@ export function useNumberDraft({
       onChange: (event: ChangeEvent<HTMLInputElement>) => {
         const text = event.target.value;
         const m = text === "" ? Number.NaN : Number(text);
-        const taken = Number.isNaN(m) || within(m);
+        const taken = Number.isNaN(m) || within(m, bounds);
         if (taken) onChange(m);
         setDraft({ text, value: taken ? m : value });
       },
@@ -139,7 +161,7 @@ export function useNumberDraft({
         setFocused(false);
         setFlagged(false);
         // A number beyond the bounds stays as typed; any other shows as the value.
-        if (!(Number.isFinite(n) && !within(n))) setDraft(null);
+        if (!(Number.isFinite(n) && !within(n, bounds))) setDraft(null);
       },
     },
   } as const;

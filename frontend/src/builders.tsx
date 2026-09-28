@@ -13,20 +13,44 @@ export const bound = (value: number | null | undefined) =>
   value !== null && value !== undefined && Number.isFinite(value) ? value : null;
 
 
-export function buildMutingParams(m: { method: string; tmin: number | null; tmax: number | null; vmin: number | null; vmax: number | null; width: number; taper: number; }) {
+export function buildMutingParams(m: { method: string; tmin: number | null; tmax: number | null; vmin: number | null; vmax: number | null; width: number | null; taper: number | null; }) {
   switch (m.method) {
     case "mute":
-      return { method: "mute", tmin: bound(m.tmin), tmax: bound(m.tmax), vmin: bound(m.vmin), vmax: bound(m.vmax), width: m.width, taper: m.taper };
+      // The width left empty left out: sigpipe's default, one sample; the taper empty, none.
+      return {
+        method: "mute",
+        tmin: bound(m.tmin),
+        tmax: bound(m.tmax),
+        vmin: bound(m.vmin),
+        vmax: bound(m.vmax),
+        ...(bound(m.width) !== null ? { width: bound(m.width) } : {}),
+        taper: bound(m.taper) ?? 0,
+      };
     default:
       return { method: "none" };
   }
 }
 
 
-// The trigger is part of the muting: its shift with the muting on (empty: each record's own,
-// from its file), none with it off.
+// The windows' settings sent: a shot distance left empty left out, so that sigpipe's own default
+// applies (none; 0 and 1,000 m in a sigpipe from before 2026-09-28, which refuses null).
+export function buildMaswParams(m: { length: number; step: number; distance_min: number | null; distance_max: number | null; }) {
+  const near = bound(m.distance_min);
+  const far = bound(m.distance_max);
+  return {
+    length: m.length,
+    step: m.step,
+    ...(near !== null ? { distance_min: near } : {}),
+    ...(far !== null ? { distance_max: far } : {}),
+  };
+}
+
+
+// The trigger is part of the muting: its shift with the muting on (emptied: 0; null, untouched
+// on files that differ: each record's own, from its file), none with it off.
 export function buildTriggerParams(t: { t0: number | null; }, muting: { method: string; }) {
-  return { t0: muting.method === "mute" ? bound(t.t0) : 0 };
+  if (muting.method !== "mute") return { t0: 0 };
+  return { t0: t.t0 === null ? null : (bound(t.t0) ?? 0) };
 }
 
 

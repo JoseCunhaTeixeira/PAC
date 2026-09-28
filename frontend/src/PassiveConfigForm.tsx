@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { type Dispersion, type Masw } from "./api";
 import {
+  bound,
   buildFilteringParams,
-  buildMutingParams,
+  buildMaswParams,
   buildNormalizationParams,
   buildSelectionParams,
   buildStackingParams,
@@ -11,7 +12,6 @@ import {
 import {
   DispersionRows,
   FilteringRow,
-  MutingRow,
   NextSteps,
   Row,
   StackingRow,
@@ -32,12 +32,12 @@ import {
   NumberField,
   Segmented,
 } from "./components/kit";
-import { above, below, upTo } from "./components/numbers";
+import { written } from "./components/numbers";
+import { shortestRecord } from "./components/records";
 import { RunPanel } from "./components/RunPanel";
 import { useStoredState } from "./components/stored";
 import {
   type FilteringState,
-  type MutingState,
   type PresetDefaults,
   type SelectionState,
   type StackingState,
@@ -74,7 +74,6 @@ function Form({
   // The settings, kept for this profile when the page is left; frozen while their job runs.
   const kept = `pac.form.passive.${profile}`;
   const [running, setRunning] = useState(false);
-  const maxTime = Number(Math.max(...acquisition.durations).toFixed(2));
   const nyquist = (acquisition.sampling_frequencies[0] ?? 0) / 2;
   const nCpus = navigator.hardwareConcurrency || 1;
 
@@ -82,22 +81,22 @@ function Form({
     `${kept}.masw`,
     stage<Masw>(preset, "masw"),
   );
-  // @2: since the bounds may be empty (2026-09-28), an earlier session's stand-in values are
-  // not kept.
-  const [muting, setMuting] = useStoredState(
-    `${kept}.muting@2`,
-    stage<MutingState>(preset, "muting"),
-  );
   const [filtering, setFiltering] = useStoredState(
     `${kept}.filtering`,
     stage<FilteringState>(preset, "filtering"),
   );
-  const [slicing, setSlicing] = useState(() =>
-    stage<{ segment_duration: number; segment_step: number }>(
-      preset,
-      "slicing",
-    ),
-  );
+  // The step, empty: the segment's length, segments end to end (the user, 2026-09-28).
+  const [slicing, setSlicing] = useState(() => {
+    const given = stage<{ segment_duration: number; segment_step: number }>(preset, "slicing");
+    return {
+      segment_duration: given.segment_duration,
+      segment_step: given.segment_step === given.segment_duration ? null : given.segment_step,
+    } as { segment_duration: number; segment_step: number | null };
+  });
+  // What the records hold (see records.ts): a segment within the shortest record; its
+  // frequency step, 1/segment.
+  const data = shortestRecord(acquisition);
+  const segment = bound(slicing.segment_duration);
   const [selection, setSelection] = useStoredState(
     `${kept}.selection@2`,
     stage<SelectionState>(preset, "selection"),
@@ -110,6 +109,10 @@ function Form({
     `${kept}.normalization`,
     stage<{ method: string }>(preset, "normalization"),
   );
+  // The band the filter and the whitening keep: the image overlaps it (sigpipe checks it).
+  const filtered = filtering.method === "iir" ? [filtering.fmin, filtering.fmax] : [0, nyquist];
+  const whitened = whitening.method === "onebit_apod" ? [whitening.fmin, whitening.fmax] : [0, nyquist];
+  const keptBand: [number, number] = [Math.max(filtered[0], whitened[0]), Math.min(filtered[1], whitened[1])];
   const [dispersion, setDispersion] = useStoredState(
     `${kept}.dispersion`,
     stage<Dispersion>(preset, "dispersion"),
@@ -129,10 +132,13 @@ function Form({
     profile,
     mode: "passive",
     overrides: {
-      masw,
-      muting: buildMutingParams(muting),
+      // No shot: no distances to them, no velocities from them.
+      masw: buildMaswParams({ ...masw, distance_min: null, distance_max: null }),
       filtering: buildFilteringParams(filtering),
-      slicing,
+      slicing: {
+        segment_duration: slicing.segment_duration,
+        segment_step: bound(slicing.segment_step) ?? slicing.segment_duration,
+      },
       selection: buildSelectionParams(selection),
       whitening: buildWhiteningParams(whitening),
       normalization: buildNormalizationParams(normalization),
@@ -160,12 +166,6 @@ function Form({
           hint="Applied to each record first."
         >
           <div className="rows">
-            <MutingRow
-              acquisition={acquisition}
-              muting={muting}
-              setMuting={setMuting}
-              maxTime={maxTime}
-            />
             <FilteringRow
               filtering={filtering}
               setFiltering={setFiltering}
@@ -194,17 +194,17 @@ function Form({
                     setSlicing({ ...slicing, segment_duration: v })
                   }
                   min={0.1}
-                  max={maxTime}
+                  max={data}
                   step={0.05}
                 />
                 <NumberField
                   label="Step"
                   unit="s"
-                  value={slicing.segment_step}
+                  value={slicing.segment_step ?? Number.NaN}
+                  optional={segment !== null ? written(segment) : "segment"}
                   onChange={(v) => setSlicing({ ...slicing, segment_step: v })}
                   min={0.01}
-                  max={maxTime}
-                  check={upTo(slicing.segment_duration)}
+                  max={segment ?? data}
                   step={0.01}
                 />
               </Fields>
@@ -238,11 +238,12 @@ function Form({
                     max={1}
                     step={0.1}
                   />
+                  {/* The band's velocities: empty, the band open on that side (0, ∞). */}
                   <NumberField
                     label="Slowest"
                     unit="m/s"
                     value={selection.vmin ?? Number.NaN}
-                    optional="none"
+                    optional="0"
                     onChange={(v) => setSelection({ ...selection, vmin: v })}
                     min={0}
                   />
@@ -250,10 +251,9 @@ function Form({
                     label="Fastest"
                     unit="m/s"
                     value={selection.vmax ?? Number.NaN}
-                    optional="none"
+                    optional="∞"
                     onChange={(v) => setSelection({ ...selection, vmax: v })}
-                    min={0}
-                    check={above(selection.vmin ?? Number.NaN)}
+                    gt={bound(selection.vmin) ?? 0}
                   />
                 </Fields>
               )}
@@ -287,16 +287,18 @@ function Form({
                     max={nyquist}
                     step={5}
                   />
+                  {/* Two of a segment's frequency steps at least: sigpipe whitens no narrower. */}
                   <NumberField
                     label="To"
                     unit="Hz"
                     value={whitening.fmax}
                     onChange={(v) => setWhitening({ ...whitening, fmax: v })}
-                    min={0}
+                    min={segment !== null ? whitening.fmin + 2 / segment : undefined}
+                    gt={segment !== null ? undefined : whitening.fmin}
                     max={nyquist}
-                    check={above(whitening.fmin)}
                     step={5}
                   />
+                  {/* Narrower than the band, when there is one (its "To" says otherwise). */}
                   <NumberField
                     label="Taper"
                     unit="Hz"
@@ -304,14 +306,9 @@ function Form({
                     onChange={(v) =>
                       setWhitening({ ...whitening, taper_width_Hz: v })
                     }
-                    min={0}
+                    gt={0}
+                    lt={whitening.fmax > whitening.fmin ? whitening.fmax - whitening.fmin : undefined}
                     max={nyquist / 4}
-                    // Narrower than the band, when there is one (its "To" says otherwise).
-                    check={
-                      whitening.fmax > whitening.fmin
-                        ? below(whitening.fmax - whitening.fmin)
-                        : undefined
-                    }
                     step={1}
                   />
                 </Fields>
@@ -355,6 +352,7 @@ function Form({
               dispersion={dispersion}
               setDispersion={setDispersion}
               nyquist={nyquist}
+              kept={keptBand}
             />
           </div>
         </Card>

@@ -5,13 +5,21 @@ from pathlib import Path
 from masw.io.folders import get_xmid_folders
 from masw.io.history import curve_changed
 from masw.io.paths import output_folder
-from masw.io.pick_origin import Origin, mark_edited, pick_origin
+from masw.io.pick_origin import Origin, mark_auto, mark_edited, pick_origin
 from masw.io.quality.log import read_log
 from sigpipe.algorithms.picking.dispersion.curve import pick_curves
 from sigpipe.algorithms.picking.dispersion.lasso import pick_lasso as lasso
+from sigpipe.algorithms.picking.dispersion.tracking import PickingParameters, pick_modes
 from sigpipe.base.dispersion_curve import DispersionCurve, Mode
 from sigpipe.base.dispersion_image import DispersionImage
-from sigpipe.masw.picks import PseudoSection, load_curves, pseudo_section, remove_pick, save_curves
+from sigpipe.masw.picks import (
+    PseudoSection,
+    load_curves,
+    pseudo_section,
+    remove_pick,
+    save_curves,
+    save_pick,
+)
 from sigpipe.masw.runs import load_image
 from sigpipe.masw.runs.finding import IMAGE_FILE
 
@@ -124,3 +132,26 @@ def get_pseudo_section(folder: str, label: str) -> PseudoSection:
     if not any(curve is not None for curve in curves):
         raise ValueError(f"No curve labelled '{label}' found in folder={folder}")
     return pseudo_section(xmids, curves)
+
+
+class NoCurveFound(ValueError):
+    """The automatic picking found no ridge to follow in a window."""
+
+
+def auto_pick_m0(folder: str, xmid: float) -> DispersionImage:
+    """The window's M0 picked automatically, as PACo picks it (sigpipe's tracking picker, its
+    defaults), replacing any M0 it holds, its other modes kept; the window marked picked
+    automatically, and what the old M0 led to forgotten (as a hand edit does). Raises
+    NoCurveFound when the picker finds none: the window's curves stay as they are."""
+    window = xmid_folder(folder, xmid)
+    if not (window / IMAGE_FILE).exists():
+        raise ValueError(f"No dispersion image for folder={folder}, xmid={xmid}")
+    image = load_image(window)
+    modes = pick_modes(image, PickingParameters())
+    curve = modes[0].curve if modes else None
+    if curve is None:
+        raise NoCurveFound(f"The automatic picking found no fundamental mode at xmid {xmid:g} m.")
+    save_pick(window, image, curve)
+    curve_changed(window, curve.mode)
+    mark_auto(window)
+    return load_dispersion_image(folder, xmid)

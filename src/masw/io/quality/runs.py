@@ -15,7 +15,13 @@ from pydantic import BaseModel, ConfigDict
 
 from masw.io.folders import get_input_folders, get_output_folders
 from masw.io.paths import INPUT_DIR
-from masw.io.quality.files import folder_path, line_geometry, preset_stage, read_manifest
+from masw.io.quality.files import (
+    folder_path,
+    line_geometry,
+    preset_stage,
+    read_manifest,
+    shot_distances,
+)
 from masw.io.quality.log import (
     COHERENCE_FILE,
     LINE,
@@ -136,9 +142,8 @@ class RunCard(BaseModel):
     receivers: tuple[float, ...]  # every receiver's x
     sources: dict[str, float]  # each record's shot x, by file name; none on a passive line
     windows: tuple[LineWindow, ...]
-    reach: (
-        tuple[float, float] | None
-    )  # the shots a window stacks: from, to this far from its middle
+    # The shots a window stacks: from, to this far from its middle (to None: any distance).
+    reach: tuple[float, float | None] | None
 
 
 def maker(run_folder: Path) -> Maker:
@@ -189,7 +194,7 @@ def run_card(folder: str) -> RunCard:
         receivers=line.receivers,
         sources=line.sources,
         windows=_windows(manifest, line.receivers),
-        reach=(masw["distance_min"], masw["distance_max"]) if line.sources else None,
+        reach=shot_distances(masw) if line.sources else None,
     )
 
 
@@ -285,7 +290,7 @@ def processing_settings(
             Setting(
                 key="reach",
                 label="Shots stacked",
-                value=_reach(masw, defaults["masw"]),
+                value=_reach(masw),
                 detail="from the window's middle"
                 + (
                     f", out of its near field ({number(field, 4)} m)"
@@ -342,13 +347,12 @@ def _length_rule(choice: LengthChoice, rules: Mapping[str, Any]) -> str:
     return f"the assistant's choice: {how} (every trial under Every setting)"
 
 
-def _reach(masw: Mapping[str, Any], default: Mapping[str, Any]) -> str:
+def _reach(masw: Mapping[str, Any]) -> str:
     """The shots a window stacks, by their distance from its middle (both exclusive)."""
-    near, far = float(masw["distance_min"]), float(masw["distance_max"])
-    unbounded = far >= float(default["distance_max"])
+    near, far = shot_distances(masw)
     if near > 0:
-        return f"beyond {number(near, 4)} m" if unbounded else span(near, far, "m", 4)
-    return "any distance" if unbounded else f"within {number(far, 4)} m"
+        return f"beyond {number(near, 4)} m" if far is None else span(near, far, "m", 4)
+    return "any distance" if far is None else f"within {number(far, 4)} m"
 
 
 def _records(manifest: RunManifest, log: QCLog | None) -> Setting:

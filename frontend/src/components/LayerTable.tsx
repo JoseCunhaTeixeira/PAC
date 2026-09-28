@@ -6,7 +6,6 @@ import {
 } from "react";
 import { CopyIcon, GripIcon, LockIcon, StrataIcon, TrashIcon } from "./icons";
 import { NumberInput } from "./kit";
-import { above } from "./numbers";
 import {
   copied,
   moved,
@@ -288,10 +287,10 @@ export function LayerTable({
                         <td>
                           <NumberInput
                             min={0.1}
+                            gt={thickness.thickness_min}
                             unit="m"
                             step={0.1}
                             value={thickness.thickness_max}
-                            check={above(thickness.thickness_min)}
                             onChange={(v) =>
                               setThickness(i, { thickness_max: v })
                             }
@@ -334,10 +333,10 @@ export function LayerTable({
                     <td>
                       <NumberInput
                         min={10}
+                        gt={vs.vs_min}
                         unit="m/s"
                         step={10}
                         value={vs.vs_max}
-                        check={above(vs.vs_min)}
                         onChange={(v) => setVs(i, { vs_max: v })}
                       />
                     </td>
