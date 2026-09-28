@@ -32,11 +32,22 @@ class PositionStatusOut(BaseModel):
     has_result: bool
 
 
+class SectionWindowOut(BaseModel):
+    """A window's column: its middle, its ground's elevation, how deep its model reaches and
+    how deep its data inform it (m; None: not measured)."""
+
+    x: float
+    top: float
+    depth: float
+    informed: float | None
+
+
 class VelocitySectionOut(BaseModel):
     positions: list[float]
     elevations: list[float]
     vs_grid: list[list[float | None]]
     vs_std_grid: list[list[float | None]]
+    windows: list[SectionWindowOut]
 
 
 class PositionCurvesOut(BaseModel):
@@ -99,6 +110,7 @@ def get_velocity_section(
 ) -> VelocitySectionOut:
     try:
         section = io.get_velocity_section(folder, model, lateral_smoothing)
+        windows = io.section_windows(folder, model)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return VelocitySectionOut(
@@ -106,6 +118,10 @@ def get_velocity_section(
         elevations=section.elevations.tolist(),
         vs_grid=nan_to_none(section.vs),
         vs_std_grid=nan_to_none(section.vs_std),
+        windows=[
+            SectionWindowOut(x=one.x, top=one.top, depth=one.depth, informed=one.informed)
+            for one in windows
+        ],
     )
 
 

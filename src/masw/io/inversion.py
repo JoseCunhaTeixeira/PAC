@@ -12,6 +12,7 @@ import numpy as np
 from masw.io.dispersion_images import xmid_folder
 from masw.io.folders import get_xmid_folders
 from masw.io.paths import output_folder
+from masw.io.quality.inversion import thresholds_of, window_measures
 from sigpipe.base.dispersion_curve import Mode
 from sigpipe.base.inversion import InversionResult
 from sigpipe.masw.inversion import InversionParameters, invert_window
@@ -28,6 +29,7 @@ from sigpipe.masw.inversion.section import (
     save_section,
     save_sections_file,
     velocity_grid,
+    window_model,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,6 +73,45 @@ def get_velocity_section(
             f"At least two inverted positions are required to build a section in folder={folder}"
         )
     return velocity_grid(section, lateral_smoothing)
+
+
+@dataclass(slots=True, frozen=True)
+class SectionWindow:
+    """A window's column in the sections: its middle, its ground's elevation, how deep its model
+    reaches and how deep its data inform it (m; None when they cannot be measured)."""
+
+    x: float
+    top: float
+    depth: float
+    informed: float | None
+
+
+def section_windows(folder: str, model: ModelName = "smooth_median") -> list[SectionWindow]:
+    """Each window holding model `model`, by position: how deep its data inform it, read against
+    one yardstick for every window (sigpipe's measuring), its whole depth when all of it."""
+    run_folder = output_folder(folder)
+    thresholds = thresholds_of(run_folder)
+    windows: list[SectionWindow] = []
+    for unit in _units(folder):
+        found = window_model(run_folder / unit, model)
+        if found is None:
+            continue
+        depth = round(float(np.sum(found.thicknesses)), 2)
+        try:
+            measured = window_measures(run_folder / unit, thresholds)
+        except ValueError:
+            logger.warning("Depth informed of %s left out of the section", unit, exc_info=True)
+            measured = None
+        useful = measured[1].useful_depth_m if measured is not None else None
+        windows.append(
+            SectionWindow(
+                x=float(found.position.x),
+                top=float(found.position.z),
+                depth=depth,
+                informed=None if measured is None else depth if useful is None else useful,
+            )
+        )
+    return sorted(windows, key=lambda one: one.x)
 
 
 def save_velocity_section_plot(

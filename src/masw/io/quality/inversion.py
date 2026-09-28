@@ -14,6 +14,7 @@ from datetime import timedelta
 from itertools import pairwise
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
@@ -59,6 +60,7 @@ from sigpipe.masw.inversion.measuring import (
     BoundShare,
     InversionMeasures,
     ModelFit,
+    against_yardstick,
     measure_inversion,
 )
 from sigpipe.masw.inversion.section import ModelName, picked_curve, predicted_curve, window_model
@@ -231,26 +233,40 @@ def window_measures(
 ) -> tuple[WindowParameters, InversionMeasures] | None:
     """The parameters window `folder` was inverted with and the measures of its posterior; None
     when it holds no inversion sigpipe saved its samples for. Measured when no file holds them
-    yet, or an older one than the samples: then saved, as the assistant saves them. Raises
-    ValueError when they cannot be measured (no fundamental mode among the curves inverted)."""
+    yet, or an older one than the samples; the depth the data inform read again when measured
+    against the run's own prior (before one yardstick served every window): then saved, as the
+    assistant saves them. Raises ValueError when they cannot be measured (no fundamental mode
+    among the curves inverted)."""
     samples = folder / SAMPLES_FILE
     if not (folder / PARAMETERS_FILE).exists() or not samples.exists():
         return None
     ran = load_parameters(folder / PARAMETERS_FILE)
     path = folder / MEASURES_FILE
-    if path.exists() and path.stat().st_mtime >= samples.stat().st_mtime:
-        return ran, InversionMeasures.model_validate_json(path.read_text())
+    saved = (
+        InversionMeasures.model_validate_json(path.read_text())
+        if path.exists() and path.stat().st_mtime >= samples.stat().st_mtime
+        else None
+    )
     try:
-        measures = measure_inversion(
-            folder,
-            ran.parameters,
-            n_bands=thresholds.n_bands,
-            bound_edge=thresholds.bound_edge,
-            std_ratio=thresholds.useful_std_ratio,
+        measures = (
+            against_yardstick(saved, folder, ran.parameters, thresholds.useful_std_ratio)
+            if saved is not None
+            else measure_inversion(
+                folder,
+                ran.parameters,
+                n_bands=thresholds.n_bands,
+                bound_edge=thresholds.bound_edge,
+                std_ratio=thresholds.useful_std_ratio,
+            )
         )
     except (StopIteration, OSError, ValueError) as exc:
         raise ValueError(f"The inversion of {folder.name} cannot be measured: {exc!r}") from exc
-    path.write_text(measures.model_dump_json(indent=2))
+    if measures is not saved:
+        # Whole, under a name of its own, then renamed: the overview and the sections may
+        # measure a window at once, and neither reads half a file.
+        partial = path.with_name(f"{path.name}.{uuid4().hex}.partial")
+        partial.write_text(measures.model_dump_json(indent=2))
+        partial.replace(path)
     return ran, measures
 
 
@@ -681,31 +697,35 @@ def _not_inverted(unit: str, title: str, log: QCLog | None) -> InversionCard:
 def _depth_sentences(
     parameters: InversionParameters, measures: InversionMeasures, thresholds: InversionThresholds
 ) -> list[Sentence]:
-    """How deep the model goes, and how much of it the data inform."""
+    """How deep the model goes, and how much of it the data inform: where the models' Vs
+    spreads less than a share of what the curve alone allows (sigpipe's yardstick)."""
     bottom = measures.depth_max_m
     useful = measures.useful_depth_m
     enough = thresholds.min_useful_share * model_depth(parameters)
+    ratio = thresholds.useful_std_ratio
+    share = "half as" if ratio == 0.5 else f"{ratio:.0%} as"
     if useful is None:
         return [
             Sentence(
                 mark="pass",
-                text=f"The data inform the whole model, down to {number(bottom)} m: the samples "
-                "stay tighter than the prior all the way down.",
+                text=f"The data inform the whole model, down to {number(bottom)} m: the models' "
+                f"Vs spreads less than {share} widely as the curve alone allows.",
             )
         ]
     if useful <= 0:
         return [
             Sentence(
                 mark="warn",
-                text=f"The data inform none of the {number(bottom)} m modelled: the samples "
-                "spread as widely as the prior at every depth.",
+                text=f"The data inform none of the {number(bottom)} m modelled: at every depth, "
+                f"the models' Vs spreads at least {share} widely as the curve alone allows.",
             )
         ]
     return [
         Sentence(
             mark="pass" if useful >= enough else "warn",
             text=f"The data inform it down to {number(useful)} m of the {number(bottom)} m "
-            "modelled: deeper, the samples spread as widely as the prior.",
+            f"modelled: deeper, the models' Vs spreads at least {share} widely as the curve "
+            "alone allows.",
         )
     ]
 

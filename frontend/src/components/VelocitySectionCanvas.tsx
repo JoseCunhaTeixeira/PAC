@@ -28,6 +28,79 @@ const FONT = CANVAS_FONT;
 // whole, in m/s, as the pseudo-sections' colour bars write them.
 const DEFAULT_FORMAT_VALUE = (v: number) => v.toFixed(0);
 
+/** A window's column, for the depth its data inform: its middle, its ground's elevation, how
+ * deep its model reaches and how deep the data inform it (m; null: not measured). */
+export interface InformedWindow {
+  x: number;
+  top: number;
+  depth: number;
+  informed: number | null;
+}
+
+/** The elevation down to which `one`'s data inform its model, its bottom's at most (the section
+ * draws its half-space deeper); null when not measured: nothing veiled. */
+function informedElevation(one: InformedWindow): number | null {
+  return one.informed === null ? null : one.top - Math.min(one.informed, one.depth);
+}
+
+/** What the hover says of `one`'s depth informed; null: nothing measured. */
+function informedText(one: InformedWindow): string | null {
+  if (one.informed === null) return null;
+  const metres = (value: number) => `${+value.toFixed(2)} m`;
+  if (one.informed >= one.depth - 1e-6) return `informed to ${metres(one.depth)} (its bottom)`;
+  return one.informed > 0 ? `informed to ${metres(one.informed)}` : "not informed";
+}
+
+/** Below each window's depth informed, its column veiled down to the section's `bottom`; a
+ * dashed line at that depth, one level a column, joined from column to column. */
+function drawInformed(
+  ctx: CanvasRenderingContext2D,
+  windows: InformedWindow[],
+  xOf: (x: number) => number,
+  yOf: (z: number) => number,
+  bottom: number,
+  colours: { veil: string; informed: string },
+) {
+  const n = windows.length;
+  if (!n) return;
+  // Each column from the middles between windows, the first and last from their own: as the
+  // section's columns.
+  const edges = windows.map((one, i) => (i === 0 ? one.x : (windows[i - 1].x + one.x) / 2));
+  edges.push(windows[n - 1].x);
+  const levels = windows.map(informedElevation);
+  ctx.fillStyle = colours.veil;
+  levels.forEach((level, i) => {
+    if (level === null) return;
+    const xLeft = Math.round(xOf(edges[i]));
+    const xRight = Math.round(xOf(edges[i + 1]));
+    const yLevel = yOf(level);
+    ctx.fillRect(xLeft, yLevel, Math.max(1, xRight - xLeft), yOf(bottom) - yLevel);
+  });
+  ctx.beginPath();
+  let drawing = false;
+  levels.forEach((level, i) => {
+    if (level === null) {
+      drawing = false;
+      return;
+    }
+    const y = yOf(level);
+    if (drawing) ctx.lineTo(Math.round(xOf(edges[i])), y);
+    else ctx.moveTo(Math.round(xOf(edges[i])), y);
+    ctx.lineTo(Math.round(xOf(edges[i + 1])), y);
+    drawing = true;
+  });
+  ctx.lineJoin = "round";
+  // A halo in the veil's colour, then the line: seen over any colour of the section.
+  ctx.strokeStyle = colours.veil;
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+  ctx.setLineDash([6, 4]);
+  ctx.strokeStyle = colours.informed;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
 export function VelocitySectionCanvas({
   positions,
   elevations,
@@ -40,6 +113,7 @@ export function VelocitySectionCanvas({
   colorRange,
   marker,
   onPick,
+  informed,
 }: {
   positions: number[];
   elevations: number[];
@@ -63,6 +137,8 @@ export function VelocitySectionCanvas({
   // (not a zoom's drag) selects: its position.
   marker?: number;
   onPick?: (position: number) => void;
+  // Each window's depth its data inform, by position: below it, the section veiled.
+  informed?: InformedWindow[];
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
@@ -110,6 +186,10 @@ export function VelocitySectionCanvas({
     const posIdx = nearestIndex(positions, position);
     const zIdx = nearestIndex(elevations, elevation);
     const value = values[posIdx]?.[zIdx] ?? null;
+    const column = informed?.length
+      ? informed[nearestIndex(informed.map((one) => one.x), position)]
+      : undefined;
+    const said = column ? informedText(column) : null;
 
     return {
       px: hoverPos.x * scale,
@@ -118,9 +198,10 @@ export function VelocitySectionCanvas({
         `xmid ${positions[posIdx].toFixed(2)} m`,
         `elevation ${elevations[zIdx].toFixed(2)} m`,
         `${colorLabel}: ${value === null ? "—" : formatValue(value)}`,
+        ...(said ? [said] : []),
       ],
     };
-  }, [hoverPos, positions, elevations, values, colorLabel, scale, PLOT_H, PLOT_W, formatValue, x0, x1, z0, z1]);
+  }, [hoverPos, positions, elevations, values, colorLabel, scale, PLOT_H, PLOT_W, formatValue, x0, x1, z0, z1, informed]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -210,6 +291,7 @@ export function VelocitySectionCanvas({
       ctx.drawImage(off, 0, k0, 1, k1 - k0, xLeft, yTop, Math.max(1, xRight - xLeft), yBottom - yTop);
     }
     ctx.imageSmoothingEnabled = true;
+    if (informed) drawInformed(ctx, informed, xOf, yOf, zMin, palette);
     ctx.restore();
     if (marker !== undefined && marker >= x0 && marker <= x1) drawMarker(ctx, xOf(marker), MT, MT + PLOT_H);
 
@@ -293,7 +375,7 @@ export function VelocitySectionCanvas({
     ctx.textAlign = "center";
     ctx.fillText(colorLabel, 0, 0);
     ctx.restore();
-  }, [positions, elevations, values, colorLabel, colormap, PLOT_H, TOTAL_H, TOTAL_W, PLOT_W, palette, scale, formatValue, fixedMin, fixedMax, x0, x1, z0, z1, marker]);
+  }, [positions, elevations, values, colorLabel, colormap, PLOT_H, TOTAL_H, TOTAL_W, PLOT_W, palette, scale, formatValue, fixedMin, fixedMax, x0, x1, z0, z1, marker, informed]);
 
   const click = useClick(
     TOTAL_W,

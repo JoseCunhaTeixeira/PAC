@@ -22,10 +22,24 @@ export function useTheme(): Theme {
 // Canvas drawing uses raw pixel colors that can't follow CSS variables, so
 // plotting components look these up explicitly via useTheme(): the page's own
 // text colours (index.css), ticks and labels muted, titles in the main text's.
+// A section's depths the data do not inform: veiled in the card's surface
+// (--surface), below a line in Visualization's warn amber.
 export function canvasPalette(theme: Theme) {
   return theme === "dark"
-    ? { axis: "#5c6778", tick: "#a1abbc", title: "#e7ebf2" }
-    : { axis: "#a3abb8", tick: "#525d70", title: "#0f1728" };
+    ? {
+        axis: "#5c6778",
+        tick: "#a1abbc",
+        title: "#e7ebf2",
+        veil: "rgba(17, 23, 31, 0.62)",
+        informed: "#f0b429",
+      }
+    : {
+        axis: "#a3abb8",
+        tick: "#525d70",
+        title: "#0f1728",
+        veil: "rgba(255, 255, 255, 0.62)",
+        informed: "#d98a04",
+      };
 }
 
 // The page's font (index.css), so that a plot's text reads as the page's.

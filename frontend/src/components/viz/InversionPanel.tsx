@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { API } from "../../api";
+import { canvasPalette, useTheme } from "../../theme";
 import { afmhotR, terrain } from "../colormaps";
 import { LayersIcon, StrataIcon } from "../icons";
 import { Card, Segmented } from "../kit";
 import { ModeHead } from "../PseudoSectionCanvas";
 import { PseudoSectionComparisonCanvas, type PseudoSectionComparisonData } from "../PseudoSectionComparisonCanvas";
 import { useZoomLink } from "../useZoom";
-import { VelocitySectionCanvas } from "../VelocitySectionCanvas";
+import { VelocitySectionCanvas, type InformedWindow } from "../VelocitySectionCanvas";
 import { ChainLegend, ChainTracesCanvas, MarginalsGrid } from "./ChainPlots";
 import { num, parameterLabel, xmidOf } from "./format";
 import { StageHead, UnitCard } from "./panel";
@@ -35,6 +36,13 @@ interface VelocitySection {
   elevations: number[];
   vs_grid: (number | null)[][];
   vs_std_grid: (number | null)[][];
+  windows: InformedWindow[];
+}
+
+/** The legend's swatch of the veil: the Vs colours seen through it. */
+function veiled(veil: string): string {
+  const stops = [0.15, 0.5, 0.85].map((t) => `rgb(${terrain(t).join(", ")})`);
+  return `linear-gradient(${veil}, ${veil}), linear-gradient(90deg, ${stops.join(", ")})`;
 }
 
 function ModelTable({ card }: { card: InversionCard }) {
@@ -149,6 +157,9 @@ export function InversionPanel({
 }) {
   const [model, setModel] = useState<ModelName>("smooth_median");
   const [smoothing, setSmoothing] = useState(false);
+  // The depth each window's data inform, over the sections.
+  const [informed, setInformed] = useState(true);
+  const colours = canvasPalette(useTheme());
   const [vsMin, setVsMin] = useState("");
   const [vsMax, setVsMax] = useState("");
   const [curveAxis, setCurveAxis] = useState<CurveAxis>("frequency");
@@ -288,6 +299,25 @@ export function InversionPanel({
             title="Vs and Vs std sections"
             aside={
               <div className="viz-toolbar" style={{ margin: 0 }}>
+                <div
+                  className="viz-field"
+                  data-tip={
+                    "Depth informed\nBelow it, veiled: Vs still spreads over half what the curve alone allows\n" +
+                    'One yardstick for every window: "By the data", its bounds left empty'
+                  }
+                >
+                  Depth informed
+                  <Segmented
+                    size="sm"
+                    label="Depth informed"
+                    value={informed ? "on" : "off"}
+                    onChange={(one) => setInformed(one === "on")}
+                    options={[
+                      { value: "off", label: "Off" },
+                      { value: "on", label: "On" },
+                    ]}
+                  />
+                </div>
                 <div className="viz-field">
                   Lateral smoothing
                   <Segmented
@@ -325,6 +355,7 @@ export function InversionPanel({
                   colorRange={range}
                   marker={xmid ?? undefined}
                   onPick={pick}
+                  informed={informed ? section.data.windows : undefined}
                 />
                 <VelocitySectionCanvas
                   positions={section.data.positions}
@@ -336,7 +367,20 @@ export function InversionPanel({
                   link={zoomLink}
                   marker={xmid ?? undefined}
                   onPick={pick}
+                  informed={informed ? section.data.windows : undefined}
                 />
+                {informed && section.data.windows?.some((one) => one.informed !== null) && (
+                  <div className="viz-legend-inline">
+                    <span style={{ color: colours.informed }}>
+                      <i className="dashed" />
+                      depth informed
+                    </span>
+                    <span>
+                      <i className="area" style={{ background: veiled(colours.veil) }} />
+                      not informed by the data
+                    </span>
+                  </div>
+                )}
               </>
             ) : section.error ? (
               <Empty>Needs 2 inverted windows.</Empty>
