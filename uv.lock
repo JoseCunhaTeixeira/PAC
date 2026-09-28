@@ -1613,7 +1613,7 @@ wheels = [
 [[package]]
 name = "paco"
 version = "1.0.0"
-source = { git = "https://github.com/JoseCunhaTeixeira/PACo#a69024da628343f0d4dcfc2173a0c336d861a825" }
+source = { git = "https://github.com/JoseCunhaTeixeira/PACo#8eef26089fa5ed2b8dbf97d205810f769a8a11d4" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "openai" },
