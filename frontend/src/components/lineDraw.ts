@@ -1,5 +1,6 @@
-import { CANVAS_FONT } from "../theme";
+import { CANVAS_FONT, type Theme } from "../theme";
 import { tickDecimals } from "./useZoom";
+import type { PartState } from "./viz/types";
 
 // What every plot of a line from above shares, so that the computing pages' geometry and
 // Visualization's line look alike: the lanes, the symbols' sizes and shapes (a star a shot, an
@@ -12,13 +13,140 @@ export const LANE = {
   shotY: 28,
   receiverY: 62,
   windowY: 86,
-  windowH: 30,
+  windowH: 34, // a window's cell: as tall as the rails'
   axisH: 30, // under the windows: ticks, their values
   axisGap: 12, // between the last lane and the position axis
 } as const;
 
 /** The windows' lane's bottom, where the position axis starts. */
 export const LANE_BOTTOM = LANE.windowY + LANE.windowH;
+
+// A window's cell, as the rails draw theirs (kit.css's .rail-cell), so that a window looks the
+// same on every page: as tall, 2 px from the next, rounded 4 px; a state's colour mixed into the
+// page, stronger under the pointer (and 12 % taller) and when selected (and edged); a cell telling
+// its checks apart, a band each, 1 px apart, rounded 2 px.
+export const CELL = { gap: 2, radius: 4, bandGap: 1, bandRadius: 2 } as const;
+
+/** A cell's tone: a state, a part's (by hand), picked but not judged (auto), or a window as the
+ * computing pages show it (series). */
+export type CellTone = PartState | "auto" | "series";
+export type CellStrength = "rest" | "hover" | "active";
+
+// index.css's tokens, which a canvas cannot read.
+const TOKENS: Record<Theme, Record<string, string>> = {
+  light: {
+    ok: "#1a9e4b",
+    warn: "#b87404",
+    bad: "#d63c3c",
+    accent: "#4f5bd5",
+    muted: "#525d70",
+    series: "#2a78d6",
+    surfaceHover: "#eef1f5",
+    borderStrong: "#cdd3dc",
+    text: "#0f1728",
+  },
+  dark: {
+    ok: "#34c46a",
+    warn: "#f0b429",
+    bad: "#f06a6a",
+    accent: "#6671ec",
+    muted: "#a1abbc",
+    series: "#4f9cf5",
+    surfaceHover: "#19212d",
+    borderStrong: "#2d394a",
+    text: "#e7ebf2",
+  },
+};
+// kit.css's mixes of each tone into the page, in %: at rest, under the pointer, selected.
+const MIXES: Record<Exclude<CellTone, "none">, readonly [number, number, number]> = {
+  pass: [34, 58, 72],
+  warn: [42, 66, 80],
+  fail: [40, 64, 78],
+  hand: [45, 70, 80],
+  auto: [34, 55, 72],
+  series: [34, 58, 80],
+};
+const BAND_MIXES = [38, 62, 80] as const;
+const STRENGTHS: Record<CellStrength, 0 | 1 | 2> = { rest: 0, hover: 1, active: 2 };
+
+/** A cell's colour, as the rails': `tone` at `strength`, a band's when `band`. */
+export function cellColour(theme: Theme, tone: CellTone, strength: CellStrength, band = false): string {
+  const tokens = TOKENS[theme];
+  const i = STRENGTHS[strength];
+  if (tone === "none") {
+    return band ? withAlpha(tokens.borderStrong, BAND_MIXES[i] / 100) : i === 0 ? tokens.surfaceHover : tokens.borderStrong;
+  }
+  const base = {
+    pass: tokens.ok,
+    warn: tokens.warn,
+    fail: tokens.bad,
+    hand: tokens.accent,
+    auto: tokens.muted,
+    series: tokens.series,
+  }[tone];
+  return withAlpha(base, (band ? BAND_MIXES : MIXES[tone])[i] / 100);
+}
+
+/** A window's cell centred on `x`, `w` wide, as the rails draw theirs: its tones top down (one,
+ * or a band each), at `strength`; selected, edged as a rail's (2 px of the text's colour and a
+ * faint ring); under the pointer, 12 % taller. */
+export function drawCell(
+  ctx: CanvasRenderingContext2D,
+  theme: Theme,
+  x: number,
+  w: number,
+  tones: readonly CellTone[],
+  strength: CellStrength,
+  selected = false,
+): void {
+  const h = LANE.windowH * (strength === "hover" ? 1.12 : 1);
+  const top = LANE.windowY + (LANE.windowH - h) / 2;
+  const left = x - w / 2;
+  if (tones.length <= 1) {
+    ctx.fillStyle = cellColour(theme, tones[0] ?? "none", strength);
+    roundedRect(ctx, left, top, w, h, CELL.radius);
+    ctx.fill();
+  } else {
+    const band = (h - CELL.bandGap * (tones.length - 1)) / tones.length;
+    tones.forEach((tone, i) => {
+      ctx.fillStyle = cellColour(theme, tone, strength, true);
+      roundedRect(ctx, left, top + i * (band + CELL.bandGap), w, band, CELL.bandRadius);
+      ctx.fill();
+    });
+  }
+  if (selected) {
+    const tokens = TOKENS[theme];
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = tokens.text;
+    roundedRect(ctx, left + 1, top + 1, w - 2, h - 2, CELL.radius - 1);
+    ctx.stroke();
+    ctx.strokeStyle = withAlpha(tokens.text, 0.16);
+    roundedRect(ctx, left - 2, top - 2, w + 4, h + 4, CELL.radius + 2);
+    ctx.stroke();
+  }
+}
+
+/** The cells' width on screen: the tightest gap between windows, less the rails' gap. */
+export function cellWidth(xmids: readonly number[], span: number, plotW: number): number {
+  const xs = [...xmids].sort((a, b) => a - b);
+  let gap = Infinity;
+  for (let i = 1; i < xs.length; i++) gap = Math.min(gap, xs[i] - xs[i - 1]);
+  const px = Number.isFinite(gap) && span > 0 ? (gap / span) * plotW : 14;
+  return Math.max(2, px - CELL.gap);
+}
+
+/** A rounded rectangle's path, its corners never rounder than half its side. */
+export function roundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, Math.max(0, Math.min(r, w / 2, h / 2)));
+}
 
 /** A round step near `raw`: 1, 2 or 5 times a power of ten. */
 function niceStep(raw: number): number {

@@ -5,6 +5,8 @@ import { useContainerWidth } from "./useContainerWidth";
 import { AlertCircleIcon } from "./icons";
 import {
   drawElevation,
+  cellWidth,
+  drawCell,
   drawLaneLabels,
   drawLineAxis,
   ELEVATION,
@@ -43,7 +45,6 @@ const ML = LANE.left;
 const MR = LANE.right;
 const SHOT_Y = LANE.shotY;
 const WINDOW_Y = LANE.windowY;
-const WINDOW_H = LANE.windowH;
 const ELEVATION_TOP = LANE_BOTTOM + ELEVATION.gap;
 
 const same = (a: number, b: number) => Math.abs(a - b) < 1e-6;
@@ -291,19 +292,12 @@ export function GeometryPlot({
       ctx.fill();
     });
 
-    // Windows: a cell at each middle, the one under the pointer outlined.
-    const gap = windows.length > 1 ? Math.min(...windows.slice(1).map((w, i) => w.xmid - windows[i].xmid)) : x1 - x0;
-    const cellW = Math.max(2, Math.min(26, (gap / (x1 - x0)) * plotW * 0.82));
+    // Windows: a cell at each middle, as the rails draw theirs (lineDraw's drawCell), the one
+    // under the pointer stronger and taller.
+    const cellW = cellWidth(windows.map((w) => w.xmid), x1 - x0, plotW);
     windows.forEach((w) => {
-      const x = px(w.xmid);
       const on = picked !== undefined && same(w.xmid, picked.xmid);
-      ctx.fillStyle = on ? palette.series : palette.seriesSoft;
-      ctx.fillRect(x - cellW / 2, WINDOW_Y, cellW, WINDOW_H);
-      if (on) {
-        ctx.strokeStyle = palette.selectedEdge;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x - cellW / 2 - 2, WINDOW_Y - 2, cellW + 4, WINDOW_H + 4);
-      }
+      drawCell(ctx, theme, px(w.xmid), cellW, ["series"], on ? "hover" : "rest");
     });
 
     // The hovered element: a guide down the lanes.
@@ -321,7 +315,7 @@ export function GeometryPlot({
     drawLineAxis(ctx, [x0, x1], plotW, axes, axisTop);
   }, [
     width, height, plotW, x0, x1, windows, receivers, shots, picked, hit, masw, showSources, axes,
-    palette, relief, lanesBottom, axisTop, starR, triangleR,
+    palette, theme, relief, lanesBottom, axisTop, starR, triangleR,
   ]);
 
   function logical(e: React.MouseEvent<HTMLCanvasElement>) {

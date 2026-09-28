@@ -330,7 +330,7 @@
 .viz-line-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 14px;
+  gap: 4px 16px;
   margin-top: 8px;
   font-size: var(--fs-small);
   color: var(--text-muted);
@@ -339,13 +339,14 @@
 .viz-line-legend span {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px; /* as the rails' legends' swatches */
 }
 
+/* A legend's swatch, as the rails' legends' (kit.css's .rail-legend i): their size, their mixes. */
 .viz-swatch {
   display: inline-block;
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   border-radius: 3px;
   flex: none;
 }
@@ -355,25 +356,30 @@
 }
 
 .viz-swatch.pass {
-  background: var(--ok);
+  background: color-mix(in srgb, var(--ok) 50%, transparent);
 }
 
 .viz-swatch.warn {
-  background: var(--warn);
+  background: color-mix(in srgb, var(--warn) 58%, transparent);
 }
 
 .viz-swatch.fail {
-  background: var(--bad);
+  background: color-mix(in srgb, var(--bad) 55%, transparent);
 }
 
 .viz-swatch.none {
-  background: var(--none-soft);
-  box-shadow: inset 0 0 0 1px var(--none);
+  background: var(--surface-hover);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 
 /* By hand: the app's indigo, as the rails say it. */
 .viz-swatch.hand {
-  background: var(--accent);
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* A window as the records' stage shows it: stacking the record, in the series' blue. */
+.viz-swatch.series {
+  background: color-mix(in srgb, var(--blue) 50%, transparent);
 }
 
 .viz-badge.hand {
@@ -401,7 +407,7 @@
 .viz-line-legend .viz-legend-group > span {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .viz-hint {

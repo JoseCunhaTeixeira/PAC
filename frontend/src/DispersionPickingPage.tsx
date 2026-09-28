@@ -349,18 +349,19 @@ export default function DispersionPickingPage() {
           : "auto";
     const image = state?.parts && state.parts.length > 1 ? state.parts[0] : undefined;
     const tone: RailTone = image === undefined ? curve : hand ? "hand" : (verdict ?? curve);
+    // The hover as Visualization's (its image, then its curve, apart), its curve as the picks
+    // are now, and every mode picked after it.
     const lines = state
       ? [...state.hover]
       : [
           `xmid ${num(position.xmid, 4)} m`,
-          hasCurve
-            ? hand
-              ? "picked by hand"
-              : "picked automatically"
-            : "not picked yet",
+          hasCurve ? (hand ? "Curve: by hand" : "Curve: picked automatically") : "No curve",
         ];
-    if (hasCurve && (hand || position.labels.length > 1))
-      lines.splice(1, 0, position.labels.join(", "));
+    const at = lines.findIndex((line) => line.startsWith("Curve") || line === "No curve");
+    const now = !hasCurve ? "No curve" : hand ? "Curve: by hand" : undefined;
+    if (now !== undefined && at >= 0) lines[at] = now;
+    if (hasCurve && position.labels.length > 1)
+      lines.splice(at >= 0 ? at + 1 : lines.length, 0, position.labels.join(", "));
     return {
       xmid: position.xmid,
       tone,

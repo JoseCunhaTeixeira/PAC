@@ -161,25 +161,22 @@ def dispersion_overview(folder: str) -> Overview:
         # The image's state only when the assistant checked the images.
         parts = (image, picks) if log is not None else (picks,)
         present.update(enumerate(parts))
+        # Its image and its curve apart, as its cell's parts, then its curve's figures.
         hover = [f"xmid {number(xmid_of(unit), 4)} m"]
-        if stats is not None and picked_by == "hand":
-            hover.append("picked by hand")
-        elif stats is not None:
+        if log is not None:
+            hover.append(_part_line("Image", image, IMAGE_STATES, g2))
+        curve_states = CURVE_STATES if log is not None else MEASURED_CURVE_STATES
+        hover.append(_part_line("Curve", picks, curve_states, g3, g4))
+        if stats is not None:
             hover.append(
                 f"{stats.label}: {stats.n_points} points, {span(*stats.band_hz, 'Hz')}, "
                 f"λ {span(*stats.wavelength_m, 'm')}"
+                + (
+                    f", uncertainty {stats.uncertainty:.0%}"
+                    if stats.uncertainty is not None
+                    else ""
+                )
             )
-            if stats.uncertainty is not None:
-                hover.append(f"median uncertainty {stats.uncertainty:.0%}")
-            hover.append("picked automatically" if picked_by == "auto" else "picked by hand")
-        else:
-            hover.append("no curve")
-        verdicts = [f"{one.gate} {one.verdict}" for one in (g2, g3, g4) if one is not None]
-        if verdicts and picked_by != "hand":
-            hover.append(" · ".join(verdicts))
-        flags = [flag.name for one in (g2, g3, g4) if one is not None for flag in one.flags]
-        if flags and picked_by != "hand":
-            hover.append("flags: " + ", ".join(flag_text(name) for name in dict.fromkeys(flags)))
         cells.append(
             Cell(
                 key=unit,
@@ -260,6 +257,22 @@ def _states(
     if g3 is not None or g4 is not None:
         return image, verdict_status(g3, g4)
     return image, measured_status(curve_metrics(curve, thresholds.curve, lambda_min))
+
+
+def _part_line(
+    part: str, state: PartState, states: Mapping[PartState, str], *results: GateResult | None
+) -> str:
+    """One of a window's parts on its cell's hover: its state and, judged, the gates that judged
+    it with their flags ("Image: flagged (G2: competing ridges)"); no curve said so."""
+    if part == "Curve" and state == "none":
+        return "No curve"
+    said = f"{part}: {states[state]}"
+    judged = [one for one in results if one is not None]
+    if judged and state != "hand":
+        flags = dict.fromkeys(flag_text(flag.name) for one in judged for flag in one.flags)
+        said += f" ({', '.join(one.gate for one in judged)}"
+        said += f": {', '.join(flags)})" if flags else ")"
+    return said
 
 
 def _status(image: PartState, curve: PartState) -> Status:

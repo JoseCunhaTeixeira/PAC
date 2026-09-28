@@ -172,7 +172,7 @@ function LineLegend({
       )}
       {!windows && (
         <span>
-          <i className="viz-swatch" style={{ background: palette.series }} />{" "}
+          <i className="viz-swatch series" />{" "}
           windows stacking the record
         </span>
       )}

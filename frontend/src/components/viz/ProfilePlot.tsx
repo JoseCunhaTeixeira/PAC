@@ -2,7 +2,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { canvasPalette, useTheme } from "../../theme";
 import { useContainerWidth } from "../useContainerWidth";
 import { CLICK_PX, useZoom, type PlotRect, type Range } from "../useZoom";
-import { drawLaneLabels, drawLineAxis, LANE, receiverPath, starPath, symbolSizes } from "../lineDraw";
+import {
+  cellWidth,
+  drawCell,
+  drawLaneLabels,
+  drawLineAxis,
+  LANE,
+  receiverPath,
+  starPath,
+  symbolSizes,
+  type CellTone,
+} from "../lineDraw";
 import { ZoomReset, ZoomSelection } from "../ZoomOverlay";
 import { TooltipLines } from "../HoverTooltip";
 import { num } from "./format";
@@ -114,13 +124,10 @@ export function ProfilePlot({
   const stacked = useMemo(() => new Set(stacking ?? []), [stacking]);
 
   // A cell's width: the tightest gap between windows, on screen.
-  const cellW = useMemo(() => {
-    const xs = card.windows.map((window) => window.xmid).sort((a, b) => a - b);
-    let gap = Infinity;
-    for (let i = 1; i < xs.length; i++) gap = Math.min(gap, xs[i] - xs[i - 1]);
-    const px = Number.isFinite(gap) ? (gap / (x1 - x0)) * plotW : 12;
-    return Math.max(2, Math.min(26, px * 0.82));
-  }, [card.windows, x0, x1, plotW]);
+  const cellW = useMemo(
+    () => cellWidth(card.windows.map((window) => window.xmid), x1 - x0, plotW),
+    [card.windows, x0, x1, plotW],
+  );
 
   function hitAt(px: number, py: number): Hit | null {
     if (px < ML - 4 || px > ML + plotW + 4) return null;
@@ -300,47 +307,28 @@ export function ProfilePlot({
       ctx.fill();
     });
 
-    // Windows: a cell at each middle; one telling its checks apart (the image's, the curve's), in
-    // as many bands, top down, a hairline between them.
+    // Windows: a cell at each middle, as the rails draw theirs (lineDraw's drawCell); one telling
+    // its checks apart (the image's, the curve's), a band each; the one under the pointer
+    // stronger and taller, the selected one stronger and edged.
     const cellOf = new Map(windowCells.map((cell) => [cell.key, cell]));
     for (const window of card.windows) {
-      const x = X(window.xmid);
-      let colours = [palette.faint];
+      let tones: CellTone[] = ["none"];
       if (mode === "windows") {
         const cell = cellOf.get(window.key);
-        colours = !cell
-          ? [palette.faint]
-          : cell.parts?.length
-            ? cell.parts.map(palette.part)
-            : [palette.status[cell.status]];
+        tones = !cell ? ["none"] : cell.parts?.length ? cell.parts : [cell.status];
       } else if (stacked.has(window.key)) {
-        colours = [palette.series];
+        tones = ["series"];
       }
-      const band = WINDOW_H / colours.length;
-      colours.forEach((colour, i) => {
-        ctx.fillStyle = colour;
-        ctx.fillRect(x - cellW / 2, WINDOW_Y + i * band, cellW, band - (i < colours.length - 1 ? 1 : 0));
-      });
-    }
-    if (hovered && hovered !== selectedWindow) {
-      const x = X(hovered.xmid);
-      ctx.strokeStyle = palette.selectedEdge;
-      ctx.globalAlpha = 0.45;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x - cellW / 2 - 2, WINDOW_Y - 2, cellW + 4, WINDOW_H + 4);
-      ctx.globalAlpha = 1;
+      const chosen = mode === "windows" && window === selectedWindow;
+      const strength = chosen ? "active" : window === hovered ? "hover" : "rest";
+      drawCell(ctx, theme, X(window.xmid), cellW, tones, strength, chosen);
     }
 
-    // The selected cell, outlined, with a guide down to the axis.
+    // The selected cell's guide down to the axis.
     const selectedX =
       mode === "windows" ? selectedWindow?.xmid : shots.find((shot) => shot.name === selected)?.x;
     if (selectedX !== undefined) {
       const x = X(selectedX);
-      if (mode === "windows") {
-        ctx.strokeStyle = palette.selectedEdge;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x - cellW / 2 - 2, WINDOW_Y - 2, cellW + 4, WINDOW_H + 4);
-      }
       ctx.strokeStyle = palette.selectedEdge;
       ctx.globalAlpha = 0.55;
       ctx.lineWidth = 1;
@@ -372,8 +360,8 @@ export function ProfilePlot({
 
     drawLineAxis(ctx, [x0, x1], plotW, axes, axisTop);
   }, [
-    width, height, plotW, bottom, axisTop, x0, x1, axes, palette, shots, card, mode, selected, sources, shotUse,
-    recordCells, windowCells, selectedWindow, stacked, cellW, hit,
+    width, height, plotW, bottom, axisTop, x0, x1, axes, palette, theme, shots, card, mode, selected, sources,
+    shotUse, recordCells, windowCells, selectedWindow, stacked, cellW, hit,
   ]);
 
   function logical(e: React.MouseEvent<HTMLCanvasElement>) {

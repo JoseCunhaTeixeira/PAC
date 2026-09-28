@@ -1062,12 +1062,13 @@ details.fold > summary:hover {
   color: var(--text-muted);
 }
 
+/* A window, as the rails' legends' swatches: their size, the series' blue at their mix. */
 .geometry-legend i.window {
   display: inline-block;
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   border-radius: 3px;
-  background: rgba(42, 120, 214, 0.35);
+  background: rgba(42, 120, 214, 0.5);
 }
 
 [data-theme="dark"] .geometry-legend i.shot {
@@ -1075,7 +1076,7 @@ details.fold > summary:hover {
 }
 
 [data-theme="dark"] .geometry-legend i.window {
-  background: rgba(79, 156, 245, 0.4);
+  background: rgba(79, 156, 245, 0.5);
 }
 
 /* The run bar's states (RunPanel.tsx). */
