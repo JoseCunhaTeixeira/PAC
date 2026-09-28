@@ -48,6 +48,8 @@ class VelocitySectionOut(BaseModel):
     vs_grid: list[list[float | None]]
     vs_std_grid: list[list[float | None]]
     windows: list[SectionWindowOut]
+    # Per column: the elevation down to which the data inform it (None: not known).
+    informed_levels: list[float | None]
 
 
 class PositionCurvesOut(BaseModel):
@@ -122,6 +124,7 @@ def get_velocity_section(
             SectionWindowOut(x=one.x, top=one.top, depth=one.depth, informed=one.informed)
             for one in section.windows
         ],
+        informed_levels=nan_to_none(section.levels[None, :], 3)[0],
     )
 
 

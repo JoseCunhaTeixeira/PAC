@@ -37,10 +37,12 @@ export interface InformedWindow {
   informed: number | null;
 }
 
-/** The elevation down to which `one`'s data inform its model, its bottom's at most (the section
- * draws its half-space deeper); null when not measured: nothing veiled. */
-function informedElevation(one: InformedWindow): number | null {
-  return one.informed === null ? null : one.top - Math.min(one.informed, one.depth);
+/** The depth the data inform, over a section: `levels`, per column of its grid, the elevation
+ * down to which they do (smoothed across positions as the section is; null: not known), and
+ * `windows`, what each window's own measures say, for the hover. */
+export interface InformedOverlay {
+  levels: (number | null)[];
+  windows: InformedWindow[];
 }
 
 /** What the hover says of `one`'s depth informed; null: nothing measured. */
@@ -51,23 +53,17 @@ function informedText(one: InformedWindow): string | null {
   return one.informed > 0 ? `informed to ${metres(one.informed)}` : "not informed";
 }
 
-/** Below each window's depth informed, its column veiled down to the section's `bottom`; a
- * dashed line at that depth, one level a column, joined from column to column. */
+/** Below each column's level, the column veiled down to the section's `bottom`; a thin dashed
+ * line at that level, joined from column to column (`edges`, the grid's columns). */
 function drawInformed(
   ctx: CanvasRenderingContext2D,
-  windows: InformedWindow[],
+  levels: (number | null)[],
+  edges: number[],
   xOf: (x: number) => number,
   yOf: (z: number) => number,
   bottom: number,
   colours: { veil: string; informed: string },
 ) {
-  const n = windows.length;
-  if (!n) return;
-  // Each column from the middles between windows, the first and last from their own: as the
-  // section's columns.
-  const edges = windows.map((one, i) => (i === 0 ? one.x : (windows[i - 1].x + one.x) / 2));
-  edges.push(windows[n - 1].x);
-  const levels = windows.map(informedElevation);
   ctx.fillStyle = colours.veil;
   levels.forEach((level, i) => {
     if (level === null) return;
@@ -90,13 +86,13 @@ function drawInformed(
     drawing = true;
   });
   ctx.lineJoin = "round";
-  // A halo in the veil's colour, then the line: seen over any colour of the section.
+  // A faint halo in the veil's colour, then the line: seen over any colour of the section.
   ctx.strokeStyle = colours.veil;
-  ctx.lineWidth = 3.5;
+  ctx.lineWidth = 2.2;
   ctx.stroke();
-  ctx.setLineDash([6, 4]);
+  ctx.setLineDash([5, 4]);
   ctx.strokeStyle = colours.informed;
-  ctx.lineWidth = 1.6;
+  ctx.lineWidth = 1;
   ctx.stroke();
   ctx.setLineDash([]);
 }
@@ -137,8 +133,8 @@ export function VelocitySectionCanvas({
   // (not a zoom's drag) selects: its position.
   marker?: number;
   onPick?: (position: number) => void;
-  // Each window's depth its data inform, by position: below it, the section veiled.
-  informed?: InformedWindow[];
+  // The depth the data inform: below it, the section veiled.
+  informed?: InformedOverlay;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
@@ -186,8 +182,9 @@ export function VelocitySectionCanvas({
     const posIdx = nearestIndex(positions, position);
     const zIdx = nearestIndex(elevations, elevation);
     const value = values[posIdx]?.[zIdx] ?? null;
-    const column = informed?.length
-      ? informed[nearestIndex(informed.map((one) => one.x), position)]
+    const windows = informed?.windows ?? [];
+    const column = windows.length
+      ? windows[nearestIndex(windows.map((one) => one.x), position)]
       : undefined;
     const said = column ? informedText(column) : null;
 
@@ -291,7 +288,10 @@ export function VelocitySectionCanvas({
       ctx.drawImage(off, 0, k0, 1, k1 - k0, xLeft, yTop, Math.max(1, xRight - xLeft), yBottom - yTop);
     }
     ctx.imageSmoothingEnabled = true;
-    if (informed) drawInformed(ctx, informed, xOf, yOf, zMin, palette);
+    // (A backend from before the levels sends none: nothing drawn.)
+    if (informed?.levels?.length === np) {
+      drawInformed(ctx, informed.levels, cellEdges, xOf, yOf, zMin, palette);
+    }
     ctx.restore();
     if (marker !== undefined && marker >= x0 && marker <= x1) drawMarker(ctx, xOf(marker), MT, MT + PLOT_H);
 

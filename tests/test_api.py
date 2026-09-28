@@ -198,8 +198,11 @@ def test_an_inversion_gives_a_section(run: str) -> None:
     assert [one["x"] for one in section["windows"]] == [2.5, 5.5]
     assert all(0 <= one["informed"] <= one["depth"] for one in section["windows"])
     assert (output_folder(run) / "xmid_2.50" / "SeismicInversion_Measures_0000.json").exists()
+    assert len(section["informed_levels"]) == len(section["positions"])
     smoothed = client.get(f"/inversion/velocity_section/{run}", params={"lateral_smoothing": True})
     assert smoothed.status_code == 200
+    # Smoothed as the section: a level per column of its finer grid.
+    assert len(smoothed.json()["informed_levels"]) == len(smoothed.json()["positions"]) > 2
     curves = client.get(f"/inversion/curves/{run}/M0").json()
     assert [one["predicted_fs"] is not None for one in curves] == [True, True, False]
     comparison = client.get(f"/inversion/pseudo_section_comparison/{run}/M0").json()
