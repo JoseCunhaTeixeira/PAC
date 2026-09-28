@@ -8,7 +8,7 @@ from masw.io import dispersion_images as io
 from masw.io.folders import get_output_folders, get_xmid_folders
 from masw.io.pick_origin import Origin
 from sigpipe.algorithms.picking.dispersion.curve import (
-    max_resolvable_wavelength,
+    longest_reached_wavelength,
     min_resolvable_wavelength,
 )
 from sigpipe.base.dispersion_image import DispersionImage
@@ -106,9 +106,9 @@ def _to_image_out(image: DispersionImage) -> DispersionImageOut:
         else []
     )
 
-    # The array's resolution limits: below lambda_min (twice the smallest spacing) picks are
-    # spatially aliased, above lambda_max (the array's length) they aren't resolvable. Both along
-    # the ground, and undefined for an unknown geometry.
+    # Where the checks' flags start (the user, 2026-09-28): under lambda_min (twice the smallest
+    # spacing) the aliasing zone, over lambda_max (three window lengths) beyond the window's
+    # reach. Both along the ground, and undefined for an unknown geometry.
     # The map normalized (0 to 1): four decimals finer than any colour step.
     return DispersionImageOut(
         fv_map=[rounded(row, 4) for row in image.fv_map],
@@ -117,7 +117,7 @@ def _to_image_out(image: DispersionImage) -> DispersionImageOut:
         type=image.type,
         curves=curves,
         lambda_min=min_resolvable_wavelength(image.acquisition),
-        lambda_max=max_resolvable_wavelength(image.acquisition),
+        lambda_max=longest_reached_wavelength(image.acquisition),
     )
 
 

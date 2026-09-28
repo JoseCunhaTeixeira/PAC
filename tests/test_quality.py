@@ -12,11 +12,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
 from masw.api.main import app
 from masw.io.paths import OUTPUT_DIR
+from masw.io.quality.dispersion import CurveThresholds, curve_metrics
+from sigpipe.base import Coordinate, DispersionCurve, LinearAcquisition, Mode, VelocityType
 from sigpipe.masw.inversion.measuring import USEFUL_REFERENCE, InversionMeasures
 
 client = TestClient(app)
@@ -856,3 +859,23 @@ def test_a_receiver_the_line_left_out_is_the_windows_and_near_shots_the_near_fie
     record = client.get(f"/quality/records/card/{folder}/1.mseed").json()
     assert any(text.startswith("The receiver at 3 m") for text in _texts(record))
     assert not any(text.startswith("Its trace at 3 m") for text in _texts(record))
+
+
+def test_a_curves_points_past_the_images_lines_are_measured() -> None:
+    # Under λmin (two spacings, 2 m) the aliasing zone, over λmax (three window lengths, 15 m)
+    # beyond the window's reach: where G3's flags start, measured on a curve no check judged. A
+    # point on each, a hair past it in float32, is within it.
+    receivers = tuple(Coordinate(2.0 + k, 0.0, 0.0) for k in range(6))
+    curve = DispersionCurve(
+        # 200 m, 15.0000004 m, 12 m, 3.2 m, 1.9999998 m, 1.5 m
+        fs=np.array([1.0, 6.666666507720947, 10, 50, 75.00000762939453, 100], dtype=np.float32),
+        vs=np.array([200.0, 100, 120, 160, 150, 150], dtype=np.float32),
+        mode=Mode("M", 0),
+        acquisition=LinearAcquisition(source=Coordinate(0.0, 0.0, 0.0), receivers=receivers),
+        type=VelocityType.PHASE,
+    )
+
+    metrics = {one.name: one for one in curve_metrics(curve, CurveThresholds(), 2.0, 15.0)}
+
+    for name in ("aliased_points", "beyond_reach_points"):
+        assert metrics[name].value == 0.167 and not metrics[name].passed
