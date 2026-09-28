@@ -205,6 +205,61 @@ def test_an_inversion_gives_a_section(run: str) -> None:
     assert len(comparison["observed_by_wavelength_grid"][0]) == len(lambdas)
 
 
+def test_a_window_done_again_by_hand_keeps_nothing_older(run: str) -> None:
+    # After the inversion above: 2.5 and 5.5 inverted with M0. 2.5 as the assistant leaves a
+    # window it retried: an attempt archived, its lines in the QC log, a file of its own.
+    run_folder = output_folder(run)
+    window = run_folder / "xmid_2.50"
+    archive = window / "attempts" / "1_inversion"
+    archive.mkdir(parents=True)
+    (archive / "SeismicInversion_Samples_0000.npz").write_text("its first models")
+    (window / "SeismicInversion_Model_0000_old.csv").write_text("an older run's model")
+    line = {"parameters": {}, "started_at": "2026-09-26T18:40:12Z", "status": "succeeded"}
+    lines = [
+        {"unit": "xmid_2.50", "stage": "inversion", "attempt": 1, "triggered_by": "initial"},
+        {"unit": "xmid_2.50", "stage": "inversion", "attempt": 2, "triggered_by": "G5:steps"},
+        {"unit": "xmid_5.50", "stage": "inversion", "attempt": 1, "triggered_by": "initial"},
+    ]
+    log = run_folder / "qc_log.jsonl"
+    log.write_text("".join(json.dumps(line | one) + "\n" for one in lines))
+    config = {
+        "folder": run,
+        "positions": [2.5],
+        "labels": ["M0"],
+        "parameters": {"n_iterations": 1_000, "n_burnin_iterations": 100, "n_chains": 2},
+        "n_workers": 1,
+    }
+
+    assert _wait(client.post("/inversion/run", json=config).json())["state"] == "succeeded"
+
+    # Inverted again by hand: the window's earlier attempts gone, its lines in the log with them
+    # (5.5's kept), no older file beside the new ones; its card, by hand.
+    assert not (window / "attempts").exists()
+    assert not (window / "SeismicInversion_Model_0000_old.csv").exists()
+    assert (window / "SeismicInversion_Samples_0000.npz").exists()
+    assert [json.loads(one)["unit"] for one in log.read_text().splitlines()] == ["xmid_5.50"]
+    card = client.get(f"/quality/inversion/card/{run}/2.5").json()
+    assert card["attempts"] == [] and any(
+        one["text"].startswith("Inverted by hand") for one in card["sentences"]
+    )
+    section = run_folder / "SeismicInversion_VelocitySection_0000.png"
+    assert section.exists()
+
+    # Another mode picked, then deleted: the inversion, of M0, kept.
+    box = {"fmin": 10, "fmax": 60, "vmin": 300, "vmax": 800, "label": "M1"}
+    assert client.post(f"/dispersion_images/{run}/2.5/pick/box", json=box).status_code == 200
+    assert client.delete(f"/dispersion_images/{run}/2.5/pick/M1").status_code == 200
+    assert (window / "SeismicInversion_Samples_0000.npz").exists()
+    # M0 picked again: the inversion made of the old curve erased, the line's section with it.
+    box.update({"vmin": 100, "vmax": 400, "label": "M0"})
+    assert client.post(f"/dispersion_images/{run}/2.5/pick/box", json=box).status_code == 200
+    assert not any(window.glob("SeismicInversion_*")) and not section.exists()
+    assert (window / "DispersionCurves_0000.csv").exists()
+    status = client.get(f"/inversion/status/{run}").json()
+    assert [one["has_result"] for one in status] == [False, True, False]
+    log.unlink()
+
+
 def test_a_petrophysical_inversion_gives_its_sections(run: str) -> None:
     box = {"fmin": 10, "fmax": 60, "vmin": 100, "vmax": 400, "label": "M0"}
     for xmid in (2.5, 5.5):

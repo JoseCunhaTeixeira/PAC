@@ -13,6 +13,8 @@ export interface RailCell {
   xmid: number;
   tone: RailTone;
   title: string;
+  /** Its checks said apart, top down (a window's image, its curve): a band each. */
+  parts?: RailTone[];
 }
 
 /** What the rail's colours mean: groups of swatches, a titled group outlined ("Automatic":
@@ -85,7 +87,7 @@ export function PositionRail({
             disabled={cell.tone === "off"}
             data-tip={cell.title}
             data-tip-place="above"
-            className={`rail-cell ${cell.tone}${isActive(cell.xmid) ? " active" : ""}`}
+            className={`rail-cell ${cell.parts ? "split" : cell.tone}${isActive(cell.xmid) ? " active" : ""}`}
             onClick={onPaint ? undefined : () => onClick?.(cell.xmid)}
             onMouseDown={
               onPaint
@@ -104,7 +106,9 @@ export function PositionRail({
                   }
                 : undefined
             }
-          />
+          >
+            {cell.parts?.map((part, i) => <i key={i} className={part} />)}
+          </button>
         ))}
       </div>
       <div className="rail-axis">

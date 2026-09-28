@@ -38,6 +38,29 @@ class Setting(BaseModel):
     origin: Origin
 
 
+# A check said apart from the others of its unit (the dispersion's: its image's, its curve's):
+# its state, or "hand" (made by hand: the user's, which no check judges).
+type PartState = Literal["pass", "warn", "fail", "none", "hand"]
+
+
+class Part(BaseModel):
+    """One of a unit's checks said apart: what it checks, and its state."""
+
+    model_config = ConfigDict(frozen=True)
+
+    label: str  # "image", "curve"
+    state: PartState
+
+
+class PartLegend(BaseModel):
+    """What one of the cells' parts says: what it checks, and each of its states present."""
+
+    model_config = ConfigDict(frozen=True)
+
+    title: str
+    legend: dict[PartState, str]
+
+
 class Cell(BaseModel):
     """One unit on the strip: a window at its middle, or a record at its shot."""
 
@@ -49,6 +72,8 @@ class Cell(BaseModel):
     hover: tuple[str, ...]  # a few key numbers, in words
     value: float | None = None  # the stage's telling measure
     total: float | None = None  # what the measure is read against (the model's depth)
+    # Its checks said apart, top down, in the order of the overview's parts; none: `status`.
+    parts: tuple[PartState, ...] = ()
 
 
 class Track(BaseModel):
@@ -72,6 +97,7 @@ class Overview(BaseModel):
     summary: str
     legend: dict[Status, str]  # what each color says here
     cells: tuple[Cell, ...]
+    parts: tuple[PartLegend, ...] = ()  # the cells' parts, when they say their checks apart
     track: Track | None = None
     settings: tuple[Setting, ...] = ()  # what the stage ran with, and why
 
@@ -112,6 +138,7 @@ class Card(BaseModel):
     verdict: Sentence | None = None  # what the assistant's checks concluded; None: none judged
     sentences: tuple[Sentence, ...]
     gates: tuple[GateView, ...] = ()
+    parts: tuple[Part, ...] = ()  # its checks said apart, as its cell's parts: for its badges
 
 
 def worst(*statuses: Status) -> Status:

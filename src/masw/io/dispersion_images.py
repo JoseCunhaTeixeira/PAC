@@ -3,6 +3,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from masw.io.folders import get_xmid_folders
+from masw.io.history import curve_changed
 from masw.io.paths import output_folder
 from masw.io.pick_origin import Origin, mark_edited, pick_origin
 from masw.io.quality.log import read_log
@@ -34,9 +35,10 @@ def pick_lasso(
     label: str,
 ) -> DispersionImage:
     image = load_dispersion_image(folder, xmid)
-    updated = lasso(image, polygon, Mode.from_label(label))
+    mode = Mode.from_label(label)
+    updated = lasso(image, polygon, mode)
     save_curves(xmid_folder(folder, xmid), image, updated.dispersion_curves)
-    mark_edited(xmid_folder(folder, xmid))
+    _edited(xmid_folder(folder, xmid), mode)
     return updated
 
 
@@ -67,15 +69,23 @@ def pick_box(
         resample_over_wavelength=True,
     )
     save_curves(xmid_folder(folder, xmid), image, updated.dispersion_curves)
-    mark_edited(xmid_folder(folder, xmid))
+    _edited(xmid_folder(folder, xmid), mode)
     return updated
 
 
 def delete_curve(folder: str, xmid: float, label: str) -> DispersionImage:
     image = load_dispersion_image(folder, xmid)
-    remaining = remove_pick(xmid_folder(folder, xmid), image, Mode.from_label(label))
-    mark_edited(xmid_folder(folder, xmid))
+    mode = Mode.from_label(label)
+    remaining = remove_pick(xmid_folder(folder, xmid), image, mode)
+    _edited(xmid_folder(folder, xmid), mode)
     return replace(image, dispersion_curves=remaining)
+
+
+def _edited(window: Path, mode: Mode) -> None:
+    """`window`'s curve of `mode` changed by hand: said so, and nothing older left of it (see
+    masw.io.history)."""
+    mark_edited(window)
+    curve_changed(window, mode)
 
 
 def list_labels(folder: str) -> dict[str, int]:

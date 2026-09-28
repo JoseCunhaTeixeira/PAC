@@ -8,6 +8,7 @@ from typing import cast
 
 from masw.io.dispersion_images import xmid_folder
 from masw.io.folders import get_xmid_folders
+from masw.io.history import redone
 from masw.io.paths import output_folder
 from masw.models.petro_inversion import PetroInversionRunConfig
 from masw.runners.computing import WindowError
@@ -56,6 +57,8 @@ def run_petro_inversion(
             errors[outcome.unit] = error
             logger.error("Petro inversion failed for xmid=%.2f: %s", error.xmid, error.message)
         else:
+            # In place (sigpipe replaced all its old results): its earlier attempts forgotten.
+            redone(out_dir / outcome.unit, "petro_inversion")
             logger.info("Finished xmid=%.2f", xmids[outcome.unit])
         if on_progress is not None:
             on_progress(done, total, error)

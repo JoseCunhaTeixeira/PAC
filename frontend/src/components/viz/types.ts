@@ -103,6 +103,10 @@ export interface WindowSources {
   sentences: Sentence[];
 }
 
+/** A check said apart from the others of its unit (a window's image, its curve): its state, or
+ * by hand (the user's, which no check judges). */
+export type PartState = Status | "hand";
+
 export interface Cell {
   key: string;
   x: number | null;
@@ -110,6 +114,14 @@ export interface Cell {
   hover: string[];
   value: number | null;
   total: number | null;
+  /** Its checks said apart, top down, in the order of the overview's parts; none: `status`. */
+  parts?: PartState[];
+}
+
+/** What one of the cells' parts says: what it checks, and each of its states present. */
+export interface PartLegend {
+  title: string;
+  legend: Partial<Record<PartState, string>>;
 }
 
 export interface Track {
@@ -127,6 +139,8 @@ export interface Overview {
   cells: Cell[];
   track: Track | null;
   settings: Setting[];
+  /** The cells' parts, when they say their checks apart. */
+  parts?: PartLegend[];
 }
 
 export interface Metric {
@@ -167,6 +181,8 @@ export interface Card {
   sentences: Sentence[];
   gates: GateView[];
   attempts: AttemptSummary[];
+  /** Its checks said apart, as its cell's parts: for its badges. */
+  parts?: { label: string; state: PartState }[];
 }
 
 export interface RecordCard extends Card {

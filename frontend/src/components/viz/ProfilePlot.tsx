@@ -300,19 +300,27 @@ export function ProfilePlot({
       ctx.fill();
     });
 
-    // Windows: a cell at each middle.
+    // Windows: a cell at each middle; one telling its checks apart (the image's, the curve's), in
+    // as many bands, top down, a hairline between them.
     const cellOf = new Map(windowCells.map((cell) => [cell.key, cell]));
     for (const window of card.windows) {
       const x = X(window.xmid);
-      let colour = palette.faint;
+      let colours = [palette.faint];
       if (mode === "windows") {
         const cell = cellOf.get(window.key);
-        colour = cell ? palette.status[cell.status] : palette.faint;
+        colours = !cell
+          ? [palette.faint]
+          : cell.parts?.length
+            ? cell.parts.map(palette.part)
+            : [palette.status[cell.status]];
       } else if (stacked.has(window.key)) {
-        colour = palette.series;
+        colours = [palette.series];
       }
-      ctx.fillStyle = colour;
-      ctx.fillRect(x - cellW / 2, WINDOW_Y, cellW, WINDOW_H);
+      const band = WINDOW_H / colours.length;
+      colours.forEach((colour, i) => {
+        ctx.fillStyle = colour;
+        ctx.fillRect(x - cellW / 2, WINDOW_Y + i * band, cellW, band - (i < colours.length - 1 ? 1 : 0));
+      });
     }
     if (hovered && hovered !== selectedWindow) {
       const x = X(hovered.xmid);

@@ -3,7 +3,7 @@ import { ArrowLeftIcon, ArrowRightIcon, DepthIcon, FlaskIcon, ImageIcon, PulseIc
 import { neighbours } from "./cells";
 import { STATE_MEANINGS } from "./format";
 import type { Card, Cell, Overview, Sentence, StageKey } from "./types";
-import { Empty, ErrorBox, Fold, GateBadge, Sentences, SettingsList, Skeleton, StatusBadge } from "./ui";
+import { Empty, ErrorBox, Fold, GateBadge, PartBadge, Sentences, SettingsList, Skeleton, StatusBadge } from "./ui";
 
 // What every stage's panel is made of: its summary and the settings it ran with, and the
 // selected unit's card, with its neighbours a click away. A card says its verdict and its
@@ -102,9 +102,12 @@ export function UnitCard({
       <div className="viz-unit-head">
         {stage && <span className="card-icon">{STAGE_ICONS[stage]}</span>}
         <strong>{card.title}</strong>
-        {card.status !== "none" && (
-          <StatusBadge status={card.status} meaning={stage ? STATE_MEANINGS[stage][card.status].full : undefined} />
-        )}
+        {card.parts?.length
+          ? // Its checks said apart (a window's image, its curve): a badge each.
+            card.parts.map((part) => <PartBadge key={part.label} part={part} />)
+          : card.status !== "none" && (
+              <StatusBadge status={card.status} meaning={stage ? STATE_MEANINGS[stage][card.status].full : undefined} />
+            )}
         {gates.length > 0 && (
           <span className="viz-gate-list">
             {gates.map((gate) => (

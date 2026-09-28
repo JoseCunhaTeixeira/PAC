@@ -36,6 +36,22 @@ import { judged, useStageStates, xmidKey } from "./components/railStates";
 import { num } from "./components/viz/format";
 
 const LABEL_PATTERN = /^[A-Z]{1,3}[0-9]+$/;
+// The rail's parts' states in words, in the legend's order: a window's image's (G2), its
+// curve's (G3, G4; or by hand).
+const IMAGE_TONES: [RailTone, string][] = [
+  ["pass", "passed"],
+  ["warn", "flagged"],
+  ["fail", "rejected"],
+  ["none", "not checked"],
+];
+const CURVE_TONES: [RailTone, string][] = [
+  ["pass", "passed"],
+  ["warn", "flagged"],
+  ["fail", "rejected"],
+  ["auto", "not checked"],
+  ["hand", "by hand"],
+  ["none", "not picked"],
+];
 const LABEL_PARTS = /^([A-Z]{1,3})([0-9]+)$/;
 
 function sanitizeLabel(raw: string): string {
@@ -315,20 +331,24 @@ export default function DispersionPickingPage() {
   }, [xmids, xmid, setXmid]);
 
   const picked = positionPicks.filter((position) => position.labels.length > 0);
-  // An automatic pick by its checks' verdict, a window the picker rejected without a curve as
-  // rejected, a pick by hand as the user's; the hover as Visualization's.
+  // Each window's curve, as its picks are now: by hand the user's, an automatic one by its
+  // checks' verdict, none without a curve; and, the assistant having checked the images, its
+  // image apart, above (as Visualization's line); the hover as Visualization's.
   const cells: RailCell[] = positionPicks.map((position) => {
     const state = states.get(xmidKey(position.xmid));
     const verdict = judged(state);
     const hasCurve = position.labels.length > 0;
     const hand = hasCurve && position.picked_by === "hand";
-    const tone: RailTone = hand
-      ? "hand"
-      : hasCurve
-        ? (verdict ?? "auto")
-        : verdict === "fail"
-          ? "fail"
-          : "none";
+    const checked = state?.parts?.at(-1);
+    const curve: RailTone = !hasCurve
+      ? "none"
+      : hand
+        ? "hand"
+        : checked === "pass" || checked === "warn" || checked === "fail"
+          ? checked
+          : "auto";
+    const image = state?.parts && state.parts.length > 1 ? state.parts[0] : undefined;
+    const tone: RailTone = image === undefined ? curve : hand ? "hand" : (verdict ?? curve);
     const lines = state
       ? [...state.hover]
       : [
@@ -341,8 +361,22 @@ export default function DispersionPickingPage() {
         ];
     if (hasCurve && (hand || position.labels.length > 1))
       lines.splice(1, 0, position.labels.join(", "));
-    return { xmid: position.xmid, tone, title: lines.join("\n") };
+    return {
+      xmid: position.xmid,
+      tone,
+      title: lines.join("\n"),
+      parts: image === undefined ? undefined : [image === "hand" ? "none" : image, curve],
+    };
   });
+  // What the rail's colours say, each part's states present: the image's, the curve's.
+  const imageTones = new Set(cells.flatMap((cell) => (cell.parts ? [cell.parts[0]] : [])));
+  const curveTones = new Set(cells.map((cell) => (cell.parts ? cell.parts[1] : cell.tone)));
+  const legend = [
+    ...(imageTones.size
+      ? [{ title: "Image", items: IMAGE_TONES.filter(([tone]) => imageTones.has(tone)) }]
+      : []),
+    { title: "Curve", items: CURVE_TONES.filter(([tone]) => curveTones.has(tone)) },
+  ];
   const index = xmid === null ? -1 : xmids.indexOf(xmid);
   const chooseRun = useCallback(
     (next: string) => {
@@ -372,24 +406,7 @@ export default function DispersionPickingPage() {
             title="Windows"
             hint="Click one, or ← →."
             aside={
-              <RailLegend
-                groups={[
-                  {
-                    title: "Automatic",
-                    items: [
-                      ["pass", "passed"],
-                      ["warn", "flagged"],
-                      ["fail", "rejected"],
-                    ],
-                  },
-                  {
-                    items: [
-                      ["hand", "By hand"],
-                      ["none", "Not picked"],
-                    ],
-                  },
-                ]}
-              >
+              <RailLegend groups={legend}>
                 <Badge
                   tone={
                     picked.length === positionPicks.length ? "ok" : "neutral"

@@ -1,5 +1,5 @@
 import type { Theme } from "../../theme";
-import type { Status, Use } from "./types";
+import type { PartState, Status, Use } from "./types";
 
 // Visualization's canvas colours, which cannot take CSS variables: the states (pass green,
 // warn amber, fail red, none grey, as the page's badges), one series (blue) for values and the
@@ -14,8 +14,13 @@ export function vizPalette(theme: Theme) {
     none: dark ? "#4a4d55" : "#d5d6da",
   };
   const series = dark ? "#4f9cf5" : "#2a78d6";
+  // By hand: the app's indigo (index.css's --accent), as the rails and badges say it.
+  const hand = dark ? "#6671ec" : "#4f5bd5";
   return {
     status,
+    hand,
+    /** A cell's part, by its state. */
+    part: (state: PartState) => (state === "hand" ? hand : status[state]),
     series,
     seriesSoft: dark ? "rgba(79, 156, 245, 0.28)" : "rgba(42, 120, 214, 0.18)",
     // How a window uses a shot: stacked, stacked with some traces left out, or left out (why).

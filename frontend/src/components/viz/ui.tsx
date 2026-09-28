@@ -10,7 +10,17 @@ import {
   STATUS_LABELS,
   triggerLabel,
 } from "./format";
-import type { AttemptSummary, GateView, Mark, Metric, Sentence, Setting, Status, Verdict } from "./types";
+import type {
+  AttemptSummary,
+  GateView,
+  Mark,
+  Metric,
+  PartState,
+  Sentence,
+  Setting,
+  Status,
+  Verdict,
+} from "./types";
 import "./viz.css";
 
 // The pieces every panel of Visualization says things with: a state's badge, a card's
@@ -52,6 +62,32 @@ export function StatusBadge({ status, label, meaning }: { status: Status; label?
   );
 }
 
+// A part's state in words, and what each part checks (its badge's hover).
+const PART_WORDS: Record<PartState, string> = {
+  pass: "passed",
+  warn: "flagged",
+  fail: "rejected",
+  hand: "by hand",
+  none: "not checked",
+};
+const PART_GATES: Record<string, string> = {
+  image: "G2: the dispersion image's check",
+  curve: "G3 and G4: the curve's checks, alone and along the line",
+};
+
+/** One of a unit's checks said apart (a window's image, its curve): what it checks, its state,
+ * in its colour (indigo by hand). */
+export function PartBadge({ part }: { part: { label: string; state: PartState } }) {
+  const said =
+    part.state === "none" && part.label === "curve" ? "no curve" : `${part.label} ${PART_WORDS[part.state]}`;
+  const why = part.state === "hand" ? "The user's curve, passed as it is" : (PART_GATES[part.label] ?? "");
+  return (
+    <span className={`viz-badge ${part.state}`} data-tip={`${capitalized(said)}\n${why}`}>
+      {said}
+    </span>
+  );
+}
+
 /** A gate's verdict, or for a run PAC made, that it measured without judging. */
 export function GateBadge({ gate }: { gate: GateView }) {
   const name = GATE_NAMES[gate.gate] ?? gate.gate;
@@ -59,7 +95,7 @@ export function GateBadge({ gate }: { gate: GateView }) {
     const passed = gate.verdict === "pass";
     return (
       <span
-        className={`viz-badge ${passed ? "pass" : "none"}`}
+        className={`viz-badge ${passed ? "hand" : "none"}`}
         data-tip={`${gate.gate}: ${name}\n${passed ? "Picked by hand: passed as it is" : "Not checked: its curve was picked by hand"}`}
       >
         {gate.gate} {passed ? "by hand" : "not checked"}
