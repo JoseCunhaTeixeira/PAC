@@ -26,10 +26,10 @@ function Trials({ trials, kept }: { trials: LengthTrial[]; kept: number | null }
         <thead>
           <tr>
             <th>Length tried</th>
-            <th>Passed</th>
-            <th data-tip={"Picks ±\nThe passed curves' median velocity uncertainty"}>Picks ±</th>
-            <th>Wavelengths</th>
-            <th>Windows</th>
+            <th className="num">Passed</th>
+            <th className="num" data-tip={"Picks ±\nThe passed curves' median velocity uncertainty"}>Picks ±</th>
+            <th className="num">Wavelengths</th>
+            <th className="num">Windows</th>
           </tr>
         </thead>
         <tbody>

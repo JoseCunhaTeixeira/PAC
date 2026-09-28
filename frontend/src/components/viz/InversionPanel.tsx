@@ -81,13 +81,13 @@ function ModelTable({ card }: { card: InversionCard }) {
           <thead>
             <tr>
               <th>Parameter</th>
-              <th>Prior</th>
-              <th data-tip="Median of all chains' models">Result</th>
-              <th data-tip="Where 80 % of the models lie">10–90 %</th>
-              <th>R-hat</th>
-              <th>Effective samples</th>
-              <th>Lag-1 autocorr.</th>
-              <th>Step</th>
+              <th className="num">Prior</th>
+              <th className="num" data-tip="Median of all chains' models">Result</th>
+              <th className="num" data-tip="Where 80 % of the models lie">10–90 %</th>
+              <th className="num">R-hat</th>
+              <th className="num">Effective samples</th>
+              <th className="num">Lag-1 autocorr.</th>
+              <th className="num">Step</th>
             </tr>
           </thead>
           <tbody>
@@ -152,8 +152,8 @@ function MovesTable({ card }: { card: InversionCard }) {
         <thead>
           <tr>
             <th data-tip={"How the chains moved\nMedian of the chains"}>Move</th>
-            <th>Accepted</th>
-            <th data-tip="Relative to the value moved">Step</th>
+            <th className="num">Accepted</th>
+            <th className="num" data-tip="Relative to the value moved">Step</th>
           </tr>
         </thead>
         <tbody>
@@ -191,8 +191,8 @@ function BoundsTable({ card }: { card: InversionCard }) {
         <thead>
           <tr>
             <th data-tip={"Samples at a prior's bound\nThe data would go further"}>At a bound</th>
-            <th>Bound</th>
-            <th>Samples</th>
+            <th className="num">Bound</th>
+            <th className="num">Samples</th>
           </tr>
         </thead>
         <tbody>
@@ -222,13 +222,13 @@ function FitsTable({ card }: { card: InversionCard }) {
         <thead>
           <tr>
             <th data-tip={"Each model's curve against the picks\nIn uncertainties"}>Fit</th>
-            <th>Misfit</th>
+            <th className="num">Misfit</th>
             {bands.map((band, i) => (
-              <th key={i} data-tip={`Wavelengths ${num(band.wavelength_m[0])}–${num(band.wavelength_m[1])} m`}>
+              <th key={i} className="num" data-tip={`Wavelengths ${num(band.wavelength_m[0])}–${num(band.wavelength_m[1])} m`}>
                 {bands.length === 3 ? BAND_LABELS[i] : `Band ${i + 1}`}
               </th>
             ))}
-            <th data-tip="Picks the model has no fundamental mode at">Missing</th>
+            <th className="num" data-tip="Picks the model has no fundamental mode at">Missing</th>
           </tr>
         </thead>
         <tbody>

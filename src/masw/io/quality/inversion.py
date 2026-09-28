@@ -131,6 +131,9 @@ class InversionThresholds(BaseModel):
     max_rhat: float = 1.1
     min_ess: float = 200.0  # of the models' Vs at any depth watched
     min_samples_per_chain: int = 100
+    # %: when the data choose the layers, the chains' median acceptance outside it is a warning
+    # (the user, 2026-09-29); the layers given (DREAM, near 5 % by design) report it only.
+    acceptance_band: tuple[float, float] = (20.0, 30.0)
     bound_edge: float = 0.02  # of a prior's range, at each bound
     max_at_bound: float = 0.1  # share of a parameter's samples within that edge
     useful_std_ratio: float = 0.5
@@ -353,8 +356,24 @@ def model_metrics(
             value=max(correlations) if correlations else None,
             passed=True,
         ),
-        # Reported, not judged since the sampler of 2026-09-27: the chains' median, %.
-        Metric(name="acceptance", value=acceptance, passed=True, unit="%"),
+        # A warning outside its band when the data chose the layers (the user, 2026-09-29): one
+        # row of two; reported for the layers given.
+        *(
+            (
+                Metric(
+                    name="acceptance",
+                    value=acceptance,
+                    threshold=limit,
+                    bound=bound,
+                    passed=acceptance is None
+                    or (acceptance >= limit if bound == "min" else acceptance <= limit),
+                    unit="%",
+                )
+                for limit, bound in zip(thresholds.acceptance_band, ("min", "max"), strict=True)
+            )
+            if parameters.layering == "free"
+            else (Metric(name="acceptance", value=acceptance, passed=True, unit="%"),)
+        ),
         Metric(
             name="at_bound",
             value=piled.share if piled else None,

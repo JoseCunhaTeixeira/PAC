@@ -340,9 +340,9 @@ def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> N
     assert card["moves"] == {} and card["move_steps"] == {} and card["exchanges"] is None
     (gate,) = card["gates"]
     assert gate["gate"] == "G5" and gate["verdict"] is None
-    # The acceptance among the measures, reported: the chains' median.
-    acceptance = next(metric for metric in gate["metrics"] if metric["name"] == "acceptance")
-    assert acceptance["threshold"] is None and acceptance["unit"] == "%"
+    # The acceptance among the measures, the chains' median: reported, the layers given.
+    acceptance = [metric for metric in gate["metrics"] if metric["name"] == "acceptance"]
+    assert [(one["threshold"], one["unit"]) for one in acceptance] == [(None, "%")]
     profile = card["profile"]
     # The ensemble by default: each depth's median of the kept models; its fit named.
     assert profile["model"] == "ensemble" and profile["tops"][0] == 0
@@ -916,3 +916,7 @@ def test_an_inversion_whose_data_chose_the_layers_shows_how_its_chains_moved(run
     rows = {row["parameter"]: row for row in card["convergence"]}
     assert all(row["step_unit"] == "%" for name, row in rows.items() if name.startswith("vs@"))
     assert rows["noise"]["step_unit"] == "%" and rows["layers"]["step"] is None
+    # The chains' median acceptance: a warning outside 20 to 30 % (their steps aim at 30 %).
+    (gate,) = card["gates"]
+    acceptance = [metric for metric in gate["metrics"] if metric["name"] == "acceptance"]
+    assert [(one["threshold"], one["bound"]) for one in acceptance] == [(20, "min"), (30, "max")]
