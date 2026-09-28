@@ -25,11 +25,13 @@ from sigpipe.base.velocity_model import VelocityModel, VelocityModelsSection
 from sigpipe.masw.inversion import InversionParameters, invert_window
 from sigpipe.masw.inversion.measuring import measure_inversion
 from sigpipe.masw.inversion.section import (
+    DEFAULT_MODEL,
     ComparisonGrids,
     ModelName,
     VelocityGrid,
     comparison_grids,
     informed_levels,
+    interface_grid,
     is_inverted,
     picked_curve,
     predicted_curve,
@@ -81,6 +83,9 @@ class SectionWindow:
     top: float
     depth: float
     informed: float | None
+    # Per INTERFACE_DZ from its ground, the share of its kept models with an interface there
+    # (none when its measures do not say).
+    interfaces: tuple[float, ...] = ()
 
 
 @dataclass(slots=True, frozen=True)
@@ -90,10 +95,12 @@ class VelocitySection:
     # Per column of the grid, the elevation down to which the data inform it (NaN: not known),
     # smoothed across positions as the grid is.
     levels: np.ndarray
+    # On the grid, the share of the kept models with an interface (NaN: not known).
+    interfaces: np.ndarray
 
 
 def get_velocity_section(
-    folder: str, model: ModelName = "smooth_median", lateral_smoothing: bool = False
+    folder: str, model: ModelName = DEFAULT_MODEL, lateral_smoothing: bool = False
 ) -> VelocitySection:
     """The section of the windows' model `model` on a grid, and each window's column: its model
     and the measures its inversion saved, each read once; nothing measured."""
@@ -118,7 +125,13 @@ def get_velocity_section(
         for one in windows
     ]
     levels = informed_levels(grid, informed, lateral_smoothing, window_m)
-    return VelocitySection(grid=grid, windows=windows, levels=levels)
+    shares = [(one.x, one.top, one.interfaces) for one in windows]
+    return VelocitySection(
+        grid=grid,
+        windows=windows,
+        levels=levels,
+        interfaces=interface_grid(grid, shares, lateral_smoothing, window_m),
+    )
 
 
 def window_length(run_folder: Path) -> float | None:
@@ -140,7 +153,11 @@ def _section_window(window: Path, model: VelocityModel) -> SectionWindow:
         # All of it: the model's own depth, the bottom the section draws.
         informed = depth if measures.useful_depth_m is None else known
     return SectionWindow(
-        x=float(model.position.x), top=float(model.position.z), depth=depth, informed=informed
+        x=float(model.position.x),
+        top=float(model.position.z),
+        depth=depth,
+        informed=informed,
+        interfaces=measures.interfaces if measures is not None else (),
     )
 
 
@@ -164,7 +181,7 @@ def measure_position(
 
 
 def save_velocity_section_plot(
-    folder: str, model: ModelName = "smooth_median", lateral_smoothing: bool = False
+    folder: str, model: ModelName = DEFAULT_MODEL, lateral_smoothing: bool = False
 ) -> Path:
     """Save the Vs(x,z) + std(x,z) section plot in the output folder."""
     path = save_section(output_folder(folder), _units(folder), model, lateral_smoothing)
@@ -185,7 +202,7 @@ def save_velocity_xzv(folder: str) -> Path:
 
 
 def save_pseudo_section_comparison_plot(
-    folder: str, label: str, model: ModelName = "smooth_median"
+    folder: str, label: str, model: ModelName = DEFAULT_MODEL
 ) -> Path:
     """Save the observed-vs-predicted pseudo-section comparison for one label in the output
     folder."""
@@ -196,7 +213,7 @@ def save_pseudo_section_comparison_plot(
 
 
 def get_pseudo_section_comparison(
-    folder: str, label: str, model: ModelName = "smooth_median"
+    folder: str, label: str, model: ModelName = DEFAULT_MODEL
 ) -> ComparisonGrids:
     grids = comparison_grids(output_folder(folder), _units(folder), Mode.from_label(label), model)
     if grids is None:
@@ -223,7 +240,7 @@ class PositionCurves:
 
 
 def get_curves_by_position(
-    folder: str, label: str, model: ModelName = "smooth_median"
+    folder: str, label: str, model: ModelName = DEFAULT_MODEL
 ) -> list[PositionCurves]:
     xmids = get_xmid_folders(folder)
     if not xmids:

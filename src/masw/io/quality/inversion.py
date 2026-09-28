@@ -61,7 +61,13 @@ from sigpipe.masw.inversion.measuring import (
     InversionMeasures,
     ModelFit,
 )
-from sigpipe.masw.inversion.section import ModelName, picked_curve, predicted_curve, window_model
+from sigpipe.masw.inversion.section import (
+    DEFAULT_MODEL,
+    ModelName,
+    picked_curve,
+    predicted_curve,
+    window_model,
+)
 from sigpipe.masw.inversion.window import SAMPLES_FILE, load_profiles, load_samples
 from sigpipe.masw.runs import window_folders, xmid_of
 
@@ -77,6 +83,14 @@ PROFILE_POINTS = 400  # the most layers a profile keeps of a smooth model
 # An inversion done this long after the assistant's last attempt on the window was PAC's.
 LATER = timedelta(minutes=1)
 BAND_NAMES = {3: ("short", "middle", "long")}
+# A model's name in a sentence.
+MODEL_WORDS: dict[str, str] = {
+    "ensemble": "The ensemble",
+    "median": "The layered median",
+    "smooth_median": "The smooth median",
+    "best": "The best model",
+    "smooth_best": "The smooth best model",
+}
 # The share of proposals the trial runs aimed at (%), for the runs saved before 2026-09-27.
 TRIAL_BAND = (20.0, 30.0)
 # How the assistant chooses its parameters, as it says it (PACo's inversion rules).
@@ -185,7 +199,9 @@ class InversionCard(Card):
     acceptance: tuple[float, ...]  # %, per chain
     samples_per_chain: int
     convergence: tuple[Convergence, ...]
-    fits: tuple[ModelFit, ...]  # the smooth median's, then the layered median's
+    # The monitored model's (the ensemble's; the smooth median's in measures from before
+    # 2026-09-28), then the layered median's.
+    fits: tuple[ModelFit, ...]
     at_bounds: tuple[BoundShare, ...]  # the most piled first
     profile: VsProfile | None
     curve: FitCurve | None
@@ -275,9 +291,9 @@ def model_metrics(
 ) -> tuple[Metric, ...]:
     """G5's measures of a window's model against G5's limits, as G5 names them: its fit by band,
     how its chains converged, the samples piled at a bound, the depth it is informed down to."""
-    smooth = measures.fits[0]
+    monitored = measures.fits[0]
     names = BAND_NAMES.get(
-        len(smooth.bands), tuple(f"band{i + 1}" for i in range(len(smooth.bands)))
+        len(monitored.bands), tuple(f"band{i + 1}" for i in range(len(monitored.bands)))
     )
     metrics = [
         Metric(
@@ -287,7 +303,7 @@ def model_metrics(
             bound="max",
             passed=band.misfit is not None and band.misfit <= thresholds.max_misfit,
         )
-        for name, band in zip(names, smooth.bands, strict=True)
+        for name, band in zip(names, monitored.bands, strict=True)
     ]
     rhat, ess, _ = _convergence(measures)
     correlations = [
@@ -528,7 +544,7 @@ def inversion_settings(
     )
 
 
-def inversion_card(folder: str, xmid: float, model: ModelName = "smooth_median") -> InversionCard:
+def inversion_card(folder: str, xmid: float, model: ModelName = DEFAULT_MODEL) -> InversionCard:
     run_folder = folder_path(folder)
     unit = f"xmid_{xmid:.2f}"
     window = run_folder / unit
@@ -552,7 +568,7 @@ def inversion_card(folder: str, xmid: float, model: ModelName = "smooth_median")
     verdict = verdict_sentence("model", g5, g6)
     said += _depth_sentences(parameters, measures, thresholds)
     said.append(_model_sentence(measures))
-    said += _fit_sentences(measures, thresholds)
+    said += _fit_sentences(measures, thresholds, model)
     said.append(_convergence_sentence(measures, thresholds))
     said.append(_run_sentence(parameters, ran.tuning, ours))
     if log is not None and ours:
@@ -731,9 +747,12 @@ def _model_sentence(measures: InversionMeasures) -> Sentence:
     )
 
 
-def _fit_sentences(measures: InversionMeasures, thresholds: InversionThresholds) -> list[Sentence]:
-    smooth = measures.fits[0]
-    misfits = [band.misfit for band in smooth.bands]
+def _fit_sentences(
+    measures: InversionMeasures, thresholds: InversionThresholds, model: ModelName
+) -> list[Sentence]:
+    """How `model` fits its curve when measured, else the monitored model, named."""
+    fit = next((one for one in measures.fits if one.model == model), measures.fits[0])
+    misfits = [band.misfit for band in fit.bands]
     said: list[Sentence] = []
     known = [value for value in misfits if value is not None]
     if known:
@@ -744,20 +763,21 @@ def _fit_sentences(measures: InversionMeasures, thresholds: InversionThresholds)
         said.append(
             Sentence(
                 mark="pass" if good else "warn",
-                text=f"{'Fits' if good else 'Misfits'} its curve: misfit {each}{where} (at most "
-                f"{number(thresholds.max_misfit)}, in uncertainties).",
+                text=f"{MODEL_WORDS.get(fit.model, fit.model)} {'fits' if good else 'misfits'} "
+                f"its curve: misfit {each}{where} (at most {number(thresholds.max_misfit)}, in "
+                "uncertainties).",
             )
         )
-    if smooth.n_missing:
+    if fit.n_missing:
         below = (
-            f" below {number(smooth.lowest_missing_hz)} Hz"
-            if smooth.lowest_missing_hz is not None
+            f" below {number(fit.lowest_missing_hz)} Hz"
+            if fit.lowest_missing_hz is not None
             else ""
         )
         said.append(
             Sentence(
                 mark="warn",
-                text=f"The model has no fundamental mode at {plural(smooth.n_missing, 'picked point')}"
+                text=f"The model has no fundamental mode at {plural(fit.n_missing, 'picked point')}"
                 f"{below}.",
             )
         )

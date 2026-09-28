@@ -333,7 +333,11 @@ def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> N
     (gate,) = card["gates"]
     assert gate["gate"] == "G5" and gate["verdict"] is None
     profile = card["profile"]
-    assert profile["model"] == "smooth_median" and profile["tops"][0] == 0
+    # The ensemble by default: each depth's median of the kept models; its fit named.
+    assert profile["model"] == "ensemble" and profile["tops"][0] == 0
+    assert any(
+        text.startswith(("The ensemble fits", "The ensemble misfits")) for text in _texts(card)
+    )
     assert len(profile["tops"]) == len(profile["vs"]) == len(profile["std"]) <= 401
     assert profile["layered_tops"][0] == 0 and len(profile["layered_vs"]) == 2
     assert profile["deepest_top"] == 5.0 and profile["bottom"] > 0

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { API } from "../../api";
 import { canvasPalette, useTheme } from "../../theme";
-import { afmhotR, terrain } from "../colormaps";
+import { afmhotR, purples, terrain } from "../colormaps";
 import { LayersIcon, StrataIcon } from "../icons";
 import { Card, Segmented } from "../kit";
 import { ModeHead } from "../PseudoSectionCanvas";
@@ -27,19 +27,25 @@ import { useJson } from "./useJson";
 
 const at = (folder: string) => encodeURIComponent(folder);
 
+// The interfaces' shares, mostly under a third where the models agree only roughly: coloured by
+// their square root, so that those show too (the colour bar keeps the shares).
+const interfaceColours = (t: number) => purples(Math.sqrt(t));
+
 const MODELS: { value: ModelName; label: string }[] = [
-  { value: "smooth_median", label: "Smooth median" },
+  { value: "ensemble", label: "Median of the ensemble" },
   { value: "median", label: "Median, layered" },
+  { value: "smooth_median", label: "Smooth median" },
   { value: "smooth_best", label: "Smooth best" },
   { value: "best", label: "Best, layered" },
-  { value: "ensemble", label: "Median of the ensemble" },
 ];
 
 interface VelocitySection {
   positions: number[];
   elevations: number[];
   vs_grid: (number | null)[][];
-  vs_std_grid: (number | null)[][];
+  vs_std_grid: (number | null)[][]; // % of Vs
+  // The share of the kept models with an interface, % (null: not known).
+  interface_grid: (number | null)[][];
   // Each window's column, how deep its data inform it as its inversion measured.
   windows: InformedWindow[];
   // Per column: the elevation down to which the data inform it, smoothed as the section.
@@ -162,7 +168,7 @@ export function InversionPanel({
   overviewError: string | null;
   onSelect: (key: string) => void;
 }) {
-  const [model, setModel] = useState<ModelName>("smooth_median");
+  const [model, setModel] = useState<ModelName>("ensemble");
   const [smoothing, setSmoothing] = useState(false);
   // The depth each window's data inform, over the sections.
   const [informed, setInformed] = useState(true);
@@ -307,7 +313,11 @@ export function InversionPanel({
           <Card
             className="viz-section"
             icon={<LayersIcon size={17} />}
-            title="Vs and Vs std sections"
+            title="Vs, Vs std and interface sections"
+            hint={
+              "Of the kept models\nVs: their median at each depth\nVs std: their spread, % of Vs\n" +
+              "Interfaces: the share placing a layer boundary there"
+            }
             aside={
               <div className="viz-toolbar" style={{ margin: 0 }}>
                 <div
@@ -372,7 +382,7 @@ export function InversionPanel({
                   positions={section.data.positions}
                   elevations={section.data.elevations}
                   values={section.data.vs_std_grid}
-                  colorLabel="Vs std (m/s)"
+                  colorLabel="Vs std (%)"
                   colormap={afmhotR}
                   height={200}
                   link={zoomLink}
@@ -380,6 +390,23 @@ export function InversionPanel({
                   onPick={pick}
                   informed={overlay}
                 />
+                {section.data.interface_grid?.some((row) => row.some((value) => value !== null)) ? (
+                  <VelocitySectionCanvas
+                    positions={section.data.positions}
+                    elevations={section.data.elevations}
+                    values={section.data.interface_grid}
+                    colorLabel="Interfaces (%)"
+                    colormap={interfaceColours}
+                    colorRange={{ min: 0 }}
+                    height={200}
+                    link={zoomLink}
+                    marker={xmid ?? undefined}
+                    onPick={pick}
+                    informed={overlay}
+                  />
+                ) : (
+                  <Empty>Interfaces: invert again to see them.</Empty>
+                )}
                 {overlay?.windows.some((one) => one.informed !== null) && (
                   <div className="viz-legend-inline">
                     <span style={{ color: colours.informed }}>
@@ -396,7 +423,7 @@ export function InversionPanel({
             ) : section.error ? (
               <Empty>Needs 2 inverted windows.</Empty>
             ) : (
-              <Skeleton height={420} />
+              <Skeleton height={640} />
             )}
           </Card>
           {modes.length > 0 && (

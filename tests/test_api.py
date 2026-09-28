@@ -199,6 +199,10 @@ def test_an_inversion_gives_a_section(run: str) -> None:
     assert all(0 <= one["informed"] <= one["depth"] for one in section["windows"])
     assert (output_folder(run) / "xmid_2.50" / "SeismicInversion_Measures_0000.json").exists()
     assert len(section["informed_levels"]) == len(section["positions"])
+    # The spread in % of Vs, and where the kept models put interfaces (the job counted them).
+    assert all(0 <= std < 200 for row in section["vs_std_grid"] for std in row if std is not None)
+    shares = [one for row in section["interface_grid"] for one in row if one is not None]
+    assert shares and all(0 <= one <= 100 for one in shares)
     smoothed = client.get(f"/inversion/velocity_section/{run}", params={"lateral_smoothing": True})
     assert smoothed.status_code == 200
     # Smoothed as the section: a level per column of its finer grid.
