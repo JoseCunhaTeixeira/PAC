@@ -43,6 +43,8 @@ export interface InformedWindow {
 export interface InformedOverlay {
   levels: (number | null)[];
   windows: InformedWindow[];
+  // Per column, the elevation its models end at: the veil goes no deeper.
+  floors?: number[];
 }
 
 /** What the hover says of `one`'s depth informed; null: nothing measured. */
@@ -53,11 +55,13 @@ function informedText(one: InformedWindow): string | null {
   return one.informed > 0 ? `informed to ${metres(one.informed)}` : "not informed";
 }
 
-/** Below each column's level, the column veiled down to the section's `bottom`; a thin dashed
- * line at that level, joined from column to column (`edges`, the grid's columns). */
+/** Below each column's level, the column veiled down to its floor (the section's `bottom`
+ * without floors); a thin dashed line at that level, joined from column to column (`edges`,
+ * the grid's columns). */
 function drawInformed(
   ctx: CanvasRenderingContext2D,
   levels: (number | null)[],
+  floors: number[] | undefined,
   edges: number[],
   xOf: (x: number) => number,
   yOf: (z: number) => number,
@@ -66,11 +70,12 @@ function drawInformed(
 ) {
   ctx.fillStyle = colours.veil;
   levels.forEach((level, i) => {
-    if (level === null) return;
+    const floor = floors?.[i] ?? bottom;
+    if (level === null || level <= floor) return;
     const xLeft = Math.round(xOf(edges[i]));
     const xRight = Math.round(xOf(edges[i + 1]));
     const yLevel = yOf(level);
-    ctx.fillRect(xLeft, yLevel, Math.max(1, xRight - xLeft), yOf(bottom) - yLevel);
+    ctx.fillRect(xLeft, yLevel, Math.max(1, xRight - xLeft), yOf(floor) - yLevel);
   });
   ctx.beginPath();
   let drawing = false;
@@ -290,7 +295,7 @@ export function VelocitySectionCanvas({
     ctx.imageSmoothingEnabled = true;
     // (A backend from before the levels sends none: nothing drawn.)
     if (informed?.levels?.length === np) {
-      drawInformed(ctx, informed.levels, cellEdges, xOf, yOf, zMin, palette);
+      drawInformed(ctx, informed.levels, informed.floors, cellEdges, xOf, yOf, zMin, palette);
     }
     ctx.restore();
     if (marker !== undefined && marker >= x0 && marker <= x1) drawMarker(ctx, xOf(marker), MT, MT + PLOT_H);

@@ -116,10 +116,13 @@ def get_velocity_section(
         )
     ordered = sorted(found.items(), key=lambda item: item[1].position.x)
     section = VelocityModelsSection(velocity_models=tuple(one for _, one in ordered))
-    # Smoothed along the line over a window's length: what each window's model describes.
-    window_m = window_length(run_folder)
-    grid = velocity_grid(section, lateral_smoothing, window_m=window_m)
     windows = [_section_window(run_folder / unit, one) for unit, one in ordered]
+    # Smoothed along the line over a window's length: what each window's model describes. Each
+    # column down to its models' depth, no half-space carried further.
+    window_m = window_length(run_folder)
+    grid = velocity_grid(
+        section, lateral_smoothing, window_m=window_m, depths=[one.depth for one in windows]
+    )
     informed = [
         (one.x, one.top, None if one.informed is None else min(one.informed, one.depth))
         for one in windows
@@ -145,9 +148,13 @@ def window_length(run_folder: Path) -> float | None:
 
 
 def _section_window(window: Path, model: VelocityModel) -> SectionWindow:
-    depth = round(float(np.sum(model.thicknesses)), 2)
     measured = window_measures(window)
     measures = measured[1] if measured is not None else None
+    # How deep its models were built (a layered model's own file ends half way into the
+    # half-space); the model's own depth without measures.
+    depth = round(
+        measures.depth_max_m if measures is not None else float(np.sum(model.thicknesses)), 2
+    )
     informed = None
     if measures is not None and (known := informed_to(measures)) is not None:
         # All of it: the model's own depth, the bottom the section draws.

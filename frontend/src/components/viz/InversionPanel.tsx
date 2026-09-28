@@ -47,6 +47,7 @@ interface VelocitySection {
   vs_std_grid: (number | null)[][]; // % of Vs
   // The share of the kept models with an interface, % (null: not known).
   interface_grid: (number | null)[][];
+  floors?: number[]; // per column, the elevation its models end at
   // Each window's column, how deep its data inform it as its inversion measured.
   windows: InformedWindow[];
   // Per column: the elevation down to which the data inform it, smoothed as the section.
@@ -190,7 +191,7 @@ export function InversionPanel({
   );
   const overlay: InformedOverlay | undefined =
     informed && section.data
-      ? { levels: section.data.informed_levels, windows: section.data.windows }
+      ? { levels: section.data.informed_levels, windows: section.data.windows, floors: section.data.floors }
       : undefined;
   const labels = useJson<Record<string, number>>(`${API}/dispersion_image_labels/${at(folder)}`);
   const modes = Object.keys(labels.data ?? {});

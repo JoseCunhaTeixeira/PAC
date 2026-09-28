@@ -50,6 +50,7 @@ class VelocitySectionOut(BaseModel):
     vs_std_grid: list[list[float | None]]  # % of Vs
     # The share of the kept models with an interface, % (None: not known).
     interface_grid: list[list[float | None]]
+    floors: list[float]  # per column, the elevation its models end at
     windows: list[SectionWindowOut]
     # Per column: the elevation down to which the data inform it (None: not known).
     informed_levels: list[float | None]
@@ -124,6 +125,7 @@ def get_velocity_section(
         vs_grid=nan_to_none(grid.vs, 1),
         vs_std_grid=nan_to_none(100 * grid.vs_std / grid.vs, 1),
         interface_grid=nan_to_none(100 * section.interfaces, 1),
+        floors=rounded(grid.floor, 3),
         windows=[
             SectionWindowOut(x=one.x, top=one.top, depth=one.depth, informed=one.informed)
             for one in section.windows
