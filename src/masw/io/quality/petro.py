@@ -50,8 +50,8 @@ from sigpipe.algorithms.inversion.rayleigh.petro.silex_catalog import (
 )
 from sigpipe.base.dispersion_curve import DispersionCurve
 from sigpipe.masw.inversion.measuring import ModelFit
-from sigpipe.masw.petro import load_modeled_curve, load_petro_model
-from sigpipe.masw.petro.measuring import PetroMeasures, measure_petro
+from sigpipe.masw.petro import load_modeled_curve
+from sigpipe.masw.petro.measuring import PetroMeasures
 from sigpipe.masw.petro.window import MODEL_FILE
 from sigpipe.masw.runs import window_folders, xmid_of
 
@@ -147,12 +147,12 @@ def petro_overview(folder: str) -> Overview:
         gaps = range_gaps(card, curve) if card is not None and curve is not None else ()
         if curve is not None:
             found.append(gaps)
-        measures = _measures(window, model, thresholds)
+        measures = _measures(window)
         hover = [f"xmid {number(x, 4)} m"]
         if gaps and card is not None:
             hover.append("outside the model's range: " + _gaps_text(card, gaps))
         if measures is None:
-            hover.append("not inverted")
+            hover.append(_unmeasured(window))
             cells.append(Cell(key=unit, x=x, status="none", hover=tuple(hover)))
             continue
         g7, g8 = _results(log, window)
@@ -221,7 +221,7 @@ def petro_card(folder: str, xmid: float) -> PetroCard:
     card = _card(model)
     curve = fundamental(window)
     gaps = range_gaps(card, curve) if card is not None and curve is not None else ()
-    measures = _measures(window, model, thresholds)
+    measures = _measures(window)
     # A soil column PAC made again leaves the assistant's checks and attempts behind.
     ours = measures is not None and by_assistant(log, window)
     g7, g8 = _results(log, window) if measures is not None else (None, None)
@@ -231,7 +231,15 @@ def petro_card(folder: str, xmid: float) -> PetroCard:
         said.append(_coverage(card, curve, gaps))
     metrics: tuple[Metric, ...] = ()
     if measures is None:
-        said.append(Sentence(mark="info", text="Not inverted."))
+        unmeasured = _unmeasured(window)
+        said.append(
+            Sentence(
+                mark="info",
+                text="Inverted before its measures were saved with it: invert it again to see them."
+                if unmeasured != "not inverted"
+                else "Not inverted.",
+            )
+        )
     else:
         metrics = fit_metrics(measures.fit, thresholds)
         said.append(_column_sentence(measures))
@@ -309,21 +317,23 @@ def _results(log: QCLog | None, window: Path) -> tuple[GateResult | None, GateRe
     return log.result(window.name, STAGE, "G7"), log.result(window.name, STAGE, "G8")
 
 
-def _measures(window: Path, model: str | None, thresholds: PetroThresholds) -> PetroMeasures | None:
-    """The window's petrophysical inversion measured: as the assistant saved it, or from its
-    files when it measured none, or an older model (PAC inverted it again)."""
+def _measures(window: Path) -> PetroMeasures | None:
+    """The window's petrophysical inversion as measured when it ran (PAC's job or the assistant),
+    none older than its model: Visualization never measures."""
     path = window / MEASURES_FILE
     model_file = window / MODEL_FILE
-    if path.exists() and (
-        not model_file.exists() or path.stat().st_mtime >= model_file.stat().st_mtime
+    if not path.exists() or (
+        model_file.exists() and path.stat().st_mtime < model_file.stat().st_mtime
     ):
-        return PetroMeasures.model_validate_json(path.read_text())
-    if model is None or load_petro_model(window) is None:
         return None
-    try:
-        return measure_petro(window, model, (), thresholds.n_bands)
-    except ValueError:  # no fundamental mode picked any more
-        return None
+    return PetroMeasures.model_validate_json(path.read_text())
+
+
+def _unmeasured(window: Path) -> str:
+    """Why a window shows no soil column."""
+    if (window / MODEL_FILE).exists():
+        return "inverted before its measures were saved"
+    return "not inverted"
 
 
 def _card(model: str | None) -> SilexCard | None:

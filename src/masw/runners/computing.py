@@ -9,8 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from masw.io.paths import OUTPUT_DIR, PACKAGES, workspace
+from masw.io.quality.records import measure_records
 from masw.models.processing import ProcessingRequest
-from sigpipe.masw.runs import WindowOutcome, run_processing
+from sigpipe.masw.runs import RunManifest, Stopped, WindowOutcome, run_processing
 
 logger = logging.getLogger(__name__)
 
@@ -38,18 +39,24 @@ def run_compute(
         request.profile,
         request.workers,
     )
-    manifest = run_processing(
-        request.profile,
-        request.mode,
-        request.overrides,
-        workspace(request.workers),
-        on_progress=None
-        if on_progress is None
-        else lambda done, total: on_progress(done, total, None),
-        packages=PACKAGES,
-        stop=stop,
-    )
+    try:
+        manifest = run_processing(
+            request.profile,
+            request.mode,
+            request.overrides,
+            workspace(request.workers),
+            on_progress=None
+            if on_progress is None
+            else lambda done, total: on_progress(done, total, None),
+            packages=PACKAGES,
+            stop=stop,
+        )
+    except Stopped as stopped:
+        if isinstance(stopped.kept, RunManifest):
+            _measure(stopped.kept)
+        raise
     folder = f"{manifest.profile.name}/{manifest.run_id}"
+    _measure(manifest)
     errors = [
         window_error(OUTPUT_DIR / folder, outcome)
         for outcome in manifest.windows
@@ -62,6 +69,15 @@ def run_compute(
         len(errors),
     )
     return folder, errors
+
+
+def _measure(manifest: RunManifest) -> None:
+    """The measures of the run's preprocessed records, saved beside them: Visualization reads
+    them and never measures."""
+    try:
+        measure_records(OUTPUT_DIR / manifest.profile.name / manifest.run_id)
+    except OSError, ValueError:
+        logger.warning("The records of run %s were not measured", manifest.run_id, exc_info=True)
 
 
 def window_error(run_folder: Path, outcome: WindowOutcome) -> WindowError:

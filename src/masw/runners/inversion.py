@@ -38,8 +38,15 @@ def _invert_position_timed(
     output: Path,
     chain_jobs: int,
 ) -> float:
+    """Runs in a worker: the window's inversion, then its measures (how deep its data inform
+    it among them), saved with it: Visualization only reads them."""
     start = time.perf_counter()
     io.invert_position(folder, xmid, labels, parameters, output, chain_jobs)
+    try:
+        io.measure_position(folder, xmid, parameters, output)
+    except StopIteration, OSError, ValueError:
+        # Its model stands, shown without its measures (no fundamental mode picked, say).
+        logger.warning("The inversion of xmid=%.2f was not measured", xmid, exc_info=True)
     return time.perf_counter() - start
 
 

@@ -14,7 +14,6 @@ from datetime import timedelta
 from itertools import pairwise
 from pathlib import Path
 from typing import Literal
-from uuid import uuid4
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
@@ -57,11 +56,10 @@ from sigpipe.masw.inversion import (
     load_parameters,
 )
 from sigpipe.masw.inversion.measuring import (
+    USEFUL_REFERENCE,
     BoundShare,
     InversionMeasures,
     ModelFit,
-    against_yardstick,
-    measure_inversion,
 )
 from sigpipe.masw.inversion.section import ModelName, picked_curve, predicted_curve, window_model
 from sigpipe.masw.inversion.window import SAMPLES_FILE, load_profiles, load_samples
@@ -135,7 +133,7 @@ class VsProfile(BaseModel):
     layered_tops: tuple[float, ...]  # the layered median's
     layered_vs: tuple[float, ...]
     bottom: float  # m, the bottom of the models sigpipe builds
-    informed: float | None  # m, how deep the data inform them; None: to the bottom
+    informed: float | None  # m, how deep the data inform them; None: to the bottom, or unknown
     deepest_top: float  # m, the deepest the half-space's top could be (the prior's)
 
 
@@ -228,46 +226,27 @@ def thresholds_of(run_folder: Path) -> InversionThresholds:
     return InversionThresholds.model_validate(config_section(run_folder, "model"))
 
 
-def window_measures(
-    folder: Path, thresholds: InversionThresholds
-) -> tuple[WindowParameters, InversionMeasures] | None:
-    """The parameters window `folder` was inverted with and the measures of its posterior; None
-    when it holds no inversion sigpipe saved its samples for. Measured when no file holds them
-    yet, or an older one than the samples; the depth the data inform read again when measured
-    against the run's own prior (before one yardstick served every window): then saved, as the
-    assistant saves them. Raises ValueError when they cannot be measured (no fundamental mode
-    among the curves inverted)."""
+def window_measures(folder: Path) -> tuple[WindowParameters, InversionMeasures | None] | None:
+    """The parameters window `folder` was inverted with and the measures its inversion saved with
+    it (PAC's job or the assistant, never Visualization); None when it holds no inversion sigpipe
+    saved its samples for. No measures when none are as new as its samples: an inversion from
+    before they were saved with it, shown without them."""
     samples = folder / SAMPLES_FILE
     if not (folder / PARAMETERS_FILE).exists() or not samples.exists():
         return None
     ran = load_parameters(folder / PARAMETERS_FILE)
     path = folder / MEASURES_FILE
-    saved = (
-        InversionMeasures.model_validate_json(path.read_text())
-        if path.exists() and path.stat().st_mtime >= samples.stat().st_mtime
-        else None
-    )
-    try:
-        measures = (
-            against_yardstick(saved, folder, ran.parameters, thresholds.useful_std_ratio)
-            if saved is not None
-            else measure_inversion(
-                folder,
-                ran.parameters,
-                n_bands=thresholds.n_bands,
-                bound_edge=thresholds.bound_edge,
-                std_ratio=thresholds.useful_std_ratio,
-            )
-        )
-    except (StopIteration, OSError, ValueError) as exc:
-        raise ValueError(f"The inversion of {folder.name} cannot be measured: {exc!r}") from exc
-    if measures is not saved:
-        # Whole, under a name of its own, then renamed: the overview and the sections may
-        # measure a window at once, and neither reads half a file.
-        partial = path.with_name(f"{path.name}.{uuid4().hex}.partial")
-        partial.write_text(measures.model_dump_json(indent=2))
-        partial.replace(path)
-    return ran, measures
+    if not path.exists() or path.stat().st_mtime < samples.stat().st_mtime:
+        return ran, None
+    return ran, InversionMeasures.model_validate_json(path.read_text())
+
+
+def informed_to(measures: InversionMeasures) -> float | None:
+    """How deep the data inform the model (m), its bottom when all of it; None when unknown:
+    measured before one yardstick served every window (sigpipe's), not shown."""
+    if measures.useful_reference != USEFUL_REFERENCE:
+        return None
+    return measures.depth_max_m if measures.useful_depth_m is None else measures.useful_depth_m
 
 
 def model_depth(parameters: InversionParameters) -> float:
@@ -346,15 +325,18 @@ def model_metrics(
             bound="max",
             passed=piled is None or piled.share <= thresholds.max_at_bound,
         ),
-        Metric(
-            name="useful_depth",
-            value=useful,
-            threshold=round(thresholds.min_useful_share * depth, 2),
-            bound="min",
-            passed=useful is None or useful >= thresholds.min_useful_share * depth,
-            unit="m",
-        ),
     ]
+    if informed_to(measures) is not None:
+        metrics.append(
+            Metric(
+                name="useful_depth",
+                value=useful,
+                threshold=round(thresholds.min_useful_share * depth, 2),
+                bound="min",
+                passed=useful is None or useful >= thresholds.min_useful_share * depth,
+                unit="m",
+            )
+        )
     return tuple(metrics)
 
 
@@ -371,17 +353,13 @@ def inversion_overview(folder: str) -> Overview:
     by_hand = 0  # the windows whose model PAC made, after the assistant's or alone
     for unit in window_folders(run_folder):
         x = xmid_of(unit)
-        try:
-            measured = window_measures(run_folder / unit, thresholds)
-        except ValueError:
-            logger.warning("Inversion of %s left out of the overview", unit, exc_info=True)
-            measured = None
-        if measured is None:
-            cells.append(
-                Cell(key=unit, x=x, status="none", hover=(f"xmid {number(x, 4)} m", "not inverted"))
-            )
+        measured = window_measures(run_folder / unit)
+        measures = measured[1] if measured is not None else None
+        if measured is None or measures is None:
+            said = "not inverted" if measured is None else "inverted before its measures were saved"
+            cells.append(Cell(key=unit, x=x, status="none", hover=(f"xmid {number(x, 4)} m", said)))
             continue
-        ran, measures = measured
+        ran = measured[0]
         runs.append(ran.parameters)
         if not by_assistant(log, unit, run_folder):
             by_hand += 1
@@ -390,16 +368,19 @@ def inversion_overview(folder: str) -> Overview:
         status = verdict_status(g5, g6) if g5 is not None else measured_status(metrics)
         statuses.append(status)
         bottom = measures.depth_max_m
-        useful = measures.useful_depth_m if measures.useful_depth_m is not None else bottom
-        informed.append(useful)
-        rhat, ess, acceptance = _convergence(measures)
-        misfits = [band.misfit for band in measures.fits[0].bands if band.misfit is not None]
+        useful = informed_to(measures)
         hover = [
             f"xmid {number(x, 4)} m",
             f"{_layers(len(measures.vs_layers))}, modelled to {number(bottom)} m",
-            f"informed to {number(useful)} m"
-            + (" (its bottom)" if measures.useful_depth_m is None else ""),
         ]
+        if useful is not None:
+            informed.append(useful)
+            hover.append(
+                f"informed to {number(useful)} m"
+                + (" (its bottom)" if measures.useful_depth_m is None else "")
+            )
+        rhat, ess, acceptance = _convergence(measures)
+        misfits = [band.misfit for band in measures.fits[0].bands if band.misfit is not None]
         if misfits:
             hover.append(f"misfit {number(max(misfits), 2)} at worst")
         hover.append(
@@ -444,7 +425,8 @@ def inversion_overview(folder: str) -> Overview:
             )
             if part
         )
-        summary += f" · informed {span(min(informed), max(informed), 'm')} deep"
+        if informed:
+            summary += f" · informed {span(min(informed), max(informed), 'm')} deep"
     return Overview(
         paco=paco,
         summary=summary,
@@ -554,11 +536,12 @@ def inversion_card(folder: str, xmid: float, model: ModelName = "smooth_median")
         raise ValueError(f"No window for folder={folder}, xmid={xmid}")
     thresholds = thresholds_of(run_folder)
     log = read_log(run_folder)
-    measured = window_measures(window, thresholds)
+    measured = window_measures(window)
+    measures = measured[1] if measured is not None else None
     title = f"xmid {number(xmid, 4)} m"
-    if measured is None:
-        return _not_inverted(unit, title, log)
-    ran, measures = measured
+    if measured is None or measures is None:
+        return _not_inverted(unit, title, log, measured is not None)
+    ran = measured[0]
     parameters = ran.parameters
     # An inversion PAC made again leaves the assistant's checks and attempts behind: none of them
     # is of the model now in the window.
@@ -665,20 +648,24 @@ def _results(
     return log.result(unit, STAGE, GATE), log.result(unit, STAGE, "G6")
 
 
-def _not_inverted(unit: str, title: str, log: QCLog | None) -> InversionCard:
+def _not_inverted(
+    unit: str, title: str, log: QCLog | None, unmeasured: bool = False
+) -> InversionCard:
+    """The card of a window without an inversion, or `unmeasured`: inverted before its measures
+    were saved with it."""
     g3 = log.result(unit, "picking", "G3") if log is not None else None
     rejected = g3 is not None and g3.verdict == "reject"
+    said = (
+        "Inverted before its measures were saved with it: invert it again to see them."
+        if unmeasured
+        else "Not inverted"
+        + (": its curve was rejected by the curve check (G3)." if rejected else ".")
+    )
     return InversionCard(
         key=unit,
         status="none",
         title=title,
-        sentences=(
-            Sentence(
-                mark="info",
-                text="Not inverted"
-                + (": its curve was rejected by the curve check (G3)." if rejected else "."),
-            ),
-        ),
+        sentences=(Sentence(mark="info", text=said),),
         inverted=False,
         parameters=None,
         tuning=(),
@@ -698,7 +685,10 @@ def _depth_sentences(
     parameters: InversionParameters, measures: InversionMeasures, thresholds: InversionThresholds
 ) -> list[Sentence]:
     """How deep the model goes, and how much of it the data inform: where the models' Vs
-    spreads less than a share of what the curve alone allows (sigpipe's yardstick)."""
+    spreads less than a share of what the curve alone allows (sigpipe's yardstick); nothing
+    when measured before it."""
+    if informed_to(measures) is None:
+        return []
     bottom = measures.depth_max_m
     useful = measures.useful_depth_m
     enough = thresholds.min_useful_share * model_depth(parameters)
@@ -946,7 +936,7 @@ def _profile(
         layered_tops=tuple(round(value, 3) for value in layered_tops),
         layered_vs=measures.vs_layers,
         bottom=measures.depth_max_m,
-        informed=measures.useful_depth_m,
+        informed=measures.useful_depth_m if informed_to(measures) is not None else None,
         deepest_top=model_depth(parameters),
     )
 

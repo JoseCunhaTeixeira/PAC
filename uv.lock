@@ -1613,7 +1613,7 @@ wheels = [
 [[package]]
 name = "paco"
 version = "1.0.0"
-source = { git = "https://github.com/JoseCunhaTeixeira/PACo#f4842f9006e5221299937016b2f0a149936774ed" }
+source = { git = "https://github.com/JoseCunhaTeixeira/PACo#e58ef30261c6c17bd3a6cfd51a5138505c9c3820" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "openai" },
@@ -2256,7 +2256,7 @@ wheels = [
 [[package]]
 name = "sigpipe"
 version = "1.0.0"
-source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#25631ea94930c8699ce3b9f7d5b5954cc853a5f9" }
+source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#330530fd07bf188458a7e314ff33a182cf5e62fc" }
 dependencies = [
     { name = "disba" },
     { name = "h5py" },
