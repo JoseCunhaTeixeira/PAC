@@ -352,7 +352,7 @@ def inversion_overview(folder: str) -> Overview:
     runs: list[InversionParameters] = []
     informed: list[float] = []
     statuses: list[Status] = []
-    again = 0  # the assistant's inversions PAC made again after
+    by_hand = 0  # the windows whose model PAC made, after the assistant's or alone
     for unit in window_folders(run_folder):
         x = xmid_of(unit)
         try:
@@ -367,8 +367,8 @@ def inversion_overview(folder: str) -> Overview:
             continue
         ran, measures = measured
         runs.append(ran.parameters)
-        if log is not None and log.of(unit, STAGE) and not by_assistant(log, unit, run_folder):
-            again += 1
+        if not by_assistant(log, unit, run_folder):
+            by_hand += 1
         g5, g6 = _results(log, unit, run_folder)
         metrics = model_metrics(ran.parameters, measures, thresholds)
         status = verdict_status(g5, g6) if g5 is not None else measured_status(metrics)
@@ -407,11 +407,16 @@ def inversion_overview(folder: str) -> Overview:
             Cell(key=unit, x=x, status=status, hover=tuple(hover), value=useful, total=bottom)
         )
     paco = log is not None and any(attempt.stage == STAGE for attempt in log.attempts)
+    assistant = len(runs) - by_hand
     summary = f"{len(runs)} of {plural(len(cells), 'window')} inverted" + (
-        " by the assistant" if paco else " by hand" if runs else ""
+        ""
+        if not runs
+        else " by hand"
+        if not assistant
+        else " by the assistant"
+        if not by_hand
+        else f": {assistant} by the assistant, {by_hand} by hand"
     )
-    if again:
-        summary += f" ({again} of them again by hand)"
     if runs:
         passed, flagged, rejected = (statuses.count(one) for one in ("pass", "warn", "fail"))
         summary += " · " + ", ".join(

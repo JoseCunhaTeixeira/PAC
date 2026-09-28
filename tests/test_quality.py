@@ -220,6 +220,11 @@ def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:
     # A curve picked by hand is the user's: passed as it is, said so, nothing more.
     assert cells[2.5]["status"] == "pass" and cells[2.5]["value"] > 0
     assert cells[2.5]["hover"] == ["xmid 2.5 m", "picked by hand"]
+    # No image checked: each cell its curve alone, by hand or none, as its legend says.
+    assert [cells[x]["parts"] for x in (2.5, 8.5)] == [["hand"], ["none"]]
+    (curve,) = overview["parts"]
+    assert curve["title"] == "Curve" and curve["legend"]["hand"] == "by hand"
+    assert curve["legend"]["none"] == "no curve" and "fail" not in curve["legend"]
     (setting,) = overview["settings"]
     assert setting["origin"] == "pac"
 
@@ -240,6 +245,7 @@ def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:
         "competing_ridges",
     }
     assert card["status"] == "pass" and card["verdict"]["text"] == "Picked by hand."
+    assert card["parts"] == [{"label": "curve", "state": "hand"}]
     assert not any(text.startswith("M0 picked") for text in _texts(card))
     assert card["attempts"] == []
 
@@ -609,6 +615,10 @@ def test_an_assistant_run_shows_g2_g3_g4(judged: str) -> None:
     cells = {one["x"]: one for one in overview["cells"]}
     assert cells[2.5]["status"] == "pass" and "G2 pass · G3 pass · G4 pass" in cells[2.5]["hover"]
     assert "picked automatically" in cells[2.5]["hover"]
+    # Its image and its curve apart; a window without a curve says none, whatever its image.
+    assert cells[2.5]["parts"] == ["pass", "pass"]
+    assert cells[8.5]["parts"][1] == "none" and cells[8.5]["status"] == "none"
+    assert [part["title"] for part in overview["parts"]] == ["Image", "Curve"]
     assert overview["settings"][0]["origin"] == "rule"
 
     card = client.get(f"/quality/dispersion/card/{judged}/2.5").json()
@@ -617,6 +627,10 @@ def test_an_assistant_run_shows_g2_g3_g4(judged: str) -> None:
     assert [gates[gate]["verdict"] for gate in ("G2", "G3", "G4")] == ["pass"] * 3
     assert [metric["name"] for metric in gates["G3"]["metrics"]] == ["sharpness", "prominence"]
     assert card["verdict"]["text"] == "The assistant's checks (G2, G3, G4) passed this window."
+    assert card["parts"] == [
+        {"label": "image", "state": "pass"},
+        {"label": "curve", "state": "pass"},
+    ]
     assert len(card["attempts"]) == 2  # the phase shift's and the picking's
 
 
@@ -643,13 +657,16 @@ def test_a_pick_changed_by_hand_leaves_the_assistants_curve_checks_behind(
         for one in client.get(f"/quality/dispersion/overview/{folder}").json()["cells"]
     }
     assert "G3 pass" not in " ".join(cells["xmid_2.50"]["hover"])
+    # Its image as the assistant checked it, its curve the user's.
+    assert cells["xmid_2.50"]["parts"] == ["pass", "hand"]
 
 
 def test_an_assistant_run_shows_g5_and_what_each_attempt_changed(judged: str) -> None:
     overview = client.get(f"/quality/inversion/overview/{judged}").json()
 
     assert overview["paco"] is True
-    assert overview["summary"].startswith("2 of 3 windows inverted by the assistant")
+    # 5.5 inverted by hand before (test_api's run): who made each model now.
+    assert overview["summary"].startswith("2 of 3 windows inverted: 1 by the assistant, 1 by hand")
     cells = {one["x"]: one for one in overview["cells"]}
     assert cells[2.5]["status"] == "pass" and "G5 pass · G6 pass" in cells[2.5]["hover"]
     assert overview["settings"][0]["origin"] == "rule"
@@ -687,7 +704,7 @@ def test_a_window_inverted_again_in_pac_drops_the_assistants_verdict(judged: str
     assert any(text.startswith("Inverted by hand: ") for text in _texts(card))
     assert not any(text.startswith("Attempt ") for text in _texts(card))
     overview = client.get(f"/quality/inversion/overview/{folder}").json()
-    assert "(1 of them again by hand)" in overview["summary"]
+    assert overview["summary"].startswith("2 of 3 windows inverted by hand")
 
 
 def test_a_soil_column_made_again_in_pac_drops_the_assistants_checks(judged: str) -> None:

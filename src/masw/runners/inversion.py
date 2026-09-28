@@ -16,11 +16,13 @@ from typing import cast
 
 from masw.io import inversion as io
 from masw.io.dispersion_images import xmid_folder
+from masw.io.history import redone
 from masw.io.paths import output_folder
 from masw.logging_config import setup_logging
 from masw.models.inversion import InversionRunConfig
 from masw.runners.computing import WindowError
 from sigpipe.masw.inversion import InversionParameters
+from sigpipe.masw.runs.history import STAGE_FILES
 from sigpipe.masw.runs.stopping import Stopped, commit, finished, staging, undo
 
 logger = logging.getLogger(__name__)
@@ -92,7 +94,11 @@ def run_inversion(
                 pos_err = None
                 try:
                     duration_s = future.result()
-                    commit(xmid_folder(config.folder, xmid))
+                    # Its new results replace all its old ones, and its earlier attempts' (the
+                    # assistant's) are forgotten.
+                    window = xmid_folder(config.folder, xmid)
+                    commit(window, replacing=STAGE_FILES["inversion"])
+                    redone(window, "inversion")
                     logger.info("Finished xmid=%.2f", xmid)
                     results.append({"xmid": xmid, "status": "success", "duration_s": duration_s})
                 except Exception as exc:

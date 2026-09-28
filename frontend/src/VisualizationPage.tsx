@@ -11,6 +11,7 @@ import { RECORDS_ONLY, RunPicker } from "./components/viz/RunPicker";
 import { RunSummary } from "./components/viz/RunSummary";
 import type {
   Overview,
+  PartState,
   ProfileRuns,
   RecordCard,
   RunCard,
@@ -43,6 +44,12 @@ const TABS: { key: StageKey; label: string }[] = [
 ];
 
 const STATUSES: Status[] = ["pass", "warn", "fail", "none"];
+// A part's states in the legend's order, and what each part checks, on its title's hover.
+const PART_STATES: PartState[] = ["pass", "warn", "fail", "hand", "none"];
+const PART_TIPS: Record<string, string> = {
+  Image: "Image\nG2: the dispersion image's check",
+  Curve: "Curve\nG3 and G4: the curve's checks, alone and along the line",
+};
 
 // What a window's (or record's) state implies for what comes after it, said on the line plot's
 // hover: the badges' meanings, in short. None for a window with nothing: its own line says so.
@@ -123,15 +130,28 @@ function LineLegend({
   return (
     <div className="viz-line-legend">
       {overview &&
-        STATUSES.filter((status) => overview.legend[status]).map((status) => (
-          <span
-            key={status}
-            data-tip={`${capitalized(overview.legend[status] ?? "")}\n${meanings[status] ?? ""}`}
-          >
-            <i className={`viz-swatch ${status}`} />
-            {overview.legend[status]}
-          </span>
-        ))}
+        (overview.parts?.length
+          ? // The cells' parts apart (a window's image, its curve): a titled group each.
+            overview.parts.map((part) => (
+              <span key={part.title} className="viz-legend-group">
+                <b data-tip={PART_TIPS[part.title]}>{part.title}</b>
+                {PART_STATES.filter((state) => part.legend[state]).map((state) => (
+                  <span key={state}>
+                    <i className={`viz-swatch ${state}`} />
+                    {part.legend[state]}
+                  </span>
+                ))}
+              </span>
+            ))
+          : STATUSES.filter((status) => overview.legend[status]).map((status) => (
+              <span
+                key={status}
+                data-tip={`${capitalized(overview.legend[status] ?? "")}\n${meanings[status] ?? ""}`}
+              >
+                <i className={`viz-swatch ${status}`} />
+                {overview.legend[status]}
+              </span>
+            )))}
       {windows && uses && (
         <>
           {SHOT_KEYS.filter((key) => key.uses.some((use) => uses.has(use))).map(

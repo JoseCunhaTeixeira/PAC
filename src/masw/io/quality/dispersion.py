@@ -31,6 +31,9 @@ from masw.io.quality.view import (
     Cell,
     GateView,
     Overview,
+    Part,
+    PartLegend,
+    PartState,
     Sentence,
     Setting,
     Status,
@@ -44,6 +47,7 @@ from masw.io.quality.view import (
     verdict_sentence,
     verdict_status,
     warnings,
+    worst,
 )
 from sigpipe.algorithms.picking.dispersion.curve import (
     max_resolvable_wavelength,
@@ -142,6 +146,7 @@ def dispersion_overview(folder: str) -> Overview:
     cells: list[Cell] = []
     origins: Counter[Origin] = Counter()
     by_hand: set[str] = set()
+    present: set[tuple[int, PartState]] = set()  # each part's states on the line
     for unit in window_folders(run_folder):
         window = run_folder / unit
         curve = fundamental(window)
@@ -152,16 +157,10 @@ def dispersion_overview(folder: str) -> Overview:
             by_hand.add(unit)
         g2, g3, g4 = _results(log, unit, picked_by)
         stats = curve_stats(curve) if curve is not None else None
-        status: Status
-        if picked_by == "hand" and curve is not None:
-            # A person picked it: the user's curve, passed as it is.
-            status = "pass"
-        elif log is not None:
-            status = verdict_status(g2, g3, g4)
-        elif curve is not None:
-            status = measured_status(curve_metrics(curve, thresholds.curve, None))
-        else:
-            status = "none"
+        image, picks = _states(g2, g3, g4, curve, picked_by, thresholds, None)
+        # The image's state only when the assistant checked the images.
+        parts = (image, picks) if log is not None else (picks,)
+        present.update(enumerate(parts))
         hover = [f"xmid {number(xmid_of(unit), 4)} m"]
         if stats is not None and picked_by == "hand":
             hover.append("picked by hand")
@@ -185,9 +184,10 @@ def dispersion_overview(folder: str) -> Overview:
             Cell(
                 key=unit,
                 x=xmid_of(unit),
-                status=status,
+                status=_status(image, picks),
                 hover=tuple(hover),
                 value=stats.wavelength_m[1] if stats is not None else None,
+                parts=parts,
             )
         )
     picked = sum(origins.values())
@@ -211,8 +211,78 @@ def dispersion_overview(folder: str) -> Overview:
             "none": "no curve",
         },
         cells=tuple(cells),
+        parts=_legends(paco, present),
         track=Track(label="Longest wavelength picked (m)", short="Longest λ", kind="value"),
         settings=_picking_settings(log, origins, by_hand),
+    )
+
+
+# Each part's states, in words: the image's (G2), the curve's (G3, G4; or by hand).
+IMAGE_STATES: dict[PartState, str] = {
+    "pass": "passed",
+    "warn": "flagged",
+    "fail": "rejected",
+    "none": "not checked",
+}
+CURVE_STATES: dict[PartState, str] = {
+    "pass": "passed",
+    "warn": "flagged",
+    "fail": "rejected",
+    "hand": "by hand",
+    "none": "no curve",
+}
+# A run PAC made: its curves' measures against the assistant's limits, not judged.
+MEASURED_CURVE_STATES: dict[PartState, str] = {
+    "pass": "within the limits",
+    "warn": "a measure beyond its limit",
+    "hand": "by hand",
+    "none": "no curve",
+}
+
+
+def _states(
+    g2: GateResult | None,
+    g3: GateResult | None,
+    g4: GateResult | None,
+    curve: DispersionCurve | None,
+    picked_by: Origin | None,
+    thresholds: DispersionThresholds,
+    lambda_min: float | None,
+) -> tuple[PartState, PartState]:
+    """A window's image and curve apart: its image by G2's verdict (none: not checked); its curve
+    by hand, none (no curve), by G3's and G4's verdicts, or by its measures against their
+    limits."""
+    image: PartState = verdict_status(g2) if g2 is not None else "none"
+    if curve is None:
+        return image, "none"
+    if picked_by == "hand":
+        return image, "hand"
+    if g3 is not None or g4 is not None:
+        return image, verdict_status(g3, g4)
+    return image, measured_status(curve_metrics(curve, thresholds.curve, lambda_min))
+
+
+def _status(image: PartState, curve: PartState) -> Status:
+    """A window as one state: a curve by hand, passed as it is; without a curve, none, unless its
+    image was rejected; else the worse of its image and its curve."""
+    if curve == "hand":
+        return "pass"
+    if curve == "none":
+        return "fail" if image == "fail" else "none"
+    return worst(cast(Status, image), cast(Status, curve))
+
+
+def _legends(paco: bool, present: set[tuple[int, PartState]]) -> tuple[PartLegend, ...]:
+    """The cells' parts' legends, each state on the line said: the image's when the assistant
+    checked the images, then the curve's."""
+    curve = CURVE_STATES if paco else MEASURED_CURVE_STATES
+    parts = (("Image", IMAGE_STATES), ("Curve", curve)) if paco else (("Curve", curve),)
+    return tuple(
+        PartLegend(
+            title=title,
+            legend={state: said for state, said in states.items() if (i, state) in present},
+        )
+        for i, (title, states) in enumerate(parts)
     )
 
 
@@ -292,22 +362,18 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         gates.append(gate_view("G3", g3, curve_measures))
         if g4 is not None:
             gates.append(gate_view("G4", g4))
-    statuses: Status = (
-        "pass"
-        if by_hand
-        else verdict_status(g2, g3, g4)
-        if judged
-        else measured_status(curve_measures)
-        if m0 is not None
-        else "none"
-    )
+    # Its image and its curve apart, as its cell's parts: the image's only when the assistant
+    # checked the images.
+    image_state, curve_state = _states(g2, g3, g4, m0, picked_by, thresholds, lambda_min)
+    parts = (Part(label="image", state=image_state),) if log is not None else ()
     return DispersionCard(
         key=unit,
-        status=statuses,
+        status=_status(image_state, curve_state),
         title=f"xmid {number(xmid, 4)} m",
         verdict=verdict,
         sentences=tuple(said),
         gates=tuple(gates),
+        parts=(*parts, Part(label="curve", state=curve_state)),
         attempts=(
             log.summaries(unit, "phase_shift") + (log.summaries(unit, "picking") if judged else ())
             if log is not None
