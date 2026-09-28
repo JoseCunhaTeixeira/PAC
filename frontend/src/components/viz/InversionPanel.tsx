@@ -13,7 +13,7 @@ import {
   type InformedWindow,
 } from "../VelocitySectionCanvas";
 import { ChainLegend, ChainTracesCanvas, MarginalsGrid } from "./ChainPlots";
-import { num, parameterLabel, xmidOf } from "./format";
+import { MODEL_LABELS, num, parameterLabel, xmidOf } from "./format";
 import { StageHead, UnitCard } from "./panel";
 import { CurveFitPlot, VsProfilePlot, type CurveAxis } from "./plots";
 import type { Chains, InversionCard, ModelName, Overview } from "./types";
@@ -73,6 +73,7 @@ function ModelTable({ card }: { card: InversionCard }) {
           `; steps tuned in ${card.tuning.length} trial run${card.tuning.length > 1 ? "s" : ""} (${card.tuning
             .map(([factor, rate]) => `×${num(factor, 2)}: ${num(rate)} %`)
             .join(", ")})`}
+        {card.exchanges != null && `; exchanges between tempered copies ${num(card.exchanges)} %`}
         .
       </p>
       <div className="viz-table-wrap">
@@ -114,12 +115,137 @@ function ModelTable({ card }: { card: InversionCard }) {
                 <td className="num">{num(row.rhat)}</td>
                 <td className="num">{num(row.ess)}</td>
                 <td className="num">{num(row.autocorrelation)}</td>
-                <td className="num">{num(row.step)}</td>
+                <td className="num">
+                  {num(row.step)}
+                  {row.step != null && row.step_unit ? ` ${row.step_unit}` : ""}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <MovesTable card={card} />
+      <BoundsTable card={card} />
+      <FitsTable card={card} />
+    </div>
+  );
+}
+
+// The moves of the chains when the data chose the layers, as the sampler names them.
+const MOVES: Record<string, [string, string]> = {
+  birth: ["Birth", "A layer added"],
+  death: ["Death", "A layer removed"],
+  interface: ["Interface", "An interface's own move"],
+  relocate: ["Relocate", "An interface drawn anew between its neighbours"],
+  vs: ["Vs", "A layer's own Vs"],
+  noise: ["Noise factor", "The factor on the picks' uncertainties"],
+  shift: ["Shift", "Every Vs together"],
+  stretch: ["Stretch", "Every depth together"],
+};
+
+function MovesTable({ card }: { card: InversionCard }) {
+  const moves = Object.entries(card.moves ?? {});
+  if (!moves.length) return null;
+  return (
+    <div className="viz-table-wrap">
+      <table className="viz-table">
+        <thead>
+          <tr>
+            <th data-tip={"How the chains moved\nMedian of the chains"}>Move</th>
+            <th>Accepted</th>
+            <th data-tip="Relative to the value moved">Step</th>
+          </tr>
+        </thead>
+        <tbody>
+          {moves.map(([move, rate]) => {
+            const [label, tip] = MOVES[move] ?? [move, ""];
+            const step = card.move_steps?.[move];
+            return (
+              <tr key={move}>
+                <td data-tip={tip || undefined}>{label}</td>
+                <td className="num">{num(rate)} %</td>
+                <td className="num">{step != null ? `${num(step)} %` : "—"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// The parameters the bounds are watched on when the data chose the layers.
+const BOUND_LABELS: Record<string, string> = {
+  top_vs: "Top Vs [m/s]",
+  half_space_vs: "Half-space Vs [m/s]",
+  deepest_interface: "Deepest interface [m]",
+  layers: "Layers",
+};
+
+function BoundsTable({ card }: { card: InversionCard }) {
+  const piled = card.at_bounds.filter((share) => share.share > 0);
+  if (!piled.length) return null;
+  return (
+    <div className="viz-table-wrap">
+      <table className="viz-table">
+        <thead>
+          <tr>
+            <th data-tip={"Samples at a prior's bound\nThe data would go further"}>At a bound</th>
+            <th>Bound</th>
+            <th>Samples</th>
+          </tr>
+        </thead>
+        <tbody>
+          {piled.map((share) => (
+            <tr key={`${share.parameter}-${share.bound}`}>
+              <td>{BOUND_LABELS[share.parameter] ?? parameterLabel(share.parameter)}</td>
+              <td className="num">
+                {share.bound} {num(share.value)}
+              </td>
+              <td className="num">{num(100 * share.share)} %</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const BAND_LABELS = ["Short", "Middle", "Long"];
+
+function FitsTable({ card }: { card: InversionCard }) {
+  if (!card.fits.length) return null;
+  const bands = card.fits[0].bands;
+  return (
+    <div className="viz-table-wrap">
+      <table className="viz-table">
+        <thead>
+          <tr>
+            <th data-tip={"Each model's curve against the picks\nIn uncertainties"}>Fit</th>
+            <th>Misfit</th>
+            {bands.map((band, i) => (
+              <th key={i} data-tip={`Wavelengths ${num(band.wavelength_m[0])}–${num(band.wavelength_m[1])} m`}>
+                {bands.length === 3 ? BAND_LABELS[i] : `Band ${i + 1}`}
+              </th>
+            ))}
+            <th data-tip="Picks the model has no fundamental mode at">Missing</th>
+          </tr>
+        </thead>
+        <tbody>
+          {card.fits.map((fit) => (
+            <tr key={fit.model}>
+              <td>{MODEL_LABELS[fit.model] ?? fit.model}</td>
+              <td className="num">{num(fit.misfit)}</td>
+              {fit.bands.map((band, i) => (
+                <td key={i} className="num">
+                  {num(band.misfit)}
+                </td>
+              ))}
+              <td className="num">{fit.n_missing}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

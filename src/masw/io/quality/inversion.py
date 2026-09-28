@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Literal
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from masw.io.quality.files import folder_path
 from masw.io.quality.log import (
@@ -68,7 +68,13 @@ from sigpipe.masw.inversion.section import (
     predicted_curve,
     window_model,
 )
-from sigpipe.masw.inversion.window import SAMPLES_FILE, load_profiles, load_samples
+from sigpipe.masw.inversion.window import (
+    SAMPLES_FILE,
+    Spread,
+    load_profiles,
+    load_samples,
+    load_spread,
+)
 from sigpipe.masw.runs import window_folders, xmid_of
 
 logger = logging.getLogger(__name__)
@@ -160,6 +166,12 @@ class FitCurve(BaseModel):
     observed_err: tuple[float, ...]  # empty without uncertainties
     predicted_fs: tuple[float, ...]
     predicted_vs: tuple[float, ...]
+    # The kept models' curves at the picked frequencies, their 10th and 90th percentiles (the
+    # density figure's band); empty for an inversion saved before 2026-09-29, or a petrophysical
+    # one.
+    spread_fs: tuple[float, ...] = ()
+    spread_low: tuple[float, ...] = ()
+    spread_high: tuple[float, ...] = ()
 
 
 class Convergence(BaseModel):
@@ -179,6 +191,9 @@ class Convergence(BaseModel):
     autocorrelation: float | None
     step: float | None  # the sampler's step, as it ran
     fixed: float | None = None  # the value, fixed: not sampled, so no prior, spread or measure
+    # "%": a step relative to the value (the layers chosen by the data move the logarithm of
+    # Vs and of the noise factor); empty: in the parameter's own unit.
+    step_unit: str = ""
 
 
 class InversionAttempt(AttemptSummary):
@@ -195,6 +210,12 @@ class InversionCard(Card):
     tuning: tuple[tuple[float, float], ...]  # each trial run's step factor and acceptance (%)
     step_factor: float | None  # the factor the run kept; None: steps not tuned
     acceptance: tuple[float, ...]  # %, per chain
+    # When the data chose the layers: each move's acceptance (%) and step (relative, %), the
+    # chains' medians, and the exchanges between tempered copies accepted (%); saved since
+    # 2026-09-29.
+    moves: dict[str, float] = Field(default_factory=dict)
+    move_steps: dict[str, float] = Field(default_factory=dict)
+    exchanges: float | None = None
     samples_per_chain: int
     convergence: tuple[Convergence, ...]
     # The monitored model's (the ensemble's; the smooth median's in measures from before
@@ -303,7 +324,7 @@ def model_metrics(
         )
         for name, band in zip(names, monitored.bands, strict=True)
     ]
-    rhat, ess, _ = _convergence(measures)
+    rhat, ess, acceptance = _convergence(measures)
     correlations = [
         value
         for name, value in measures.autocorrelation.items()
@@ -332,6 +353,8 @@ def model_metrics(
             value=max(correlations) if correlations else None,
             passed=True,
         ),
+        # Reported, not judged since the sampler of 2026-09-27: the chains' median, %.
+        Metric(name="acceptance", value=acceptance, passed=True, unit="%"),
         Metric(
             name="at_bound",
             value=piled.share if piled else None,
@@ -585,6 +608,9 @@ def inversion_card(folder: str, xmid: float, model: ModelName = DEFAULT_MODEL) -
         tuning=ran.tuning,
         step_factor=step_factor(ran.tuning),
         acceptance=measures.acceptance,
+        moves=ran.moves,
+        move_steps=_relative_steps(measures.steps) if parameters.layering == "free" else {},
+        exchanges=ran.exchanges,
         samples_per_chain=measures.samples_per_chain,
         convergence=_rows(window, parameters, measures),
         fits=measures.fits,
@@ -960,12 +986,20 @@ def _curve(window: Path, model: ModelName) -> FitCurve | None:
     observed = picked_curve(window)
     if observed is None:
         return None
-    return fit_curve(observed, predicted_curve(window, observed, model))
+    spread = load_spread(window).get(observed.mode.label)
+    return fit_curve(observed, predicted_curve(window, observed, model), spread)
 
 
-def fit_curve(observed: DispersionCurve, predicted: DispersionCurve | None) -> FitCurve:
-    """The picked curve and the one a model gives back, for the fit plot."""
+def fit_curve(
+    observed: DispersionCurve, predicted: DispersionCurve | None, spread: Spread | None = None
+) -> FitCurve:
+    """The picked curve and the one a model gives back, for the fit plot, with the kept models'
+    spread around it when saved (where some models have the mode)."""
     errors = observed.vs_err
+    band: tuple[tuple[float, ...], ...] = ((), (), ())
+    if spread is not None:
+        known = np.isfinite(spread.low) & np.isfinite(spread.high)
+        band = tuple(_rounded(values[known]) for values in (spread.fs, spread.low, spread.high))
     return FitCurve(
         label=observed.mode.label,
         observed_fs=_rounded(observed.fs),
@@ -973,6 +1007,9 @@ def fit_curve(observed: DispersionCurve, predicted: DispersionCurve | None) -> F
         observed_err=_rounded(errors) if errors is not None else (),
         predicted_fs=_rounded(predicted.fs) if predicted is not None else (),
         predicted_vs=_rounded(predicted.vs) if predicted is not None else (),
+        spread_fs=band[0],
+        spread_low=band[1],
+        spread_high=band[2],
     )
 
 
@@ -1050,6 +1087,23 @@ def _traces(samples: dict[str, np.ndarray], n_chains: int) -> tuple[ChainTraces,
     return tuple(sorted(traces, key=lambda one: _order(one.parameter)))
 
 
+def _relative_steps(steps: dict[str, float]) -> dict[str, float]:
+    """Steps in the logarithm of the values moved, as percentages of the values."""
+    return {move: round(100 * step, 2) for move, step in steps.items()}
+
+
+def _step(
+    name: str, parameters: InversionParameters, steps: dict[str, float]
+) -> tuple[float | None, str]:
+    """A series' step as the sampler ran it, and its unit: when the data chose the layers, Vs at
+    a depth moves by the Vs move's step, the noise factor by its own, both relative (%)."""
+    if parameters.layering != "free":
+        return steps.get(name), ""
+    move = "vs" if name.startswith("vs@") else name if name == "noise" else None
+    step = steps.get(move) if move is not None else None
+    return (round(100 * step, 2), "%") if step is not None else (None, "")
+
+
 def _rows(
     window: Path, parameters: InversionParameters, measures: InversionMeasures
 ) -> tuple[Convergence, ...]:
@@ -1078,6 +1132,7 @@ def _rows(
             )
             continue
         values = np.asarray(series.get(name, ()), dtype=float)
+        step, step_unit = _step(name, parameters, measures.steps)
         low, median, high = (
             (float(value) for value in np.percentile(values, [10, 50, 90]))
             if values.size
@@ -1093,7 +1148,8 @@ def _rows(
                 rhat=measures.rhat.get(name),
                 ess=measures.ess.get(name),
                 autocorrelation=measures.autocorrelation.get(name),
-                step=measures.steps.get(name),
+                step=step,
+                step_unit=step_unit,
             )
         )
     return tuple(rows)
