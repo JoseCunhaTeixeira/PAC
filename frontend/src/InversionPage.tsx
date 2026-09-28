@@ -29,7 +29,6 @@ import {
   type RailCell,
 } from "./components/PositionRail";
 import { judged, useReceivers, useStageStates, xmidKey } from "./components/railStates";
-import { above, upTo } from "./components/numbers";
 import { num } from "./components/viz/format";
 import { RunPanel } from "./components/RunPanel";
 import { runningJob } from "./components/jobs";
@@ -565,7 +564,7 @@ export default function InversionPage() {
                     value={free.vs_max ?? Number.NaN}
                     optional="auto"
                     min={1}
-                    check={above(free.vs_min ?? Number.NaN)}
+                    gt={free.vs_min ?? Number.NaN}
                     step={10}
                     title={
                       "Highest Vs of any layer\nEmpty: 3 × the fastest pick"
@@ -585,7 +584,7 @@ export default function InversionPage() {
                     onChange={(value) => setFree({ ...free, depth_max: value })}
                   />
                   <NumberField
-                    label="Layers at most"
+                    label="Max layers"
                     value={free.max_layers}
                     min={1}
                     max={20}
@@ -647,16 +646,17 @@ export default function InversionPage() {
                   value={nBurninIterations}
                   min={1}
                   // A model kept at least, after it.
-                  check={upTo(nIterations - SAVE_EVERY)}
+                  max={nIterations - SAVE_EVERY}
                   step={100}
                   onChange={setNBurninIterations}
                 />
                 <NumberField
                   label="Chains"
                   value={nChains}
-                  min={1}
+                  // Two at least: one chain's halves agree where two chains would settle apart.
+                  min={2}
                   step={1}
-                  title={"Compared to check convergence\nOne alone cannot be checked"}
+                  title="Compared to check convergence"
                   onChange={setNChains}
                 />
               </Fields>

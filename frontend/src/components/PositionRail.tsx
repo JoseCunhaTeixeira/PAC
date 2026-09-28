@@ -52,9 +52,9 @@ export function RailLegend({
       ))}
       {modes && (
         <span className="rail-legend-group">
-          <span data-tip="How many modes were picked in a window, written in its curve's band when more than one">
+          <span data-tip="How many modes were picked in a window, when > 1">
             <i className="count">2</i>
-            more than one mode picked
+            {"> 1 mode picked"}
           </span>
         </span>
       )}

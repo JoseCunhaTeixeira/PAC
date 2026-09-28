@@ -3,6 +3,7 @@ a run, its dispersion images and picks, an inversion and its section. sigpipe's 
 computes; these tests check what PAC asks of it and what the pages read back."""
 
 import json
+import shutil
 import time
 from collections.abc import Callable
 from typing import Any
@@ -13,7 +14,9 @@ from fastapi.testclient import TestClient
 
 from masw.api.main import app
 from masw.io.paths import output_folder
+from sigpipe.algorithms.picking.dispersion.tracking import PickingParameters, pick_modes
 from sigpipe.masw.inversion import InversionParameters, ThicknessLayer, VsLayer
+from sigpipe.masw.runs import load_image
 
 from .synthetic import N_RECEIVERS, SAMPLING, SOURCES
 
@@ -145,6 +148,35 @@ def test_the_picks_replace_their_modes_curve(run: str) -> None:
     }
     section = client.get(f"/dispersion_pseudo_section/{run}/M0").json()
     assert section["positions"] == [2.5, 5.5, 8.5]
+
+
+def test_a_windows_m0_is_picked_automatically(run: str) -> None:
+    # A copy of the run, not to change the others' windows; its window 5.5 given an M0 and an M1
+    # by hand.
+    folder = f"{run}-auto"
+    shutil.copytree(output_folder(run), output_folder(folder))
+    box = {"fmin": 10, "fmax": 60, "vmin": 300, "vmax": 800, "label": "M1"}
+    client.post(f"/dispersion_images/{folder}/5.5/pick/box", json=box)
+    box |= {"vmin": 100, "vmax": 400, "label": "M0"}
+    hand = client.post(f"/dispersion_images/{folder}/5.5/pick/box", json=box).json()
+
+    auto = client.post(f"/dispersion_images/{folder}/5.5/pick/auto").json()
+
+    # Its M0 replaced by PACo's (sigpipe's tracking picker, its defaults), its M1 kept; the window
+    # said picked automatically.
+    window = output_folder(folder) / "xmid_5.50"
+    picker = pick_modes(load_image(window), PickingParameters())[0].curve
+    assert picker is not None
+    m0, m1 = auto["curves"]
+    assert m0["label"] == "M0" and m0["fs"] == pytest.approx(picker.fs.tolist())
+    assert m0["fs"] != hand["curves"][0]["fs"]
+    assert m1 == hand["curves"][1]
+    by_position = client.get(f"/dispersion_picks_by_position/{folder}").json()
+    assert by_position[1] == {"xmid": 5.5, "labels": ["M0", "M1"], "picked_by": "auto"}
+    # A curve edited by hand afterwards is the user's.
+    client.delete(f"/dispersion_images/{folder}/5.5/pick/M1")
+    assert client.get(f"/dispersion_picks_by_position/{folder}").json()[1]["picked_by"] == "hand"
+    assert client.post(f"/dispersion_images/{folder}/9.5/pick/auto").status_code == 404
 
 
 def test_the_inversion_form_starts_from_sigpipes_defaults() -> None:

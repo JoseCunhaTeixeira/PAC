@@ -15,8 +15,12 @@ const METRIC_LABELS: Record<string, string> = {
   trigger_shift_s: "Trigger shift",
   trigger_scatter_s: "First breaks' scatter",
   energy_removed: "Energy the mute removed",
+  pulse_s: "Shot pulse",
+  spectral_outliers: "Traces off their neighbours' spectra",
+  spectral_receivers: "Receivers off their neighbours' spectra",
   // G2, an image
   coherent_columns: "Coherent columns",
+  virtual_shot_snr_db: "Virtual shot's SNR",
   ridge_at_vmin: "Columns peaking at vmin",
   ridge_at_vmax: "Columns peaking at vmax",
   band_at_fmin: "Coherent band reaches fmin",
@@ -123,7 +127,7 @@ export function metricValue(metric: Metric, value: number | null = metric.value)
   return metric.unit ? `${num(value)} ${metric.unit}` : num(value);
 }
 
-/** The metric's limit in words: "≤ 1.1", "≥ 400"; empty when it is reported only. */
+/** The metric's limit: "≤ 1.1", "≥ 400"; empty when it is reported only. */
 export function metricLimit(metric: Metric): string {
   if (metric.threshold == null || metric.bound == null) return "";
   if (BOOLEANS.has(metric.name)) return "no";

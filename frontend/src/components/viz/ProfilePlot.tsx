@@ -218,7 +218,8 @@ export function ProfilePlot({
     // The selected window: a band down every row over its receivers, and the reach its shots
     // lie within on the shots' row.
     if (selectedWindow) {
-      if (card.reach && shots.length) {
+      // Any distance (no farthest): no reach to draw.
+      if (card.reach && card.reach[1] !== null && shots.length) {
         const [, far] = card.reach;
         ctx.fillStyle = palette.reach;
         const l = X(selectedWindow.xmid - far);

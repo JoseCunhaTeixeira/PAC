@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { API, type Acquisition, type Masw, profileName } from "../api";
+import { bound, buildMaswParams } from "../builders";
 import { canvasPalette, useTheme } from "../theme";
 import { useContainerWidth } from "./useContainerWidth";
 import { AlertCircleIcon } from "./icons";
@@ -85,17 +86,18 @@ export function GeometryPlot({
     onCountRef.current = onCount;
   }, [onCount]);
 
-  // A value being typed or wrong (its field says why): the windows drawn stay as they were.
-  const settled =
-    Object.values(masw).every((v) => typeof v !== "number" || Number.isFinite(v)) &&
-    masw.distance_max > masw.distance_min;
+  // A value being typed or wrong (its field says why): the windows drawn stay as they were. A
+  // distance left empty is none: the nearest from 0, the farthest at any distance.
+  const near = bound(masw.distance_min) ?? 0;
+  const far = bound(masw.distance_max) ?? Infinity;
+  const settled = Number.isFinite(masw.length) && Number.isFinite(masw.step) && far > near;
   useEffect(() => {
     if (!settled) return;
     const timer = setTimeout(() => {
       fetch(`${API}/windows`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile: profileName(acquisition), masw }),
+        body: JSON.stringify({ profile: profileName(acquisition), masw: buildMaswParams(masw) }),
       })
         .then(async (res) => {
           const body = await res.json().catch(() => null);
@@ -136,11 +138,14 @@ export function GeometryPlot({
   const lanesBottom = relief ? ELEVATION_TOP + ELEVATION.h : LANE_BOTTOM;
   const axisTop = lanesBottom + (relief ? ELEVATION.after : LANE.axisGap);
   const sloped = relief !== null && !relief.flat;
-  const height = axisTop + LANE.axisH;
+  // No shot (a passive line): no shots' lane, the others drawn as high as it (the lanes' own
+  // heights `lift` above the canvas's).
+  const lift = showSources ? 0 : LANE.receiverY - SHOT_Y;
+  const height = axisTop + LANE.axisH - lift;
   // The line's extent as every page's (lineDraw's), so that a window is as wide here as there.
   const extent = useMemo((): Range => lineSpan([...receivers, ...shots.map((shot) => shot.x)]), [receivers, shots]);
   const full = useMemo(() => ({ x: extent, y: [0, 1] as Range }), [extent]);
-  const plots: PlotRect[] = [{ left: ML, top: 0, width: plotW, height: axisTop, xAxis: LANE.axisH }];
+  const plots: PlotRect[] = [{ left: ML, top: 0, width: plotW, height: axisTop - lift, xAxis: LANE.axisH }];
   const zoom = useZoom({
     extent: full,
     plots,
@@ -187,7 +192,7 @@ export function GeometryPlot({
     return null;
   }
 
-  const hit = mouse ? hitAt(mouse.x, mouse.y) : null;
+  const hit = mouse ? hitAt(mouse.x, mouse.y + lift) : null;
   const picked = hit?.row === "window" ? windows[hit.index] : undefined;
 
   const tooltip = useMemo((): string[] | null => {
@@ -237,13 +242,14 @@ export function GeometryPlot({
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
+    ctx.translate(0, -lift);
     const px = (x: number) => ML + ((x - x0) / (x1 - x0)) * plotW;
     drawLaneLabels(ctx, axes.tick, showSources);
     if (relief) drawElevation(ctx, relief, ELEVATION_TOP, [x0, x1], plotW, { tick: axes.tick, ground: palette.muted });
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(ML, 0, plotW, height);
+    ctx.rect(ML, lift, plotW, height);
     ctx.clip();
 
     // The window under the pointer: a band down every lane over its receivers, and the
@@ -252,8 +258,9 @@ export function GeometryPlot({
       if (showSources) {
         ctx.fillStyle = palette.reach;
         for (const side of [-1, 1]) {
-          const a = px(picked.xmid + side * masw.distance_min);
-          const b = px(picked.xmid + side * masw.distance_max);
+          const a = px(picked.xmid + side * near);
+          // Any distance: to the line's end, and past it.
+          const b = px(picked.xmid + side * Math.min(far, 10 * (x1 - x0)));
           ctx.fillRect(Math.min(a, b), SHOT_Y - 11, Math.abs(b - a), 22);
         }
       }
@@ -309,8 +316,8 @@ export function GeometryPlot({
 
     drawLineAxis(ctx, [x0, x1], plotW, axes, axisTop);
   }, [
-    width, height, plotW, x0, x1, windows, receivers, shots, picked, hit, masw, showSources, axes,
-    palette, theme, relief, lanesBottom, axisTop, starR, triangleR,
+    width, height, plotW, x0, x1, windows, receivers, shots, picked, hit, near, far, showSources, axes,
+    palette, theme, relief, lanesBottom, axisTop, starR, triangleR, lift,
   ]);
 
   function logical(e: React.MouseEvent<HTMLCanvasElement>) {

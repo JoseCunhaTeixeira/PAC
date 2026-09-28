@@ -613,6 +613,18 @@ button.ghost:hover:not(:disabled) {
   color: var(--text);
 }
 
+/* An action apart from those beside it (the lasso's steps, the automatic pick): tinted. */
+button.tinted {
+  background: var(--info-bg);
+  color: var(--info-text);
+  border: 1px solid color-mix(in srgb, var(--info-text) 32%, transparent);
+  box-shadow: none;
+}
+
+button.tinted:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--info-text) 16%, var(--info-bg));
+}
+
 button.danger {
   background: transparent;
   color: var(--danger-text);
@@ -1543,6 +1555,112 @@ button.rail-cell:active {
   color: var(--text);
 }
 
+/* A sketch of what each muting setting cuts (computing.tsx's MuteSketch), drawn as the preview
+   draws a muting: removed veiled, tapers half veiled, kept clear. */
+.mute-sketch {
+  display: block;
+  font-size: 10px;
+}
+
+/* The row's info, inside its switch's box, after its options: the sketch opening large on hover
+   (or focus). */
+.segmented.with-after {
+  display: inline-flex;
+  align-items: center;
+}
+
+.segmented.with-after > button {
+  flex: 1 1 0;
+}
+
+.segmented-after {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px 0 5px;
+}
+
+.sketch-info {
+  position: relative;
+  display: inline-flex;
+  color: var(--text-muted);
+  cursor: help;
+}
+
+.sketch-pop {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -8px;
+  z-index: 30;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+}
+
+.sketch-info:hover .sketch-pop,
+.sketch-info:focus-visible .sketch-pop {
+  display: block;
+}
+
+/* Removed veiled, the kept signal shaded in the series' blue, its tapers between. */
+.mute-sketch .removed {
+  fill: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+.mute-sketch .kept {
+  fill: color-mix(in srgb, var(--blue) 30%, var(--surface));
+}
+
+/* Half removed: the signal hatched with the veil. */
+.mute-sketch .taper {
+  fill: url(#mute-sketch-hatch);
+}
+
+.mute-sketch .hatch-ground {
+  fill: color-mix(in srgb, var(--blue) 30%, var(--surface));
+}
+
+.mute-sketch .hatch {
+  stroke: color-mix(in srgb, var(--text-muted) 60%, transparent);
+  stroke-width: 2;
+}
+
+
+.mute-sketch .frame {
+  fill: none;
+  stroke: var(--border-strong);
+}
+
+.mute-sketch .arrival {
+  stroke: var(--text);
+  stroke-width: 1.4;
+}
+
+.mute-sketch .edge,
+.mute-sketch .bracket {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-dasharray: 3 3;
+}
+
+.mute-sketch .bracket {
+  stroke-dasharray: none;
+}
+
+/* The shot's time, once the trigger delay is cut: where From and To count from. */
+.mute-sketch .limit {
+  stroke: var(--text-muted);
+  stroke-dasharray: 1 3;
+}
+
+
+
+.mute-sketch text {
+  fill: var(--text-muted);
+}
+
 /* The picking page. */
 
 .pick-grid {
@@ -1568,6 +1686,17 @@ button.rail-cell:active {
 }
 
 .pick-bar > svg {
+  color: var(--text-faint);
+}
+
+/* The automatic pick, with its "or": apart from the lasso's steps, a line of its own when they
+   leave no room. */
+.pick-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 26px;
+  font-size: var(--fs-small);
   color: var(--text-faint);
 }
 
@@ -1792,6 +1921,12 @@ table.layers input[type="number"] {
 
 .tip-layer b {
   font-weight: 650;
+}
+
+/* A field's bound on its hover ("≥ 0 s"): yellow, the tooltips' own dark ground under it in
+   both themes (the dark theme's --warn-text). */
+.tip-bound {
+  color: #f1c15c;
 }
 
 [data-theme="dark"] .tip-layer {
@@ -2032,7 +2167,8 @@ button.run-issue.wrong:hover {
   background: color-mix(in srgb, var(--danger-text) 12%, var(--danger-bg));
 }
 
-.tip-layer.danger b {
+.tip-layer.danger b,
+.tip-layer.danger .tip-bound {
   color: #ff9b94;
 }
 

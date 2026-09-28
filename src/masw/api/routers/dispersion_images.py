@@ -170,6 +170,17 @@ def pick_box(folder: str, xmid: float, request: BoxPickRequest) -> DispersionIma
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.post("/dispersion_images/{folder:path}/{xmid}/pick/auto")
+def pick_auto(folder: str, xmid: float) -> DispersionImageOut:
+    """The window's M0 picked automatically, replacing its M0."""
+    try:
+        return _to_image_out(io.auto_pick_m0(folder, xmid))
+    except io.NoCurveFound as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.delete("/dispersion_images/{folder:path}/{xmid}/pick/{label}")
 def delete_pick(folder: str, xmid: float, label: str) -> DispersionImageOut:
     try:

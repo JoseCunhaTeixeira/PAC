@@ -4,6 +4,7 @@ or too far from its middle, or left with too few receivers once its bad traces w
 From the window's window.json (the records it stacks, as the run built it), the run's manifest
 (its exclusions and distances) and, for a run the assistant made, its log (the reasons)."""
 
+import math
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, cast
@@ -18,6 +19,7 @@ from masw.io.quality.files import (
     preset_stage,
     read_manifest,
     read_window,
+    shot_distances,
 )
 from masw.io.quality.log import LINE, QCLog, line_receivers, read_log
 from masw.io.quality.view import Sentence, flag_text, number, plural, span
@@ -94,7 +96,8 @@ def _shots(
     last: float,
 ) -> tuple[Shot, ...]:
     masw = preset_stage(manifest, "masw")
-    near, far = float(masw["distance_min"]), float(masw["distance_max"])
+    near, farthest = shot_distances(masw)
+    far = math.inf if farthest is None else farthest
     stacked = {path.name: index for index, path in enumerate(window.selected_files)}
     width = len(window.receiver_indices)
     # The receivers left out of every window are the line's, not a shot's.
@@ -247,15 +250,15 @@ def _sentences(
                 f"{len(window.receiver_indices)} receivers: bad traces left out.",
             )
         )
-    masw = preset_stage(manifest, "masw")
+    near, far = shot_distances(preset_stage(manifest, "masw"))
     reasons = {
         "excluded": "rejected by the signal check",
         "failed": "failed to preprocess",
-        "far": f"beyond the {number(float(masw['distance_max']), 4)} m reach",
+        "far": f"beyond the {number(far, 4)} m reach" if far is not None else "beyond the reach",
         "near": (
             f"in the near field (nearer than {number(field, 4)} m to the window)"
             if (field := near_field(log)) is not None
-            else f"within {number(float(masw['distance_min']), 4)} m"
+            else f"within {number(near, 4)} m"
         ),
         "inside": "inside the window",
         "traces": "left with too few receivers",

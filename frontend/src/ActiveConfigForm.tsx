@@ -2,6 +2,7 @@ import { useState } from "react";
 import { type Dispersion, type Masw } from "./api";
 import {
   buildFilteringParams,
+  buildMaswParams,
   buildMutingParams,
   buildStackingParams,
   buildTriggerParams,
@@ -57,7 +58,6 @@ function Form({
   // The settings, kept for this profile when the page is left; frozen while their job runs.
   const kept = `pac.form.active.${profile}`;
   const [running, setRunning] = useState(false);
-  const maxTime = Number(acquisition.durations[0]?.toFixed(2) ?? 0);
   const nyquist = (acquisition.sampling_frequencies[0] ?? 0) / 2;
   const nCpus = navigator.hardwareConcurrency || 1;
 
@@ -101,7 +101,7 @@ function Form({
     profile,
     mode: "active",
     overrides: {
-      masw,
+      masw: buildMaswParams(masw),
       trigger: buildTriggerParams(trigger, muting),
       muting: buildMutingParams(muting),
       filtering: buildFilteringParams(filtering),
@@ -134,7 +134,6 @@ function Form({
               acquisition={acquisition}
               muting={muting}
               setMuting={setMuting}
-              maxTime={maxTime}
               trigger={{ t0: trigger.t0, setT0: (t0) => setTrigger({ t0 }) }}
             />
             <FilteringRow
@@ -155,6 +154,7 @@ function Form({
               dispersion={dispersion}
               setDispersion={setDispersion}
               nyquist={nyquist}
+              kept={filtering.method === "iir" ? [filtering.fmin, filtering.fmax] : undefined}
             />
             {preset.values.image_stacking && (
               <StackingRow

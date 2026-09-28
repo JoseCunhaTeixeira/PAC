@@ -249,12 +249,12 @@ function metricRows(metrics: Metric[]): MetricRow[] {
   return rows;
 }
 
-/** A floor and a ceiling as one band: "20–30 %". */
+/** A floor and a ceiling as one band: "≥ 20, ≤ 30 %". */
 function band(low: Metric, high: Metric): string {
   const from = metricValue(low, low.threshold);
   const to = metricValue(high, high.threshold);
   const unit = / (\S+)$/.exec(to)?.[1];
-  return unit && from.endsWith(` ${unit}`) ? `${from.slice(0, -unit.length - 1)}–${to}` : `${from} – ${to}`;
+  return `≥ ${unit && from.endsWith(` ${unit}`) ? from.slice(0, -unit.length - 1) : from}, ≤ ${to}`;
 }
 
 /** Each gate's metrics against their limits. */

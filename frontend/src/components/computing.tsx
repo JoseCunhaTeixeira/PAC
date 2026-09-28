@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { API, type Acquisition, type Dispersion, type Masw } from "../api";
+import { bound } from "../builders";
 import type { FilteringState, MutingState, StackingState } from "../presets";
 import { GeometryPlot } from "./GeometryPlot";
-import { ArrowRightIcon, CpuIcon, FilterIcon, FolderIcon, RulerIcon, ScissorsIcon, SpectrumIcon, StackIcon } from "./icons";
+import { ArrowRightIcon, CpuIcon, FilterIcon, FolderIcon, InfoIcon, RulerIcon, ScissorsIcon, SpectrumIcon, StackIcon } from "./icons";
 import { Callout, Card, Empty, Fields, NumberField, NumberInput, Page, Segmented, SelectField, Stat, Stats } from "./kit";
 import { runningJob } from "./jobs";
-import { above, boundsOf, tipOf } from "./numbers";
+import { boundsOf, tipOf, written } from "./numbers";
+import { dataEnd, distinct, sampleOf, shortestRecord } from "./records";
 import { useStoredState } from "./stored";
 import { MuteGather } from "./MuteGather";
 import type { ArtKind } from "./PageArt";
@@ -159,10 +161,9 @@ function AcquisitionCard({ acquisition, showSources }: { acquisition: Acquisitio
   const receivers = acquisition.receiver_positions.map((p) => p[0]);
   const spacing = spacingOf(receivers);
   const length = receivers.length ? Math.max(...receivers) - Math.min(...receivers) : 0;
-  const durations = acquisition.durations.filter((d) => Number.isFinite(d));
+  // Every length the records have; the shortest sets the settings' limits (see records.ts).
+  const durations = distinct(acquisition.durations);
   const rates = acquisition.sampling_frequencies.filter((f) => Number.isFinite(f));
-  const low = durations.length ? Math.min(...durations) : 0;
-  const high = durations.length ? Math.max(...durations) : 0;
   const rate = rates.length ? rates[0] : 0;
   return (
     <Card title="Acquisition" icon={<FolderIcon size={17} />}>
@@ -170,7 +171,11 @@ function AcquisitionCard({ acquisition, showSources }: { acquisition: Acquisitio
         <Stat label="Records" value={acquisition.files.length} />
         <Stat label="Receivers" value={receivers.length} sub={`every ${+spacing.toFixed(3)} m`} />
         <Stat label="Line length" value={`${+length.toFixed(2)} m`} />
-        <Stat label="Duration" value={low === high ? `${+low.toFixed(2)} s` : `${+low.toFixed(2)}–${+high.toFixed(2)} s`} />
+        <Stat
+          label="Duration"
+          value={`${durations.length ? durations.join(", ") : 0} s`}
+          sub={durations.length > 1 ? "the shortest sets the limits" : undefined}
+        />
         <Stat label="Sampling" value={`${+rate.toFixed(1)} Hz`} sub={`Nyquist ${+(rate / 2).toFixed(1)} Hz`} />
       </Stats>
       <details className="fold" style={{ marginTop: 14 }}>
@@ -264,6 +269,7 @@ export function WindowsCard({
           onChange={(v) => setMasw({ ...masw, length: v })}
           min={3}
           max={receivers}
+          whole
           hint={Number.isFinite(masw.length) ? `${+((masw.length - 1) * spacing).toFixed(2)} m` : undefined}
         />
         <NumberField
@@ -273,25 +279,32 @@ export function WindowsCard({
           onChange={(v) => setMasw({ ...masw, step: v })}
           min={1}
           max={receivers}
+          whole
           hint={Number.isFinite(masw.step) ? `${+(masw.step * spacing).toFixed(2)} m` : undefined}
         />
-        <NumberField
-          label="Nearest shot"
-          title="From the window's middle"
-          unit="m"
-          value={masw.distance_min}
-          onChange={(v) => setMasw({ ...masw, distance_min: v })}
-          min={0}
-        />
-        <NumberField
-          label="Farthest shot"
-          title="From the window's middle"
-          unit="m"
-          value={masw.distance_max}
-          onChange={(v) => setMasw({ ...masw, distance_max: v })}
-          min={0}
-          check={above(masw.distance_min)}
-        />
+        {/* The shots' distances: a passive line has no shot. */}
+        {showSources && (
+          <>
+            <NumberField
+              label="Nearest shot"
+              title="From the window's middle"
+              unit="m"
+              value={masw.distance_min ?? Number.NaN}
+              optional="0"
+              onChange={(v) => setMasw({ ...masw, distance_min: v })}
+              min={0}
+            />
+            <NumberField
+              label="Farthest shot"
+              title="From the window's middle"
+              unit="m"
+              value={masw.distance_max ?? Number.NaN}
+              optional="∞"
+              onChange={(v) => setMasw({ ...masw, distance_max: v })}
+              gt={bound(masw.distance_min) ?? 0}
+            />
+          </>
+        )}
       </Fields>
       <div style={{ marginTop: 18 }}>
         <GeometryPlot acquisition={acquisition} masw={masw} onCount={onCount} showSources={showSources} unit={unit} />
@@ -300,32 +313,46 @@ export function WindowsCard({
   );
 }
 
-/** Each shot or record cut: muting on, the trigger's shift first (`trigger`, the modes of shots:
- * left empty, each record's own, from its file), then a time window and the arrivals between two
- * velocities, each bound left empty when none, the shot's pulse kept after the slowest; the
- * record previewed, what the muting removes veiled. Off, none of it applies. */
+/** Each shot cut: muting on, the trigger's shift first (left empty, each record's own, from its
+ * file), then a time window and the arrivals between two velocities, each bound left empty when
+ * none, the shot's pulse kept after the slowest; the record previewed, what the muting removes
+ * veiled. Off, none of it applies. Each number kept to what the records hold, as sigpipe checks
+ * it: the shortest record, the data that ends first once moved (see records.ts). A passive line
+ * has no muting (the user, 2026-09-28): no shot to count a velocity from. */
 export function MutingRow({
   acquisition,
   muting,
   setMuting,
-  maxTime,
   gather = true,
   trigger,
 }: {
   acquisition: Acquisition;
   muting: MutingState;
   setMuting: (muting: MutingState) => void;
-  maxTime: number;
   gather?: boolean;
   trigger?: { t0: number | null; setT0: (t0: number) => void };
 }) {
-  // What the files say of their trigger, optional (a file may not say it: no shift for it):
-  // one value, in all of them or some, each its own, or nothing.
+  // What the files' headers say of the trigger, optional (a file may not say it: no shift for
+  // it): one value, in all of them or some, each value when they differ (left empty, each record
+  // moved by its own), or nothing.
   const known = (acquisition.triggers ?? []).filter((t): t is number => t !== null);
-  const said = [...new Set(known)];
-  const where = known.length === acquisition.files.length ? "the files" : `${known.length} of ${acquisition.files.length} files`;
+  const said = distinct(known);
+  const where = known.length === acquisition.files.length ? "the files' headers" : `${known.length} of ${acquisition.files.length} files' headers`;
   const files =
-    said.length === 0 ? "none in the files" : said.length === 1 ? `${+(said[0] * 1000).toFixed(1)} ms in ${where}` : `each file's own (${where})`;
+    said.length === 0
+      ? "none in the files' headers"
+      : said.length === 1
+        ? `${said[0]} s in ${where}`
+        : `${said.join(", ")} s in ${where}: each its own`;
+  // The limits: the records' data, once moved by the trigger, end first at `data`; the trigger
+  // leaves the pulse at the shot (the signal width, one sample at least), a window starts
+  // before the data's end.
+  const record = shortestRecord(acquisition);
+  const sample = sampleOf(acquisition);
+  const data = dataEnd(acquisition, trigger ? trigger.t0 : 0);
+  const width = bound(muting.width) ?? sample;
+  const tmin = bound(muting.tmin) ?? 0;
+  const vmin = bound(muting.vmin) ?? 0;
   return (
     <Row
       icon={<ScissorsIcon size={16} />}
@@ -345,43 +372,180 @@ export function MutingRow({
             { value: "none", label: "Off" },
             { value: "mute", label: "Mute" },
           ]}
+          after={
+            // What each setting is, on a sketch: large, on hover; with the muting on only.
+            muting.method === "mute" && (
+              <span className="sketch-info" tabIndex={0} aria-label="What each muting setting is">
+                <InfoIcon size={15} />
+                <span className="sketch-pop" role="tooltip">
+                  <MuteSketch scale={1.7} />
+                </span>
+              </span>
+            )
+          }
         />
       }
     >
       {muting.method === "mute" && (
         <>
-          <Fields>
+          <Fields min={100} fit>
             {trigger && (
               <NumberField
-                label="Trigger t0"
+                label="Trigger delay"
                 unit="s"
-                title={"Moves each shot's time origin\nLate (t0 > 0): drops the record's first t0 seconds\nEarly (t0 < 0): pads its start\nEmpty: each record's own, from its file"}
                 value={trigger.t0 ?? Number.NaN}
-                optional="files"
+                // Untouched on files that differ (null): each record's own; emptied: 0.
+                optional={trigger.t0 === null ? "files" : "0"}
                 hint={files}
                 onChange={trigger.setT0}
+                min={0}
+                max={record - width}
                 step={0.001}
               />
             )}
-            <NumberField label="From" unit="s" value={muting.tmin ?? Number.NaN} optional="none" onChange={(v) => setMuting({ ...muting, tmin: v })} min={0} max={maxTime} step={0.1} />
-            <NumberField label="To" unit="s" value={muting.tmax ?? Number.NaN} optional="none" onChange={(v) => setMuting({ ...muting, tmax: v })} min={0} max={maxTime} step={0.1} check={above(muting.tmin ?? Number.NaN)} />
+            <NumberField
+              label="From"
+              unit="s"
+              value={muting.tmin ?? Number.NaN}
+              optional="none"
+              onChange={(v) => setMuting({ ...muting, tmin: v })}
+              min={0}
+              lt={data}
+              step={0.1}
+            />
+            <NumberField
+              label="To"
+              unit="s"
+              value={muting.tmax ?? Number.NaN}
+              optional="none"
+              onChange={(v) => setMuting({ ...muting, tmax: v })}
+              gt={tmin}
+              max={record}
+              step={0.1}
+            />
             <NumberField label="Slowest" unit="m/s" value={muting.vmin ?? Number.NaN} optional="none" onChange={(v) => setMuting({ ...muting, vmin: v })} min={0} />
-            <NumberField label="Fastest" unit="m/s" value={muting.vmax ?? Number.NaN} optional="none" onChange={(v) => setMuting({ ...muting, vmax: v })} min={0} check={above(muting.vmin ?? Number.NaN)} />
+            <NumberField
+              label="Fastest"
+              unit="m/s"
+              value={muting.vmax ?? Number.NaN}
+              optional="none"
+              onChange={(v) => setMuting({ ...muting, vmax: v })}
+              gt={vmin}
+            />
+            {/* Empty: one sample (the least, the default). */}
             <NumberField
               label="Signal width"
               unit="s"
-              title={"Kept after the slowest arrival: the shot's pulse\nSo that the window is not empty at the shot"}
-              value={muting.width}
+              value={muting.width !== null && Math.abs(muting.width - sample) > 1e-12 ? muting.width : Number.NaN}
+              optional={written(sample)}
               onChange={(v) => setMuting({ ...muting, width: v })}
-              min={0}
+              min={sample}
+              max={data}
               step={0.01}
             />
-            <NumberField label="Taper" unit="samples" value={muting.taper} onChange={(v) => setMuting({ ...muting, taper: v })} min={0} />
+            <NumberField
+              label="Taper"
+              unit="samples"
+              value={muting.taper ? muting.taper : Number.NaN}
+              optional="none"
+              onChange={(v) => setMuting({ ...muting, taper: v })}
+              min={0}
+              whole
+            />
           </Fields>
-          {gather && <MuteGather acquisition={acquisition} muting={muting} trigger={trigger ? (trigger.t0 ?? null) : 0} />}
+          {gather && (
+            <MuteGather
+              acquisition={acquisition}
+              muting={muting}
+              trigger={trigger ? (trigger.t0 === null ? null : (bound(trigger.t0) ?? 0)) : 0}
+            />
+          )}
         </>
       )}
     </Row>
+  );
+}
+
+// What each muting setting is, on a sketch of a record, always the same (the preview shows the
+// record itself): time down from the recording's start, distance from the shot along; the signal
+// kept shaded, what is removed veiled, the tapers hatched. Each setting named as its field: at the
+// shot, the trigger delay and the window's width on the left; the times From and To on the right,
+// spans from the trigger limit (the shot's time, dotted), as the muting measures them; the
+// velocities and the taper on their lines.
+const SKETCH = {
+  w: 440,
+  h: 166,
+  left: 122, // the shot's distance
+  right: 360,
+  start: 10, // the recording's start
+  shot: 28, // the trigger limit: after the trigger delay
+  from: 36, // after the trigger limit
+  to: 116,
+  bottom: 146, // the record's end
+  fast: 0.08, // down a unit along: the fastest arrival
+  slow: 0.26, // the slowest
+  width: 32, // the window at the shot: the fastest from its top, the slowest from its bottom
+  taper: 9,
+} as const;
+
+export function MuteSketch({ scale = 1 }: { scale?: number }) {
+  const g = SKETCH;
+  const fastAt = (x: number) => g.shot + (x - g.left) * g.fast;
+  // The slowest from the width's bottom border: what is kept after it at every distance.
+  const slowAt = (x: number) => g.shot + g.width + (x - g.left) * g.slow;
+  const first = (x: number) => Math.max(fastAt(x), g.from);
+  const last = (x: number) => Math.min(slowAt(x), g.to);
+  const xs = Array.from({ length: 49 }, (_, i) => g.left + ((g.right - g.left) * i) / 48);
+  const points = (edge: (x: number) => number, back: (x: number) => number) =>
+    [...xs.map((x) => [x, edge(x)]), ...[...xs].reverse().map((x) => [x, back(x)])]
+      .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`)
+      .join(" ");
+  const text = (x: number, y: number, words: string, anchor: "start" | "end" | "middle" = "start", slope = 0) => (
+    <text x={x} y={y} textAnchor={anchor} transform={slope ? `rotate(${(Math.atan(slope) * 180) / Math.PI} ${x} ${y})` : undefined}>
+      {words}
+    </text>
+  );
+  // A time span as a bracket: on the left, opening right; on the right, opening left.
+  const bracket = (x: number, y0: number, y1: number, side: "left" | "right") => (
+    <path className="bracket" d={side === "left" ? `M${x},${y0}h-4V${y1}h4` : `M${x},${y0}h4V${y1}h-4`} />
+  );
+  const along = (at: number) => g.left + (g.right - g.left) * at;
+  return (
+    <svg className="mute-sketch" viewBox={`0 0 ${g.w} ${g.h}`} width={g.w * scale} height={g.h * scale} role="img" aria-label="What each muting setting is">
+      <defs>
+        <pattern id="mute-sketch-hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect className="hatch-ground" width="4" height="4" />
+          <line className="hatch" x1="0" y1="0" x2="0" y2="4" />
+        </pattern>
+      </defs>
+      <rect className="removed" x={g.left} y={g.start} width={g.right - g.left} height={g.bottom - g.start} />
+      <polygon className="kept" points={points(first, last)} />
+      <polygon className="taper" points={points(first, (x) => Math.min(first(x) + g.taper, last(x)))} />
+      <polygon className="taper" points={points((x) => Math.max(last(x) - g.taper, first(x)), last)} />
+      {/* The trigger limit: the shot's time, where From and To count from. */}
+      <line className="limit" x1={g.left} y1={g.shot} x2={g.right + 48} y2={g.shot} />
+      <line className="edge" x1={g.left} y1={g.from} x2={g.right} y2={g.from} />
+      <line className="edge" x1={g.left} y1={g.to} x2={g.right} y2={g.to} />
+      {/* From the width's borders at the shot: the fastest starts what is kept, the slowest ends it. */}
+      <line className="arrival" x1={g.left} y1={g.shot} x2={g.right} y2={fastAt(g.right)} />
+      <line className="arrival" x1={g.left} y1={g.shot + g.width} x2={g.right} y2={slowAt(g.right)} />
+      <rect className="frame" x={g.left} y={g.start} width={g.right - g.left} height={g.bottom - g.start} />
+      {bracket(g.left - 5, g.start, g.shot, "left")}
+      {text(g.left - 13, (g.start + g.shot) / 2 + 3.5, "Trigger delay", "end")}
+      {bracket(g.left - 5, g.shot, g.shot + g.width, "left")}
+      {text(g.left - 13, g.shot + g.width / 2 + 3.5, "Signal width", "end")}
+      {bracket(g.right + 5, g.shot, g.from, "right")}
+      {text(g.right + 14, (g.shot + g.from) / 2 + 3.5, "From")}
+      {/* Past From's label, so that its line crosses nothing. */}
+      {bracket(g.right + 44, g.shot, g.to, "right")}
+      {text(g.right + 53, (g.shot + g.to) / 2 + 3.5, "To")}
+      {/* The velocities and the taper, on their lines. */}
+      {text(along(0.34), first(along(0.34)) + g.taper + 10, "Fastest", "middle", g.fast)}
+      {text(along(0.3), slowAt(along(0.3)) + 13, "Slowest", "middle", g.slow)}
+      {text(along(0.8), first(along(0.8)) + g.taper + 11, "Taper", "middle", g.fast)}
+      {text(g.left - 13, g.bottom, "time ↓", "end")}
+      {text(g.right, g.bottom + 14, "distance from the shot →", "end")}
+    </svg>
   );
 }
 
@@ -415,8 +579,17 @@ export function FilteringRow({
       {filtering.method === "iir" && (
         <Fields>
           <NumberField label="Low cut" unit="Hz" value={filtering.fmin} onChange={(v) => setFiltering({ ...filtering, fmin: v })} min={0} max={nyquist} step={5} />
-          <NumberField label="High cut" unit="Hz" value={filtering.fmax} onChange={(v) => setFiltering({ ...filtering, fmax: v })} min={0} max={nyquist} step={5} check={above(filtering.fmin)} />
-          <NumberField label="Order" value={filtering.order} onChange={(v) => setFiltering({ ...filtering, order: v })} min={4} step={1} />
+          {/* Below Nyquist, strictly: the filter's design refuses it. */}
+          <NumberField
+            label="High cut"
+            unit="Hz"
+            value={filtering.fmax}
+            onChange={(v) => setFiltering({ ...filtering, fmax: v })}
+            gt={filtering.fmin}
+            lt={nyquist}
+            step={5}
+          />
+          <NumberField label="Order" value={filtering.order} onChange={(v) => setFiltering({ ...filtering, order: v })} min={4} step={1} whole />
         </Fields>
       )}
     </Row>
@@ -457,12 +630,12 @@ export function StackingRow({
     >
       {stacking.method === "phase_weighted" && (
         <Fields>
-          <NumberField label="Power ν" value={stacking.nu} onChange={(v) => setStacking({ ...stacking, nu: v })} min={0} />
+          <NumberField label="Power ν" value={stacking.nu} onChange={(v) => setStacking({ ...stacking, nu: v })} min={0} whole />
         </Fields>
       )}
       {stacking.method === "root" && (
         <Fields>
-          <NumberField label="Root n" value={stacking.n} onChange={(v) => setStacking({ ...stacking, n: v })} min={1} />
+          <NumberField label="Root n" value={stacking.n} onChange={(v) => setStacking({ ...stacking, n: v })} min={1} whole />
         </Fields>
       )}
     </Row>
@@ -473,24 +646,42 @@ export function DispersionRows({
   dispersion,
   setDispersion,
   nyquist,
+  kept,
 }: {
   dispersion: Dispersion;
   setDispersion: (dispersion: Dispersion) => void;
   nyquist: number;
+  /** The band the filter (and, passive, the whitening) keeps: the image overlaps it, as sigpipe
+   * checks (outside, noise alone). */
+  kept?: [number, number];
 }) {
+  const [keptLow, keptHigh] = kept ?? [0, nyquist];
   return (
     <>
       <Row icon={<SpectrumIcon size={16} />} title="Frequencies">
         <Fields>
-          <NumberField label="From" unit="Hz" value={dispersion.fmin} onChange={(v) => setDispersion({ ...dispersion, fmin: v })} min={0} max={nyquist} />
-          <NumberField label="To" unit="Hz" value={dispersion.fmax} onChange={(v) => setDispersion({ ...dispersion, fmax: v })} min={0} max={nyquist} check={above(dispersion.fmin)} />
+          <NumberField label="From" unit="Hz" value={dispersion.fmin} onChange={(v) => setDispersion({ ...dispersion, fmin: v })} min={0} lt={Math.min(nyquist, keptHigh)} />
+          <NumberField
+            label="To"
+            unit="Hz"
+            value={dispersion.fmax}
+            onChange={(v) => setDispersion({ ...dispersion, fmax: v })}
+            gt={Math.max(dispersion.fmin, keptLow)}
+            max={nyquist}
+          />
         </Fields>
       </Row>
       <Row icon={<RulerIcon size={16} />} title="Phase velocities">
         <Fields>
           <NumberField label="From" unit="m/s" value={dispersion.vmin} onChange={(v) => setDispersion({ ...dispersion, vmin: v })} min={1} />
-          <NumberField label="To" unit="m/s" value={dispersion.vmax} onChange={(v) => setDispersion({ ...dispersion, vmax: v })} min={1} check={above(dispersion.vmin)} />
-          <NumberField label="Steps" value={dispersion.nv} onChange={(v) => setDispersion({ ...dispersion, nv: v })} min={1000} />
+          <NumberField
+            label="To"
+            unit="m/s"
+            value={dispersion.vmax}
+            onChange={(v) => setDispersion({ ...dispersion, vmax: v })}
+            gt={dispersion.vmin}
+          />
+          <NumberField label="Steps" value={dispersion.nv} onChange={(v) => setDispersion({ ...dispersion, nv: v })} min={1000} whole />
         </Fields>
       </Row>
     </>
@@ -511,9 +702,9 @@ export function WorkersField({
 }) {
   // Its icon and its word say it as its number does: what it is, then its bounds.
   return (
-    <label className="workers" data-tip={tipOf(tip, boundsOf(1, maxWorkers))}>
+    <label className="workers" data-tip={tipOf(tip, boundsOf({ min: 1, max: maxWorkers }))}>
       <CpuIcon size={15} />
-      <NumberInput min={1} max={maxWorkers} value={workers} onChange={setWorkers} data-tip={tip} />
+      <NumberInput min={1} max={maxWorkers} value={workers} onChange={setWorkers} data-tip={tip} whole />
       <span>workers</span>
     </label>
   );

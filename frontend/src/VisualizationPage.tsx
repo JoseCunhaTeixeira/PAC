@@ -153,9 +153,9 @@ function LineLegend({
               </span>
             )))}
       {windows && overview?.cells.some((cell) => (cell.modes?.length ?? 0) > 1) && (
-        <span data-tip="How many modes were picked in a window, written in its curve's band when more than one">
+        <span data-tip="How many modes were picked in a window, when > 1">
           <i className="viz-swatch count">2</i>
-          more than one mode picked
+          {"> 1 mode picked"}
         </span>
       )}
       {windows && uses && (
