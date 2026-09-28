@@ -193,6 +193,8 @@ def test_a_pac_run_shows_its_records_measures_without_verdicts(run: str) -> None
     overview = client.get(f"/quality/records/overview/{run}").json()
 
     assert overview["paco"] is False and overview["summary"] == "2 of 2 records used"
+    # Measured by the job, beside each preprocessed record.
+    assert len(list((OUTPUT_DIR / run).glob("records/*/SignalMeasures_0000.json"))) == 2
     cells = overview["cells"]
     assert [(one["key"], one["x"]) for one in cells] == [("1.mseed", -2.0), ("2.mseed", 13.0)]
     # The synthetic wavelet stands far above its noise.
@@ -254,7 +256,13 @@ def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:
     assert unpicked["status"] == "none" and "No curve picked." in _texts(unpicked)
 
 
-def test_a_pac_inversion_is_measured_once_as_the_assistant_measures_it(run: str) -> None:
+def test_a_pac_inversion_saves_its_measures_as_the_assistant_does(run: str) -> None:
+    # The job saved them where the assistant saves its own; Visualization only reads them.
+    path = OUTPUT_DIR / run / "xmid_2.50" / "SeismicInversion_Measures_0000.json"
+    measures = InversionMeasures.model_validate_json(path.read_text())
+    assert measures.samples_per_chain > 0 and measures.useful_reference == USEFUL_REFERENCE
+    saved = path.stat().st_mtime_ns
+
     overview = client.get(f"/quality/inversion/overview/{run}").json()
 
     assert overview["paco"] is False
@@ -267,60 +275,51 @@ def test_a_pac_inversion_is_measured_once_as_the_assistant_measures_it(run: str)
     assert (settings["layers"]["value"], settings["layers"]["detail"]) == ("1", "over a half-space")
     assert settings["depth"]["value"] == "5 m"  # the sum of the thickness_max as run
     assert all(one["origin"] == "pac" for one in settings.values())
-    # The measures, saved where the assistant saves them, and read back from there.
-    path = OUTPUT_DIR / run / "xmid_2.50" / "SeismicInversion_Measures_0000.json"
-    measures = InversionMeasures.model_validate_json(path.read_text())
-    assert measures.samples_per_chain > 0
-    saved = path.stat().st_mtime_ns
-    client.get(f"/quality/inversion/overview/{run}")
     assert path.stat().st_mtime_ns == saved
 
 
-def test_an_inversion_newer_than_its_measures_is_measured_again(run: str) -> None:
-    client.get(f"/quality/inversion/overview/{run}")
+def test_an_inversion_newer_than_its_measures_shows_none_of_them(run: str) -> None:
     window = OUTPUT_DIR / run / "xmid_5.50"
     path = window / "SeismicInversion_Measures_0000.json"
-    stale = json.loads(path.read_text())
-    stale["samples_per_chain"] = -1
-    path.write_text(json.dumps(stale))
+    saved = path.read_text()
     samples = window / "SeismicInversion_Samples_0000.npz"
     older = samples.stat().st_mtime_ns - 10**9
     os.utime(path, ns=(older, older))
 
-    client.get(f"/quality/inversion/overview/{run}")
+    overview = client.get(f"/quality/inversion/overview/{run}").json()
+    card = client.get(f"/quality/inversion/card/{run}/5.5").json()
 
-    assert json.loads(path.read_text())["samples_per_chain"] > 0
+    cell = next(one for one in overview["cells"] if one["x"] == 5.5)
+    assert (cell["status"], cell["hover"][-1]) == (
+        "none",
+        "inverted before its measures were saved",
+    )
+    assert card["inverted"] is False and _texts(card) == [
+        "Inverted before its measures were saved with it: invert it again to see them."
+    ]
+    assert path.read_text() == saved and path.stat().st_mtime_ns == older  # never measured here
+    path.write_text(saved)
 
 
-def test_measures_read_against_the_runs_own_prior_are_read_again(run: str) -> None:
-    client.get(f"/quality/inversion/overview/{run}")
+def test_a_depth_read_against_the_runs_own_prior_is_not_shown(run: str) -> None:
     path = OUTPUT_DIR / run / "xmid_5.50" / "SeismicInversion_Measures_0000.json"
-    before = json.loads(path.read_text())
+    saved = path.read_text()
     # As saved before 2026-09-28: no yardstick named, the depth read against the run's prior.
-    older = {key: value for key, value in before.items() if key != "useful_reference"}
-    older |= {"useful_depth_m": 0.123, "samples_per_chain": 7}
-    path.write_text(json.dumps(older))
+    older = {key: value for key, value in json.loads(saved).items() if key != "useful_reference"}
+    path.write_text(json.dumps(older | {"useful_depth_m": 0.123}))
 
-    client.get(f"/quality/inversion/overview/{run}")
+    overview = client.get(f"/quality/inversion/overview/{run}").json()
+    card = client.get(f"/quality/inversion/card/{run}/5.5").json()
+    section = client.get(f"/inversion/velocity_section/{run}").json()
 
-    after = json.loads(path.read_text())
-    assert after["useful_reference"] == USEFUL_REFERENCE
-    assert after["useful_depth_m"] == before["useful_depth_m"]
-    assert after["samples_per_chain"] == 7  # the rest as saved: only the depth read again
-    path.write_text(json.dumps(before))
-
-
-def test_an_inversion_that_cannot_be_measured_is_left_out(run: str) -> None:
-    folder = f"{run}-unpicked"
-    shutil.copytree(OUTPUT_DIR / run, OUTPUT_DIR / folder)
-    window = OUTPUT_DIR / folder / "xmid_2.50"
-    (window / "SeismicInversion_Measures_0000.json").unlink()
-    (window / "DispersionCurves_0000.csv").unlink()
-
-    overview = client.get(f"/quality/inversion/overview/{folder}").json()
-
-    assert [one["x"] for one in overview["cells"] if one["status"] != "none"] == [5.5]
-    assert client.get(f"/quality/inversion/card/{folder}/2.5").status_code == 404
+    cell = next(one for one in overview["cells"] if one["x"] == 5.5)
+    assert cell["value"] is None and not any("informed" in line for line in cell["hover"])
+    assert card["profile"]["informed"] is None
+    assert not any("inform" in text for text in _texts(card))
+    assert "useful_depth" not in {metric["name"] for metric in card["gates"][0]["metrics"]}
+    assert next(one for one in section["windows"] if one["x"] == 5.5)["informed"] is None
+    assert json.loads(path.read_text())["useful_depth_m"] == 0.123  # never measured here
+    path.write_text(saved)
 
 
 def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> None:
@@ -752,24 +751,29 @@ def test_an_assistant_run_shows_g7_and_g8(judged: str) -> None:
     assert [attempt["verdicts"] for attempt in card["attempts"]] == [{"G7": "pass", "G8": "pass"}]
 
 
-def test_the_endpoints_leave_no_file_but_the_measures(judged: str) -> None:
+def test_the_endpoints_write_nothing(judged: str) -> None:
+    # Visualization reads what the stages saved: no file made or written again.
     folder = Path(OUTPUT_DIR / judged)
-    before = {path for path in folder.rglob("*") if path.is_file()}
+    before = {(path, path.stat().st_mtime_ns) for path in folder.rglob("*") if path.is_file()}
     for path in (
-        f"run/{judged}",
-        f"sources/{judged}/2.5",
-        f"records/overview/{judged}",
-        f"records/card/{judged}/1.mseed",
-        f"dispersion/overview/{judged}",
-        f"dispersion/card/{judged}/2.5",
-        f"inversion/overview/{judged}",
-        f"inversion/card/{judged}/2.5",
-        f"inversion/chains/{judged}/2.5",
-        f"petro/overview/{judged}",
-        f"petro/card/{judged}/2.5",
+        f"quality/run/{judged}",
+        f"quality/sources/{judged}/2.5",
+        f"quality/records/overview/{judged}",
+        f"quality/records/card/{judged}/1.mseed",
+        f"quality/dispersion/overview/{judged}",
+        f"quality/dispersion/card/{judged}/2.5",
+        f"quality/inversion/overview/{judged}",
+        f"quality/inversion/card/{judged}/2.5",
+        f"quality/inversion/chains/{judged}/2.5",
+        f"quality/petro/overview/{judged}",
+        f"quality/petro/card/{judged}/2.5",
+        f"inversion/velocity_section/{judged}",
+        f"inversion/pseudo_section_comparison/{judged}/M0",
+        f"petro_inversion/section/{judged}",
     ):
-        assert client.get(f"/quality/{path}").status_code == 200, path
-    assert {path for path in folder.rglob("*") if path.is_file()} == before
+        assert client.get(f"/{path}").status_code == 200, path
+    after = {(path, path.stat().st_mtime_ns) for path in folder.rglob("*") if path.is_file()}
+    assert after == before
 
 
 def test_a_receiver_the_line_left_out_is_the_windows_and_near_shots_the_near_fields(

@@ -193,9 +193,11 @@ def test_an_inversion_gives_a_section(run: str) -> None:
     section = client.get(f"/inversion/velocity_section/{run}").json()
     assert section["positions"] == [2.5, 5.5]
     assert all(100 <= vs <= 400 for row in section["vs_grid"] for vs in row if vs is not None)
-    # Each window's column: how deep its data inform its model, of the depth modelled.
+    # Each window's column: how deep its data inform its model, of the depth modelled, as the
+    # job measured it (saved beside the model).
     assert [one["x"] for one in section["windows"]] == [2.5, 5.5]
     assert all(0 <= one["informed"] <= one["depth"] for one in section["windows"])
+    assert (output_folder(run) / "xmid_2.50" / "SeismicInversion_Measures_0000.json").exists()
     smoothed = client.get(f"/inversion/velocity_section/{run}", params={"lateral_smoothing": True})
     assert smoothed.status_code == 200
     curves = client.get(f"/inversion/curves/{run}/M0").json()

@@ -5,7 +5,6 @@ first breaks point to), the records and traces the run left out, and for a run t
 made, its signal check's verdicts (G1) and the preprocessing's attempts. Shown along the line at
 each record's shot: the records strip of Visualization, and the selected record's card."""
 
-from functools import lru_cache
 from pathlib import Path
 from typing import cast
 
@@ -57,6 +56,7 @@ from sigpipe.masw.runs import RunManifest, xmid_of
 
 STAGE = "preprocessing"
 GATE = "G1"
+MEASURES_FILE = "SignalMeasures_0000.json"  # beside a record's preprocessed file, PAC's job's
 GATHER_SAMPLES = 1_200  # the most samples a trace keeps for the wiggle plot
 
 
@@ -77,6 +77,33 @@ class SignalThresholds(BaseModel):
     max_trigger_shift_s: float = 0.01
     max_trigger_scatter_s: float = 0.05
     first_break_ratio: float = 5.0
+
+
+class SignalMeasures(BaseModel):
+    """A preprocessed record's measures against G1's limits and its usable band, saved when PAC's
+    job processed it: Visualization reads them and never measures."""
+
+    model_config = ConfigDict(frozen=True)
+
+    metrics: tuple[Metric, ...]
+    band_hz: tuple[float, float] | None
+
+
+def measure_records(run_folder: Path) -> None:
+    """Save the measures of every record run `run_folder` preprocessed, beside it (a run PAC made:
+    the assistant's own are in its QC log)."""
+    manifest = read_manifest(run_folder)
+    if manifest is None:
+        return
+    thresholds = thresholds_of(run_folder)
+    active = manifest.profile.kind == "active"
+    for record in manifest.records:
+        path = run_folder / record.folder / PREPROCESSED
+        if record.status != "succeeded" or not path.exists():
+            continue
+        metrics, band = signal_metrics(path, thresholds, active)
+        measures = SignalMeasures(metrics=metrics, band_hz=band)
+        (path.parent / MEASURES_FILE).write_text(measures.model_dump_json(indent=2))
 
 
 class RecordCard(Card):
@@ -104,7 +131,7 @@ def records_overview(folder: str) -> Overview:
     cells: list[Cell] = []
     line_out, _ = line_receivers(log)
     for record in manifest.records:
-        g1, metrics, band = _judged(run_folder, manifest, log, record.name, thresholds)
+        g1, metrics, band = _judged(run_folder, manifest, log, record.name)
         snr = next((one.value for one in metrics if one.name == "snr_db"), None)
         # The record's own, the receivers left out of every window apart.
         left = [
@@ -227,7 +254,7 @@ def record_card(folder: str, name: str) -> RecordCard:
         raise ValueError(f"No record {name} in folder={folder}")
     log = read_log(run_folder)
     thresholds = thresholds_of(run_folder)
-    g1, metrics, band = _judged(run_folder, manifest, log, name, thresholds)
+    g1, metrics, band = _judged(run_folder, manifest, log, name)
     sources = line_geometry(run_folder, manifest).sources
     windows = stacking_windows(run_folder).get(name, ())
     excluded_traces = manifest.exclusions.traces.get(name, ())
@@ -286,18 +313,16 @@ def _judged(
     manifest: RunManifest,
     log: QCLog | None,
     name: str,
-    thresholds: SignalThresholds,
 ) -> tuple[GateResult | None, tuple[Metric, ...], tuple[float, float] | None]:
-    """G1's result on the record, its metrics and usable band; for a run PAC made, sigpipe's
-    measures of its preprocessed file against G1's limits."""
+    """G1's result on the record, its metrics and usable band; for a run PAC made, the measures
+    of its preprocessed file against G1's limits PAC's job saved."""
     g1 = log.result(name, STAGE, GATE) if log is not None else None
     if g1 is not None:
         return g1, g1.metrics, g1.kept.band_hz
     record = next((one for one in manifest.records if one.name == name), None)
     if record is None or record.status != "succeeded":
         return None, (), None
-    active = manifest.profile.kind == "active"
-    metrics, band = _measured(run_folder / record.folder / PREPROCESSED, thresholds, active)
+    metrics, band = _measured(run_folder / record.folder / PREPROCESSED)
     return None, metrics, band
 
 
@@ -482,21 +507,14 @@ def signal_metrics(
     return tuple(metrics), None if band is None else (round(band[0], 2), round(band[1], 2))
 
 
-def _measured(
-    path: Path, thresholds: SignalThresholds, active: bool
-) -> tuple[tuple[Metric, ...], tuple[float, float] | None]:
-    if not path.exists():
+def _measured(path: Path) -> tuple[tuple[Metric, ...], tuple[float, float] | None]:
+    """The measures of the preprocessed record in `path` as PAC's job saved them; none when it
+    saved none as new as the record (a run processed before they were saved)."""
+    saved = path.parent / MEASURES_FILE
+    if not path.exists() or not saved.exists() or saved.stat().st_mtime < path.stat().st_mtime:
         return (), None
-    return _cached_metrics(str(path), path.stat().st_mtime_ns, thresholds.model_dump_json(), active)
-
-
-@lru_cache(maxsize=512)
-def _cached_metrics(
-    path: str, mtime_ns: int, thresholds: str, active: bool
-) -> tuple[tuple[Metric, ...], tuple[float, float] | None]:
-    """The measures of a record, kept while its file stays the same (`mtime_ns`)."""
-    del mtime_ns
-    return signal_metrics(Path(path), SignalThresholds.model_validate_json(thresholds), active)
+    measures = SignalMeasures.model_validate_json(saved.read_text())
+    return measures.metrics, measures.band_hz
 
 
 def _rows(windows: Windows, rows: np.ndarray) -> Windows:

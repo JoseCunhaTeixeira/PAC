@@ -10,9 +10,11 @@ from masw.io.dispersion_images import xmid_folder
 from masw.io.folders import get_xmid_folders
 from masw.io.history import redone
 from masw.io.paths import output_folder
+from masw.io.quality.petro import MEASURES_FILE, thresholds_of
 from masw.models.petro_inversion import PetroInversionRunConfig
 from masw.runners.computing import WindowError
 from sigpipe.masw.petro import PetroOutcome, invert_line_petro, save_line_sections
+from sigpipe.masw.petro.measuring import measure_petro
 from sigpipe.masw.runs import Stopped
 
 logger = logging.getLogger(__name__)
@@ -59,6 +61,7 @@ def run_petro_inversion(
         else:
             # In place (sigpipe replaced all its old results): its earlier attempts forgotten.
             redone(out_dir / outcome.unit, "petro_inversion")
+            _measure(out_dir / outcome.unit, config.model_name)
             logger.info("Finished xmid=%.2f", xmids[outcome.unit])
         if on_progress is not None:
             on_progress(done, total, error)
@@ -81,6 +84,17 @@ def run_petro_inversion(
     save_line_sections(out_dir, units)
 
     return list(errors.values())
+
+
+def _measure(window: Path, model_name: str) -> None:
+    """The soil column's measures (its fit to the pick), saved where the assistant saves its
+    own: Visualization reads them and never measures."""
+    try:
+        measures = measure_petro(window, model_name, (), thresholds_of(window.parent).n_bands)
+    except ValueError:
+        logger.warning("The soil column of %s was not measured", window.name, exc_info=True)
+        return
+    (window / MEASURES_FILE).write_text(measures.model_dump_json(indent=2))
 
 
 def _write_outcome(

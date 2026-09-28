@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from masw.api.jobs import Job, job_manager
-from masw.api.routers.dispersion_images import nan_to_none
+from masw.api.routers.dispersion_images import nan_to_none, rounded
 from masw.io import inversion as io
 from masw.io.inversion import ModelName
 from masw.models.inversion import InversionRunConfig
@@ -110,17 +110,17 @@ def get_velocity_section(
 ) -> VelocitySectionOut:
     try:
         section = io.get_velocity_section(folder, model, lateral_smoothing)
-        windows = io.section_windows(folder, model)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    grid = section.grid
     return VelocitySectionOut(
-        positions=section.positions.tolist(),
-        elevations=section.elevations.tolist(),
-        vs_grid=nan_to_none(section.vs),
-        vs_std_grid=nan_to_none(section.vs_std),
+        positions=rounded(grid.positions, 3),
+        elevations=rounded(grid.elevations, 3),
+        vs_grid=nan_to_none(grid.vs, 1),
+        vs_std_grid=nan_to_none(grid.vs_std, 1),
         windows=[
             SectionWindowOut(x=one.x, top=one.top, depth=one.depth, informed=one.informed)
-            for one in windows
+            for one in section.windows
         ],
     )
 
@@ -158,11 +158,11 @@ def get_pseudo_section_comparison(
     return PseudoSectionComparisonOut(
         positions=comparison.positions.tolist(),
         fs=comparison.fs.tolist(),
-        observed_grid=nan_to_none(comparison.observed),
-        predicted_grid=nan_to_none(comparison.predicted),
-        residual_grid=nan_to_none(comparison.residual),
+        observed_grid=nan_to_none(comparison.observed, 1),
+        predicted_grid=nan_to_none(comparison.predicted, 1),
+        residual_grid=nan_to_none(comparison.residual, 2),  # %
         lambdas=comparison.lambdas.tolist(),
-        observed_by_wavelength_grid=nan_to_none(comparison.observed_by_wavelength),
-        predicted_by_wavelength_grid=nan_to_none(comparison.predicted_by_wavelength),
-        residual_by_wavelength_grid=nan_to_none(comparison.residual_by_wavelength),
+        observed_by_wavelength_grid=nan_to_none(comparison.observed_by_wavelength, 1),
+        predicted_by_wavelength_grid=nan_to_none(comparison.predicted_by_wavelength, 1),
+        residual_by_wavelength_grid=nan_to_none(comparison.residual_by_wavelength, 2),
     )

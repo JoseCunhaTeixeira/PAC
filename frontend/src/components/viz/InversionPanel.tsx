@@ -36,6 +36,7 @@ interface VelocitySection {
   elevations: number[];
   vs_grid: (number | null)[][];
   vs_std_grid: (number | null)[][];
+  // Each window's column, how deep its data inform it as its inversion measured.
   windows: InformedWindow[];
 }
 
@@ -174,6 +175,7 @@ export function InversionPanel({
   const section = useJson<VelocitySection>(
     `${API}/inversion/velocity_section/${at(folder)}?model=${model}&lateral_smoothing=${smoothing}`,
   );
+  const informedWindows = informed ? section.data?.windows : undefined;
   const labels = useJson<Record<string, number>>(`${API}/dispersion_image_labels/${at(folder)}`);
   const modes = Object.keys(labels.data ?? {});
   const modelLabel = MODELS.find((one) => one.value === model)?.label.toLowerCase() ?? model;
@@ -355,7 +357,7 @@ export function InversionPanel({
                   colorRange={range}
                   marker={xmid ?? undefined}
                   onPick={pick}
-                  informed={informed ? section.data.windows : undefined}
+                  informed={informedWindows}
                 />
                 <VelocitySectionCanvas
                   positions={section.data.positions}
@@ -367,9 +369,9 @@ export function InversionPanel({
                   link={zoomLink}
                   marker={xmid ?? undefined}
                   onPick={pick}
-                  informed={informed ? section.data.windows : undefined}
+                  informed={informedWindows}
                 />
-                {informed && section.data.windows?.some((one) => one.informed !== null) && (
+                {informedWindows?.some((one) => one.informed !== null) && (
                   <div className="viz-legend-inline">
                     <span style={{ color: colours.informed }}>
                       <i className="dashed" />

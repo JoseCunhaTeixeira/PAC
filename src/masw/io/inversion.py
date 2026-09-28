@@ -12,17 +12,23 @@ import numpy as np
 from masw.io.dispersion_images import xmid_folder
 from masw.io.folders import get_xmid_folders
 from masw.io.paths import output_folder
-from masw.io.quality.inversion import thresholds_of, window_measures
+from masw.io.quality.inversion import (
+    MEASURES_FILE,
+    informed_to,
+    thresholds_of,
+    window_measures,
+)
 from sigpipe.base.dispersion_curve import Mode
 from sigpipe.base.inversion import InversionResult
+from sigpipe.base.velocity_model import VelocityModel, VelocityModelsSection
 from sigpipe.masw.inversion import InversionParameters, invert_window
+from sigpipe.masw.inversion.measuring import measure_inversion
 from sigpipe.masw.inversion.section import (
     ComparisonGrids,
     ModelName,
     VelocityGrid,
     comparison_grids,
     is_inverted,
-    models_section,
     picked_curve,
     predicted_curve,
     save_comparison,
@@ -64,21 +70,10 @@ def list_inversion_status(folder: str) -> list[tuple[float, bool]]:
     return [(xmid, is_inverted(xmid_folder(folder, xmid))) for xmid in get_xmid_folders(folder)]
 
 
-def get_velocity_section(
-    folder: str, model: ModelName = "smooth_median", lateral_smoothing: bool = False
-) -> VelocityGrid:
-    section = models_section(output_folder(folder), _units(folder), model)
-    if section is None:
-        raise ValueError(
-            f"At least two inverted positions are required to build a section in folder={folder}"
-        )
-    return velocity_grid(section, lateral_smoothing)
-
-
 @dataclass(slots=True, frozen=True)
 class SectionWindow:
     """A window's column in the sections: its middle, its ground's elevation, how deep its model
-    reaches and how deep its data inform it (m; None when they cannot be measured)."""
+    reaches and how deep its data inform it (m; None when its measures do not say)."""
 
     x: float
     top: float
@@ -86,32 +81,65 @@ class SectionWindow:
     informed: float | None
 
 
-def section_windows(folder: str, model: ModelName = "smooth_median") -> list[SectionWindow]:
-    """Each window holding model `model`, by position: how deep its data inform it, read against
-    one yardstick for every window (sigpipe's measuring), its whole depth when all of it."""
+@dataclass(slots=True, frozen=True)
+class VelocitySection:
+    grid: VelocityGrid
+    windows: list[SectionWindow]  # by position
+
+
+def get_velocity_section(
+    folder: str, model: ModelName = "smooth_median", lateral_smoothing: bool = False
+) -> VelocitySection:
+    """The section of the windows' model `model` on a grid, and each window's column: its model
+    and the measures its inversion saved, each read once; nothing measured."""
     run_folder = output_folder(folder)
-    thresholds = thresholds_of(run_folder)
-    windows: list[SectionWindow] = []
-    for unit in _units(folder):
-        found = window_model(run_folder / unit, model)
-        if found is None:
-            continue
-        depth = round(float(np.sum(found.thicknesses)), 2)
-        try:
-            measured = window_measures(run_folder / unit, thresholds)
-        except ValueError:
-            logger.warning("Depth informed of %s left out of the section", unit, exc_info=True)
-            measured = None
-        useful = measured[1].useful_depth_m if measured is not None else None
-        windows.append(
-            SectionWindow(
-                x=float(found.position.x),
-                top=float(found.position.z),
-                depth=depth,
-                informed=None if measured is None else depth if useful is None else useful,
-            )
+    found = {
+        unit: one
+        for unit in _units(folder)
+        if (one := window_model(run_folder / unit, model)) is not None
+    }
+    if len(found) < 2:
+        raise ValueError(
+            f"At least two inverted positions are required to build a section in folder={folder}"
         )
-    return sorted(windows, key=lambda one: one.x)
+    ordered = sorted(found.items(), key=lambda item: item[1].position.x)
+    section = VelocityModelsSection(velocity_models=tuple(one for _, one in ordered))
+    return VelocitySection(
+        grid=velocity_grid(section, lateral_smoothing),
+        windows=[_section_window(run_folder / unit, one) for unit, one in ordered],
+    )
+
+
+def _section_window(window: Path, model: VelocityModel) -> SectionWindow:
+    depth = round(float(np.sum(model.thicknesses)), 2)
+    measured = window_measures(window)
+    measures = measured[1] if measured is not None else None
+    informed = None
+    if measures is not None and (known := informed_to(measures)) is not None:
+        # All of it: the model's own depth, the bottom the section draws.
+        informed = depth if measures.useful_depth_m is None else known
+    return SectionWindow(
+        x=float(model.position.x), top=float(model.position.z), depth=depth, informed=informed
+    )
+
+
+def measure_position(
+    folder: str, xmid: float, parameters: InversionParameters, output_folder: Path | None = None
+) -> None:
+    """Save the measures of the window's inversion (its fit, its chains, how deep its data
+    inform it) beside its files, or in `output_folder` (a staging folder), where the assistant
+    saves its own: Visualization reads them and never measures."""
+    window = xmid_folder(folder, xmid)
+    thresholds = thresholds_of(window.parent)
+    measures = measure_inversion(
+        window,
+        parameters,
+        n_bands=thresholds.n_bands,
+        bound_edge=thresholds.bound_edge,
+        std_ratio=thresholds.useful_std_ratio,
+        output_folder=output_folder,
+    )
+    ((output_folder or window) / MEASURES_FILE).write_text(measures.model_dump_json(indent=2))
 
 
 def save_velocity_section_plot(

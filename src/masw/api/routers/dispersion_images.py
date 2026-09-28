@@ -67,13 +67,24 @@ class PseudoSectionOut(BaseModel):
     velocities_by_wavelength: list[list[float | None]]
 
 
-def nan_to_none(rows: np.ndarray) -> list[list[float | None]]:
+def rounded(values: np.ndarray, decimals: int) -> list[float]:
+    """`values` to `decimals` decimals, as JSON writes them short: float32 values made float64
+    first, or 0.1234 would come out 0.12340000271797180."""
+    result: list[float] = np.round(np.asarray(values, dtype=np.float64), decimals).tolist()
+    return result
+
+
+def nan_to_none(rows: np.ndarray, decimals: int | None = None) -> list[list[float | None]]:
+    """`rows` with None for NaN, to `decimals` decimals when given: what a plot can show, and a
+    response a few times shorter than full precision."""
     # A per-cell Python loop (math.isnan + float() on every element) is fine
     # for a small dispersion-image map but multi-second for a fine-grained
     # velocity section (hundreds of thousands to millions of cells) --
     # astype(object) + boolean-mask assignment does the same NaN->None swap
     # in vectorized C instead.
     arr = np.asarray(rows, dtype=np.float64)
+    if decimals is not None:
+        arr = np.round(arr, decimals)
     out = arr.astype(object)
     out[np.isnan(arr)] = None
     result: list[list[float | None]] = out.tolist()
@@ -98,10 +109,11 @@ def _to_image_out(image: DispersionImage) -> DispersionImageOut:
     # The array's resolution limits: below lambda_min (twice the smallest spacing) picks are
     # spatially aliased, above lambda_max (the array's length) they aren't resolvable. Both along
     # the ground, and undefined for an unknown geometry.
+    # The map normalized (0 to 1): four decimals finer than any colour step.
     return DispersionImageOut(
-        fv_map=image.fv_map.tolist(),
-        fs=image.fs.tolist(),
-        vs=image.vs.tolist(),
+        fv_map=[rounded(row, 4) for row in image.fv_map],
+        fs=rounded(image.fs, 3),
+        vs=rounded(image.vs, 3),
         type=image.type,
         curves=curves,
         lambda_min=min_resolvable_wavelength(image.acquisition),
@@ -195,7 +207,7 @@ def get_pseudo_section(folder: str, label: str) -> PseudoSectionOut:
     return PseudoSectionOut(
         positions=section.positions.tolist(),
         fs_grid=section.fs_grid.tolist(),
-        velocities_by_frequency=nan_to_none(section.velocities_by_frequency),
+        velocities_by_frequency=nan_to_none(section.velocities_by_frequency, 1),
         lambdas_grid=section.lambdas_grid.tolist(),
-        velocities_by_wavelength=nan_to_none(section.velocities_by_wavelength),
+        velocities_by_wavelength=nan_to_none(section.velocities_by_wavelength, 1),
     )
