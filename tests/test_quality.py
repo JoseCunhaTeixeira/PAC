@@ -84,6 +84,7 @@ def test_the_runs_are_listed_by_profile(run: str) -> None:
     assert profiles["noise"]["runs"] == [] and profiles["noise"]["records"] is True
     entry = next(one for one in profiles["shots"]["runs"] if one["folder"] == run)
     assert entry["by"] == "pac" and entry["mode"] == "active" and entry["windows"] == 3
+    assert entry["window_length"] == 6  # receivers, as the run's form set them
     started = [one["started_at"] for one in profiles["shots"]["runs"]]
     assert started == sorted(started, reverse=True)  # the newest first
 
@@ -221,8 +222,10 @@ def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:
     assert cells[8.5]["status"] == "none" and cells[8.5]["value"] is None
     # A curve picked by hand is the user's: passed as it is, said so, nothing more.
     assert cells[2.5]["status"] == "pass" and cells[2.5]["value"] > 0
-    assert cells[2.5]["hover"][:2] == ["xmid 2.5 m", "Curve: by hand"]
-    assert cells[2.5]["hover"][2].startswith("M0: ") and cells[8.5]["hover"][1] == "No curve"
+    assert cells[2.5]["hover"][:3] == ["xmid 2.5 m", "Curve: by hand", "1 mode picked: M0"]
+    assert cells[2.5]["hover"][3].startswith("M0: ") and cells[8.5]["hover"][1] == "No curve"
+    # Its modes, a dot each under its cell; none without a curve.
+    assert cells[2.5]["modes"] == ["M0"] and cells[8.5]["modes"] == []
     # No image checked: each cell its curve alone, by hand or none, as its legend says.
     assert [cells[x]["parts"] for x in (2.5, 8.5)] == [["hand"], ["none"]]
     (curve,) = overview["parts"]

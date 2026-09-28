@@ -39,6 +39,8 @@ def test_a_profile_shows_its_records_and_receivers() -> None:
     assert shots["files"] == sorted(SOURCES)
     assert shots["sampling_frequencies"] == [SAMPLING] * len(SOURCES)
     assert [x for x, _ in shots["source_positions"]] == [SOURCES[name] for name in sorted(SOURCES)]
+    # The files' triggers: none said in these (MiniSEED; a SEG-2 file says its DELAY).
+    assert shots["triggers"] == [None] * len(SOURCES)
     assert len(shots["receiver_positions"]) == N_RECEIVERS
     assert shots["modes"] == ["active", "passive-active"]
     noise = client.get("/acquisitions/noise").json()
@@ -52,14 +54,11 @@ def test_a_form_starts_from_the_preset_fitted_to_its_profile() -> None:
     values, methods = preset["values"], preset["methods"]
     assert values["mode"] == "passive-active"
     assert values["masw"]["length"] == 5
-    assert values["correlation_window"] == {
-        "method": "mute",
-        "vmin": 80.0,
-        "vmax": 1500.0,
-        "taper": 50,
-    }
-    # Each method with its own values, those the profile derives filled in.
-    assert methods["muting"]["mute"]["tmax"] == pytest.approx(1.0, abs=0.01)
+    assert "correlation_window" not in values  # removed: the muting's velocities cut the same
+    # Each method with its own values, those the profile derives filled in; a bound left out,
+    # none (no stand-in value).
+    assert methods["muting"]["mute"]["tmax"] is None
+    assert methods["muting"]["mute"]["width"] == pytest.approx(1 / SAMPLING)  # one sample
     assert methods["filtering"]["iir"]["fmax"] == pytest.approx(0.95 * SAMPLING / 2)
     assert set(methods["stacking"]) == {"linear", "phase_weighted", "root"}
     refused = client.get("/presets/active", params={"profile": "noise"})

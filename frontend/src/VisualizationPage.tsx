@@ -152,6 +152,12 @@ function LineLegend({
                 {overview.legend[status]}
               </span>
             )))}
+      {windows && overview?.cells.some((cell) => (cell.modes?.length ?? 0) > 1) && (
+        <span data-tip="How many modes were picked in a window, written in its curve's band when more than one">
+          <i className="viz-swatch count">2</i>
+          more than one mode picked
+        </span>
+      )}
       {windows && uses && (
         <>
           {SHOT_KEYS.filter((key) => key.uses.some((use) => uses.has(use))).map(

@@ -21,6 +21,9 @@ class Acquisition(BaseModel):
     sampling_frequencies: list[float]
     source_positions: list[PositionXZ]
     receiver_positions: list[PositionXZ]
+    # Each record's trigger, s after its first sample, from its file (SEG-2's DELAY); None when
+    # the file does not say. The muting moves the record's time origin by it.
+    triggers: list[float | None]
     kind: str
     modes: list[str]
 
@@ -40,6 +43,7 @@ def load_acquisition(folder_name: str) -> Acquisition:
             if record.source is not None
         ],
         receiver_positions=[(receiver.x, receiver.z) for receiver in profile.receivers],
+        triggers=[record.trigger_s for record in profile.records],
         kind=profile.kind.value,
         modes=[mode.value for mode in MODES[profile.kind]],
     )

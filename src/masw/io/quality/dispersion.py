@@ -150,6 +150,14 @@ def dispersion_overview(folder: str) -> Overview:
     for unit in window_folders(run_folder):
         window = run_folder / unit
         curve = fundamental(window)
+        saved = load_curves(window)
+        modes = tuple(
+            one.mode.label
+            for one in sorted(
+                saved.dispersion_curves if saved is not None else (),
+                key=lambda one: (one.mode.number, one.mode.label),
+            )
+        )
         picked_by = pick_origin(window, log, curve is not None)
         if picked_by is not None:
             origins[picked_by] += 1
@@ -167,6 +175,8 @@ def dispersion_overview(folder: str) -> Overview:
             hover.append(_part_line("Image", image, IMAGE_STATES, g2))
         curve_states = CURVE_STATES if log is not None else MEASURED_CURVE_STATES
         hover.append(_part_line("Curve", picks, curve_states, g3, g4))
+        if modes:
+            hover.append(f"{plural(len(modes), 'mode')} picked: {', '.join(modes)}")
         if stats is not None:
             hover.append(
                 f"{stats.label}: {stats.n_points} points, {span(*stats.band_hz, 'Hz')}, "
@@ -185,6 +195,7 @@ def dispersion_overview(folder: str) -> Overview:
                 hover=tuple(hover),
                 value=stats.wavelength_m[1] if stats is not None else None,
                 parts=parts,
+                modes=modes,
             )
         )
     picked = sum(origins.values())

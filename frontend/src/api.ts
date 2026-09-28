@@ -10,6 +10,9 @@ export interface Acquisition {
   sampling_frequencies: number[];
   source_positions: Position[];
   receiver_positions: Position[];
+  // Each record's trigger, s after its first sample, from its file; null: not said (absent
+  // from an older backend).
+  triggers?: (number | null)[];
   kind: string; // "active" or "passive"
   modes: string[]; // the modes it can be processed in
 }
@@ -27,10 +30,11 @@ export interface Masw {
 }
 
 export interface Muting {
-  tmin: number;
-  tmax: number;
-  vmin: number;
-  vmax: number;
+  tmin: number | null;
+  tmax: number | null;
+  vmin: number | null;
+  vmax: number | null;
+  width: number;
   taper: number;
 }
 

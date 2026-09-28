@@ -122,18 +122,20 @@
   fill: rgba(255, 255, 255, 0.85);
 }
 
-.art-receiver.lit {
-  animation: art-lit 3s linear infinite;
+/* A receiver's flash as a front reaches it: once a cycle, its delay the arrival. */
+.art-flash {
+  fill: #7ee0ee;
+  opacity: 0;
+  animation: art-flash 3s linear infinite;
 }
 
-@keyframes art-lit {
-  0%,
-  14%,
-  100% {
-    fill: rgba(255, 255, 255, 0.85);
+@keyframes art-flash {
+  0% {
+    opacity: 0.95;
   }
-  6% {
-    fill: #7ee0ee;
+  6%,
+  100% {
+    opacity: 0;
   }
 }
 
@@ -149,40 +151,62 @@
   fill: rgba(95, 104, 226, 0.26);
 }
 
-.art-front {
+/* A front in the soil (PageArt's SMIL moves it): a shot's, or the noise's from afar. */
+.art-wave {
   fill: none;
-  stroke: rgba(126, 224, 238, 0.7);
+  stroke: rgba(126, 224, 238, 0.9);
   stroke-width: 1.2;
   vector-effect: non-scaling-stroke;
-  opacity: 0;
-  transform: scale(0.05);
-  animation: art-front 3.6s cubic-bezier(0.25, 0.6, 0.35, 1) infinite;
 }
 
-@keyframes art-front {
+.art-wave.back {
+  stroke: #a3abff;
+}
+
+/* The passive pages' story (PageArt's STORY, 9 s): the first receiver turned virtual shot. */
+.art-virtual {
+  opacity: 0;
+  animation: art-virtual 9s ease-in-out infinite;
+}
+
+@keyframes art-virtual {
   0% {
-    transform: scale(0.05);
-    opacity: 0.9;
+    opacity: 0;
   }
+  5%,
+  36% {
+    opacity: 1;
+  }
+  46%,
   100% {
-    transform: scale(3.4);
     opacity: 0;
   }
 }
 
-.art-pulse {
-  fill: none;
-  stroke: #7ee0ee;
-  stroke-width: 2.4;
-  stroke-linecap: round;
-  stroke-dasharray: 50 700;
-  stroke-dashoffset: 700;
-  animation: art-pulse 3s linear infinite;
+.art-receiver.virtual {
+  fill: #f5c14b;
 }
 
-@keyframes art-pulse {
-  to {
-    stroke-dashoffset: -50;
+/* The passive-active shot: fired, then gliding into the first receiver (90 px on), fading as
+   the virtual shot appears there. */
+.art-shot-fade {
+  animation: art-shot-fade 9s ease-in-out infinite;
+}
+
+@keyframes art-shot-fade {
+  0% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+  3%,
+  38% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  50%,
+  100% {
+    opacity: 0;
+    transform: translateX(90px);
   }
 }
 
@@ -192,28 +216,6 @@
 
 .art-star {
   fill: #f5c14b;
-}
-
-.art-noise {
-  fill: none;
-  stroke: #7ee0ee;
-  stroke-width: 1.4;
-  opacity: 0.8;
-  animation: art-drift 4.4s linear infinite;
-}
-
-.art-noise.back {
-  animation-direction: reverse;
-  stroke: #a3abff;
-}
-
-@keyframes art-drift {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(480px);
-  }
 }
 
 .art-ridge {
@@ -285,28 +287,9 @@
   stroke-width: 1;
 }
 
-.art-chain {
-  fill: none;
-  stroke: #7ee0ee;
-  stroke-width: 1.4;
-  stroke-dasharray: 60;
-  stroke-dashoffset: 60;
-  animation: art-draw 3s ease-in-out infinite;
-}
-
-.art-chain.late {
-  stroke: #a3abff;
-  animation-delay: 0.8s;
-}
-
-@keyframes art-draw {
-  0% {
-    stroke-dashoffset: 60;
-  }
-  60%,
-  100% {
-    stroke-dashoffset: 0;
-  }
+/* The kept models' spread, behind their profile. */
+.art-spread {
+  fill: rgba(126, 224, 238, 0.13);
 }
 
 .art-soil.one {
@@ -1266,23 +1249,33 @@ details.fold > summary:hover {
   appearance: textfield;
 }
 
-/* The position rail (PositionRail.tsx). */
+/* The position rail (PositionRail.tsx): each cell at its window's middle across the card (its
+   left and width set there), a count of the modes picked in it written small. */
 
-.rail-cells {
-  display: flex;
-  gap: 2px;
+.rail-lane {
+  position: relative;
   height: 34px;
 }
 
+.rail-cells {
+  position: absolute;
+  inset: 0;
+}
+
 button.rail-cell {
-  flex: 1 1 0;
-  min-width: 3px;
+  position: absolute;
+  top: 0;
   height: 100%;
   padding: 0;
   border-radius: 4px;
   box-shadow: none;
   border: 1px solid transparent;
   background: var(--surface-hover);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
   transition:
     transform 0.12s ease,
     background-color 0.12s ease;
@@ -1345,12 +1338,12 @@ button.rail-cell.off {
   cursor: not-allowed;
 }
 
-/* A chosen position keeps its state's colour, stronger, inside a dark edge: never the accent,
-   which is a pick by hand's. */
+/* A chosen position keeps its state's colour, stronger, inside an edge of the text's colour:
+   never the accent, which is a pick by hand's. */
 button.rail-cell.active {
   background: var(--border-strong);
-  border: 2px solid var(--text);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 16%, transparent);
+  border: 1px solid var(--text); /* lineDraw's CELL.edge */
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 16%, transparent);
 }
 
 button.rail-cell.hand.active {
@@ -1389,9 +1382,18 @@ button.rail-cell.split.active {
   --mix: 80%;
 }
 
+/* At rest, its bands fill it, as the lines draw them; selected, they sit inside its edge. */
+button.rail-cell.split:not(.active) {
+  border: 0;
+}
+
 button.rail-cell.split > i {
   flex: 1 1 0;
   min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
   border-radius: 2px;
   background: color-mix(in srgb, var(--part) var(--mix), transparent);
   --part: var(--border-strong);
@@ -1425,13 +1427,28 @@ button.rail-cell:active {
   transform: none;
 }
 
+/* The first, middle and last windows' positions, each under its cell (its left set there). */
 .rail-axis {
-  display: flex;
-  justify-content: space-between;
+  position: relative;
+  height: 1.5em;
   margin-top: 5px;
   font-size: var(--fs-caption);
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
+}
+
+.rail-axis span {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+}
+
+.rail-axis span.middle {
+  transform: translateX(-50%);
+}
+
+.rail-axis span.last {
+  transform: translateX(-100%);
 }
 
 .rail-legend {
@@ -1456,6 +1473,12 @@ button.rail-cell:active {
   align-items: center;
   flex-wrap: wrap;
   gap: 4px 12px;
+}
+
+/* An item: its swatch centred on its words, as Visualization's legend's. */
+.rail-legend-group > span {
+  display: inline-flex;
+  align-items: center;
 }
 
 .rail-legend-group b {
@@ -1505,6 +1528,19 @@ button.rail-cell:active {
 
 .rail-legend i.on {
   background: var(--accent);
+}
+
+/* The count of modes a cell writes, when more than one. */
+.rail-legend i.count {
+  height: 12px;
+  background: var(--surface-hover);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  font-size: 9px;
+  font-weight: 600;
+  font-style: normal;
+  line-height: 12px;
+  text-align: center;
+  color: var(--text);
 }
 
 /* The picking page. */

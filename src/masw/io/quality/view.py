@@ -74,6 +74,8 @@ class Cell(BaseModel):
     total: float | None = None  # what the measure is read against (the model's depth)
     # Its checks said apart, top down, in the order of the overview's parts; none: `status`.
     parts: tuple[PartState, ...] = ()
+    # The modes picked in it (a window, the dispersion stage), by number: M0, M1...
+    modes: tuple[str, ...] = ()
 
 
 class Track(BaseModel):

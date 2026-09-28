@@ -13,6 +13,7 @@ import {
   groundAt,
   LANE,
   LANE_BOTTOM,
+  lineSpan,
   receiverPath,
   reliefOf,
   slopeDegrees,
@@ -136,14 +137,8 @@ export function GeometryPlot({
   const axisTop = lanesBottom + (relief ? ELEVATION.after : LANE.axisGap);
   const sloped = relief !== null && !relief.flat;
   const height = axisTop + LANE.axisH;
-  const extent = useMemo((): Range => {
-    const xs = [...receivers, ...shots.map((shot) => shot.x)];
-    if (xs.length === 0) return [0, 1];
-    const lo = Math.min(...xs);
-    const hi = Math.max(...xs);
-    const pad = (hi - lo) * 0.02 || 1;
-    return [lo - pad, hi + pad];
-  }, [receivers, shots]);
+  // The line's extent as every page's (lineDraw's), so that a window is as wide here as there.
+  const extent = useMemo((): Range => lineSpan([...receivers, ...shots.map((shot) => shot.x)]), [receivers, shots]);
   const full = useMemo(() => ({ x: extent, y: [0, 1] as Range }), [extent]);
   const plots: PlotRect[] = [{ left: ML, top: 0, width: plotW, height: axisTop, xAxis: LANE.axisH }];
   const zoom = useZoom({
@@ -294,7 +289,7 @@ export function GeometryPlot({
 
     // Windows: a cell at each middle, as the rails draw theirs (lineDraw's drawCell), the one
     // under the pointer stronger and taller.
-    const cellW = cellWidth(windows.map((w) => w.xmid), x1 - x0, plotW);
+    const cellW = cellWidth(windows.map((w) => w.xmid), receivers, x1 - x0, plotW);
     windows.forEach((w) => {
       const on = picked !== undefined && same(w.xmid, picked.xmid);
       drawCell(ctx, theme, px(w.xmid), cellW, ["series"], on ? "hover" : "rest");

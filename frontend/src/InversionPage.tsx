@@ -28,7 +28,7 @@ import {
   RailLegend,
   type RailCell,
 } from "./components/PositionRail";
-import { judged, useStageStates, xmidKey } from "./components/railStates";
+import { judged, useReceivers, useStageStates, xmidKey } from "./components/railStates";
 import { above, upTo } from "./components/numbers";
 import { num } from "./components/viz/format";
 import { RunPanel } from "./components/RunPanel";
@@ -234,6 +234,8 @@ export default function InversionPage() {
     "inversion",
     runs,
   );
+  // The line's receivers: a window's cell is their spacing wide, whatever the step.
+  const { receivers, loading: receiversLoading } = useReceivers(folder);
   const nCpus = navigator.hardwareConcurrency || 1;
 
   useEffect(() => {
@@ -477,9 +479,10 @@ export default function InversionPage() {
                   </button>
                 </span>
               </div>
-              {!statesLoading && (
+              {!statesLoading && !receiversLoading && (
                 <PositionRail
                   cells={cells}
+                  receivers={receivers}
                   isActive={(xmid) =>
                     !!selectedPositions[xmid] && eligible.includes(xmid)
                   }

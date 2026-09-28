@@ -28,17 +28,23 @@ export interface MuteOverlay {
   offsets: number[]; // each trace's distance from the shot, m
   tmin: number;
   tmax: number;
-  vmin: number;
-  vmax: number;
+  vmin: number; // 0: none
+  vmax: number; // 0: none
+  width?: number; // s kept after the slowest arrival: the shot's pulse
   taper: number;
+  /** The trigger's shift, s: the mute measured on the shifted record (a late trigger drops the
+   * record's first `shift` seconds, an early one its last). */
+  shift?: number;
 }
 
-/** What `mute` keeps of trace `i`: [from, to] in seconds (to < from: nothing). */
+/** What `mute` keeps of trace `i`: [from, to] in seconds of the record as recorded (to < from:
+ * nothing). */
 function kept(mute: MuteOverlay, i: number): [number, number] {
   const offset = mute.offsets[i] ?? 0;
-  const from = Math.max(mute.tmin, mute.vmax > 0 ? offset / mute.vmax : 0);
-  const to = Math.min(mute.tmax, mute.vmin > 0 ? offset / mute.vmin : Infinity);
-  return [from, to];
+  const shift = mute.shift ?? 0;
+  const from = Math.max(mute.tmin, mute.vmax > 0 ? offset / mute.vmax : 0) + shift;
+  const to = Math.min(mute.tmax, mute.vmin > 0 ? offset / mute.vmin + (mute.width ?? 0) : Infinity) + shift;
+  return [Math.max(0, from), to];
 }
 
 const ML = 84;

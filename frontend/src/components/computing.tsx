@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { API, type Acquisition, type Dispersion, type Masw } from "../api";
 import type { FilteringState, MutingState, StackingState } from "../presets";
 import { GeometryPlot } from "./GeometryPlot";
-import { ArrowRightIcon, ClockIcon, CpuIcon, FilterIcon, FolderIcon, RulerIcon, ScissorsIcon, SpectrumIcon, StackIcon } from "./icons";
+import { ArrowRightIcon, CpuIcon, FilterIcon, FolderIcon, RulerIcon, ScissorsIcon, SpectrumIcon, StackIcon } from "./icons";
 import { Callout, Card, Empty, Fields, NumberField, NumberInput, Page, Segmented, SelectField, Stat, Stats } from "./kit";
 import { runningJob } from "./jobs";
 import { above, boundsOf, tipOf } from "./numbers";
@@ -300,34 +300,41 @@ export function WindowsCard({
   );
 }
 
-export function TriggerRow({ t0, setT0 }: { t0: number; setT0: (t0: number) => void }) {
-  return (
-    <Row icon={<ClockIcon size={16} />} title="Trigger" hint="Shifts every shot's time origin.">
-      <Fields>
-        <NumberField label="Time shift t0" unit="s" value={t0} onChange={setT0} step={0.001} />
-      </Fields>
-    </Row>
-  );
-}
-
+/** Each shot or record cut: muting on, the trigger's shift first (`trigger`, the modes of shots:
+ * left empty, each record's own, from its file), then a time window and the arrivals between two
+ * velocities, each bound left empty when none, the shot's pulse kept after the slowest; the
+ * record previewed, what the muting removes veiled. Off, none of it applies. */
 export function MutingRow({
   acquisition,
   muting,
   setMuting,
   maxTime,
   gather = true,
+  trigger,
 }: {
   acquisition: Acquisition;
   muting: MutingState;
   setMuting: (muting: MutingState) => void;
   maxTime: number;
   gather?: boolean;
+  trigger?: { t0: number | null; setT0: (t0: number) => void };
 }) {
+  // What the files say of their trigger, optional (a file may not say it: no shift for it):
+  // one value, in all of them or some, each its own, or nothing.
+  const known = (acquisition.triggers ?? []).filter((t): t is number => t !== null);
+  const said = [...new Set(known)];
+  const where = known.length === acquisition.files.length ? "the files" : `${known.length} of ${acquisition.files.length} files`;
+  const files =
+    said.length === 0 ? "none in the files" : said.length === 1 ? `${+(said[0] * 1000).toFixed(1)} ms in ${where}` : `each file's own (${where})`;
   return (
     <Row
       icon={<ScissorsIcon size={16} />}
       title="Signal muting"
-      hint="Keeps a time window, or arrivals between two velocities."
+      hint={
+        trigger
+          ? "The trigger's time shift, then a time window, or arrivals between two velocities."
+          : "Keeps a time window, or arrivals between two velocities."
+      }
       control={
         <Segmented
           size="sm"
@@ -344,13 +351,34 @@ export function MutingRow({
       {muting.method === "mute" && (
         <>
           <Fields>
-            <NumberField label="From" unit="s" value={muting.tmin} onChange={(v) => setMuting({ ...muting, tmin: v })} min={0} max={maxTime} step={0.1} />
-            <NumberField label="To" unit="s" value={muting.tmax} onChange={(v) => setMuting({ ...muting, tmax: v })} min={0} max={maxTime} step={0.1} check={above(muting.tmin)} />
-            <NumberField label="Slowest" unit="m/s" value={muting.vmin} onChange={(v) => setMuting({ ...muting, vmin: v })} min={0} />
-            <NumberField label="Fastest" unit="m/s" value={muting.vmax} onChange={(v) => setMuting({ ...muting, vmax: v })} min={0} check={above(muting.vmin)} />
+            {trigger && (
+              <NumberField
+                label="Trigger t0"
+                unit="s"
+                title={"Moves each shot's time origin\nLate (t0 > 0): drops the record's first t0 seconds\nEarly (t0 < 0): pads its start\nEmpty: each record's own, from its file"}
+                value={trigger.t0 ?? Number.NaN}
+                optional="files"
+                hint={files}
+                onChange={trigger.setT0}
+                step={0.001}
+              />
+            )}
+            <NumberField label="From" unit="s" value={muting.tmin ?? Number.NaN} optional="none" onChange={(v) => setMuting({ ...muting, tmin: v })} min={0} max={maxTime} step={0.1} />
+            <NumberField label="To" unit="s" value={muting.tmax ?? Number.NaN} optional="none" onChange={(v) => setMuting({ ...muting, tmax: v })} min={0} max={maxTime} step={0.1} check={above(muting.tmin ?? Number.NaN)} />
+            <NumberField label="Slowest" unit="m/s" value={muting.vmin ?? Number.NaN} optional="none" onChange={(v) => setMuting({ ...muting, vmin: v })} min={0} />
+            <NumberField label="Fastest" unit="m/s" value={muting.vmax ?? Number.NaN} optional="none" onChange={(v) => setMuting({ ...muting, vmax: v })} min={0} check={above(muting.vmin ?? Number.NaN)} />
+            <NumberField
+              label="Signal width"
+              unit="s"
+              title={"Kept after the slowest arrival: the shot's pulse\nSo that the window is not empty at the shot"}
+              value={muting.width}
+              onChange={(v) => setMuting({ ...muting, width: v })}
+              min={0}
+              step={0.01}
+            />
             <NumberField label="Taper" unit="samples" value={muting.taper} onChange={(v) => setMuting({ ...muting, taper: v })} min={0} />
           </Fields>
-          {gather && <MuteGather acquisition={acquisition} muting={muting} />}
+          {gather && <MuteGather acquisition={acquisition} muting={muting} trigger={trigger ? (trigger.t0 ?? null) : 0} />}
         </>
       )}
     </Row>

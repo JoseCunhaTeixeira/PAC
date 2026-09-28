@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { API } from "../../api";
 import { terrain, viridis } from "../colormaps";
-import { FlaskIcon, LayersIcon, StrataIcon } from "../icons";
+import { LayersIcon, OutcropIcon, StrataIcon } from "../icons";
 import { Card, Segmented } from "../kit";
 import { ModeHead } from "../PseudoSectionCanvas";
 import { PetroSectionCanvas, type PetroSectionData } from "../PetroSectionCanvas";
@@ -119,7 +119,7 @@ export function PetroPanel({
           )}
           <Card
             className="viz-section"
-            icon={<FlaskIcon size={17} />}
+            icon={<OutcropIcon size={17} />}
             title="Soil type and penetration resistance (N) sections"
             hint={"N (SPT)\nBlow count: the soil's resistance to a driven sampler"}
           >

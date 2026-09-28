@@ -17,21 +17,52 @@ export function HomeIcon({ size = 18 }: IconProps) {
   );
 }
 
-export function ZapIcon({ size = 18 }: IconProps) {
+// The three ways a line is recorded, one family: the ground, and on it a source and its fronts.
+/** Active: a shot, its fronts spreading. */
+export function ActiveIcon({ size = 18 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+      <path d="M2 21H22" />
+      <polygon points="7,7.8 8.38,11.11 11.95,11.39 9.23,13.72 10.06,17.21 7,15.34 3.94,17.21 4.77,13.72 2.05,11.39 5.62,11.11" />
+      <path d="M12.54 5.91A9 9 0 0 1 12.54 20.09" />
+      <path d="M16.71 3.62A13.5 13.5 0 0 1 18.19 20.55" />
     </svg>
   );
 }
 
-export function WavesIcon({ size = 18 }: IconProps) {
+/** Passive: a receiver, fronts arriving from either side. */
+export function PassiveIcon({ size = 18 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
-      <path d="M2 8a14 14 0 0 1 20 0" />
-      <path d="M5 12a9 9 0 0 1 14 0" />
-      <path d="M8.5 16a4.5 4.5 0 0 1 7 0" />
-      <circle cx="12" cy="20" r="1" fill="currentColor" stroke="none" />
+      <path d="M2 21H22" />
+      <path d="M8.4 13H15.6L12 18.4Z" />
+      <path d="M4.66 13.94A7.5 7.5 0 0 1 8.48 8.88" />
+      <path d="M15.52 8.88A7.5 7.5 0 0 1 19.34 13.94" />
+      <path d="M1.19 11.57A11.5 11.5 0 0 1 5.57 5.97" />
+      <path d="M18.43 5.97A11.5 11.5 0 0 1 22.81 11.57" />
+    </svg>
+  );
+}
+
+/** Passive-active: a receiver turned source (the shots correlated like noise), its fronts. */
+export function PassiveActiveIcon({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <path d="M2 21H22" />
+      <path d="M2.9 13H10.1L6.5 18.4Z" />
+      <path d="M10.75 7.64A8.5 8.5 0 0 1 12.51 21.01" />
+      <path d="M14.86 5.04A13 13 0 0 1 18.03 21" />
+    </svg>
+  );
+}
+
+/** Petrophysics: a rock outcrop, its strata. */
+export function OutcropIcon({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <path d="M2 21L9 5L13.5 13L16.5 9L22 21Z" />
+      <path d="M5.2 13.8L12.2 15.2L14.6 14.4L19.4 15.4" />
+      <path d="M3.6 17.6L20.6 18" />
     </svg>
   );
 }
@@ -66,16 +97,6 @@ export function DepthIcon({ size = 18 }: IconProps) {
       <line x1="3" y1="18" x2="21" y2="18" />
       <path d="M9 4v14" />
       <polyline points="6 15 9 18 12 15" />
-    </svg>
-  );
-}
-
-export function FlaskIcon({ size = 18 }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
-      <path d="M9 2v6.5L4.5 18a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L15 8.5V2" />
-      <path d="M8 2h8" />
-      <path d="M6.5 15h11" />
     </svg>
   );
 }

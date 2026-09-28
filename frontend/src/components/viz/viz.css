@@ -377,6 +377,19 @@
   background: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
+/* The count of modes a window's cell writes, when more than one (the rails'). */
+.viz-swatch.count {
+  height: 12px;
+  background: var(--surface-hover);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  font-size: 9px;
+  font-weight: 600;
+  font-style: normal;
+  line-height: 12px;
+  text-align: center;
+  color: var(--text);
+}
+
 /* A window as the records' stage shows it: stacking the record, in the series' blue. */
 .viz-swatch.series {
   background: color-mix(in srgb, var(--blue) 50%, transparent);
