@@ -265,8 +265,6 @@ export interface VsProfile {
   tops: number[];
   vs: number[];
   std: number[];
-  layered_tops: number[];
-  layered_vs: number[];
   bottom: number;
   informed: number | null;
   deepest_top: number;

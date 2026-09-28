@@ -20,9 +20,38 @@ export function drawMarker(ctx: CanvasRenderingContext2D, x: number, top: number
   ctx.restore();
 }
 
+// A section clicked stays where it is on screen while the page above it changes (the selected
+// window's card reloading above the sections): for HOLD_MS, each change of the page's height
+// scrolls it back, the browser's own anchoring not always keeping it. Scrolling lets it go.
+const HOLD_MS = 2500;
+let held: { element: Element; top: number; until: number } | null = null;
+let watcher: ResizeObserver | null = null;
+
+function release() {
+  held = null;
+}
+
+function holdInPlace(element: Element) {
+  held = { element, top: element.getBoundingClientRect().top, until: performance.now() + HOLD_MS };
+  if (watcher) return;
+  watcher = new ResizeObserver(() => {
+    if (!held) return;
+    if (performance.now() > held.until || !held.element.isConnected) {
+      release();
+      return;
+    }
+    const drift = held.element.getBoundingClientRect().top - held.top;
+    if (Math.abs(drift) >= 1) window.scrollBy(0, drift);
+  });
+  watcher.observe(document.body);
+  for (const input of ["wheel", "touchstart", "keydown"]) {
+    window.addEventListener(input, release, { passive: true });
+  }
+}
+
 /** The canvas's mouse handlers, `onMouseDown` (the zoom's) kept: a click that did not drag
  * calls `onClick` with the logical position under the mouse (the drawing's own coordinates,
- * `width` by `height`). */
+ * `width` by `height`), the section held where it is on screen. */
 export function useClick(
   width: number,
   height: number,
@@ -40,6 +69,7 @@ export function useClick(
       down.current = null;
       if (!onClick || !at || Math.hypot(e.clientX - at.x, e.clientY - at.y) >= CLICK_PX) return;
       const box = e.currentTarget.getBoundingClientRect();
+      holdInPlace(e.currentTarget);
       onClick(((e.clientX - box.left) / box.width) * width, ((e.clientY - box.top) / box.height) * height);
     },
   };

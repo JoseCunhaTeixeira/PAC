@@ -21,3 +21,15 @@ export function neighbours(cells: Cell[], key: string | null): { before: Cell | 
   }
   return { before: candidates[index - 1] ?? null, after: candidates[index + 1] ?? null };
 }
+
+/** The cell a click on a line's plot at `position` selects: the nearest holding a result (a
+ * smoothed section's columns fall between windows), the nearest of all when none does. */
+export function nearestCell(cells: Cell[], position: number): Cell | null {
+  const placed = cells.filter((cell): cell is Cell & { x: number } => cell.x !== null);
+  const done = placed.filter((cell) => cell.status !== "none");
+  let best: (Cell & { x: number }) | null = null;
+  for (const cell of done.length ? done : placed) {
+    if (best === null || Math.abs(cell.x - position) < Math.abs(best.x - position)) best = cell;
+  }
+  return best;
+}

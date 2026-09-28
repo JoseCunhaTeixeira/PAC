@@ -13,6 +13,7 @@ import { StageHead, UnitCard } from "./panel";
 import { CurveFitPlot, SoilColumnView, type CurveAxis } from "./plots";
 import type { Overview, PetroCard } from "./types";
 import { Details, Empty, Skeleton } from "./ui";
+import { nearestCell } from "./cells";
 import { useJson } from "./useJson";
 
 // The petrophysical stage: the selected window's card (its soil column, its fit, whether the
@@ -60,7 +61,7 @@ export function PetroPanel({
     line ? `${API}/petro_inversion/pseudo_section_comparison/${at(folder)}` : null,
   );
   const pick = (position: number) => {
-    const cell = overview?.cells.find((one) => one.x !== null && Math.abs(one.x - position) < 1e-6);
+    const cell = nearestCell(overview?.cells ?? [], position);
     if (cell) onSelect(cell.key);
   };
   const petroCard = card.data;
@@ -94,7 +95,7 @@ export function PetroPanel({
                       <CurveFitPlot
                         curve={petroCard.curve}
                         axis={curveAxis}
-                        modelled="the soil column's"
+                        modelled="modelled (soil column)"
                         aside={
                           <Segmented
                             size="sm"

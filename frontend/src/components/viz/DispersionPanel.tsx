@@ -8,6 +8,7 @@ import { xmidOf } from "./format";
 import { StageHead, UnitCard } from "./panel";
 import type { DispersionCard, Overview, WindowSources } from "./types";
 import { Details, Empty, Skeleton } from "./ui";
+import { nearestCell } from "./cells";
 import { useJson } from "./useJson";
 
 // The dispersion stage: the selected window's card (the shots its image stacks, its image and
@@ -39,7 +40,7 @@ export function DispersionPanel({
   const windows = overview?.cells.length ?? 0;
   const [axis, setAxis] = useState<"frequency" | "wavelength">("frequency");
   const pick = (position: number) => {
-    const cell = overview?.cells.find((one) => one.x !== null && Math.abs(one.x - position) < 1e-6);
+    const cell = nearestCell(overview?.cells ?? [], position);
     if (cell) onSelect(cell.key);
   };
 

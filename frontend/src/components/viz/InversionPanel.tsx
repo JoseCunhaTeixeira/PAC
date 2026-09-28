@@ -18,6 +18,7 @@ import { StageHead, UnitCard } from "./panel";
 import { CurveFitPlot, VsProfilePlot, type CurveAxis } from "./plots";
 import type { Chains, InversionCard, ModelName, Overview } from "./types";
 import { AttemptTable, Empty, Fold, GateTables, Skeleton } from "./ui";
+import { nearestCell } from "./cells";
 import { useJson } from "./useJson";
 
 // The seismic inversion stage: the display settings, the selected window's card (how deep its
@@ -34,9 +35,9 @@ const interfaceColours = (t: number) => purples(Math.sqrt(t));
 const MODELS: { value: ModelName; label: string }[] = [
   { value: "ensemble", label: "Median of the ensemble" },
   { value: "median", label: "Median, layered" },
-  { value: "smooth_median", label: "Smooth median" },
-  { value: "smooth_best", label: "Smooth best" },
+  { value: "smooth_median", label: "Median, smooth" },
   { value: "best", label: "Best, layered" },
+  { value: "smooth_best", label: "Best, smooth" },
 ];
 
 interface VelocitySection {
@@ -196,7 +197,7 @@ export function InversionPanel({
   const modelLabel = MODELS.find((one) => one.value === model)?.label.toLowerCase() ?? model;
   const inverted = (overview?.cells ?? []).some((cell) => cell.status !== "none");
   const pick = (position: number) => {
-    const cell = overview?.cells.find((one) => one.x !== null && Math.abs(one.x - position) < 1e-6);
+    const cell = nearestCell(overview?.cells ?? [], position);
     if (cell) onSelect(cell.key);
   };
   const range = {
@@ -287,7 +288,7 @@ export function InversionPanel({
                         <CurveFitPlot
                           curve={inversionCard.curve}
                           axis={curveAxis}
-                          modelled={`the ${modelLabel} model's`}
+                          modelled={`modelled (${modelLabel})`}
                           aside={
                             <Segmented
                               size="sm"
