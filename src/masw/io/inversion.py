@@ -12,6 +12,7 @@ import numpy as np
 from masw.io.dispersion_images import xmid_folder
 from masw.io.folders import get_xmid_folders
 from masw.io.paths import output_folder
+from masw.io.quality.files import preset_stage, read_manifest
 from masw.io.quality.inversion import (
     MEASURES_FILE,
     informed_to,
@@ -108,15 +109,26 @@ def get_velocity_section(
         )
     ordered = sorted(found.items(), key=lambda item: item[1].position.x)
     section = VelocityModelsSection(velocity_models=tuple(one for _, one in ordered))
-    grid = velocity_grid(section, lateral_smoothing)
+    # Smoothed along the line over a window's length: what each window's model describes.
+    window_m = window_length(run_folder)
+    grid = velocity_grid(section, lateral_smoothing, window_m=window_m)
     windows = [_section_window(run_folder / unit, one) for unit, one in ordered]
     informed = [
         (one.x, one.top, None if one.informed is None else min(one.informed, one.depth))
         for one in windows
     ]
-    return VelocitySection(
-        grid=grid, windows=windows, levels=informed_levels(grid, informed, lateral_smoothing)
-    )
+    levels = informed_levels(grid, informed, lateral_smoothing, window_m)
+    return VelocitySection(grid=grid, windows=windows, levels=levels)
+
+
+def window_length(run_folder: Path) -> float | None:
+    """A window's length along the line (m), from its first receiver to its last; None for a
+    folder without its run's settings."""
+    manifest = read_manifest(run_folder)
+    masw = preset_stage(manifest, "masw")
+    if manifest is None or "length" not in masw:
+        return None
+    return (int(masw["length"]) - 1) * manifest.profile.receiver_spacing_m
 
 
 def _section_window(window: Path, model: VelocityModel) -> SectionWindow:
