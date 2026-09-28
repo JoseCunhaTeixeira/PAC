@@ -1,20 +1,12 @@
 import { useTheme } from "../../theme";
 import type { ReactNode } from "react";
 import { LinePlot, type PlotArea, type PlotRef, type PlotSeries } from "./LinePlot";
-import { num } from "./format";
+import { MODEL_LABELS, num } from "./format";
 import { vizPalette } from "./palette";
 import type { FitCurve, SoilColumn, VsProfile } from "./types";
 
 // The plots of a selected window's card: its model's Vs against depth, with the depth its data
 // inform; its picked curve against the one its model gives back; its soil column.
-
-const MODEL_LABELS: Record<string, string> = {
-  ensemble: "median of the ensemble",
-  median: "median, layered",
-  smooth_median: "median, smooth",
-  best: "best, layered",
-  smooth_best: "best, smooth",
-};
 
 /** Points of a step profile: each layer's value from its top to the next one's, the last down
  * to `bottom`. */
@@ -133,6 +125,23 @@ export function CurveFitPlot({
     dash: [6, 4],
     width: 2,
   };
+  // The kept models' spread, as the saved density figure draws it: up along their 90th percentile,
+  // back along their 10th.
+  const spreadFs = curve.spread_fs ?? [];
+  const low = curve.spread_low ?? [];
+  const high = curve.spread_high ?? [];
+  const order = spreadFs.map((_, i) => i).sort((a, b) => spreadFs[a] - spreadFs[b]);
+  const areas: PlotArea[] = order.length
+    ? [
+        {
+          color: palette.modelledSoft,
+          polygon: [
+            ...order.map((i): [number, number] => [along(spreadFs[i], high[i]), high[i]]),
+            ...[...order].reverse().map((i): [number, number] => [along(spreadFs[i], low[i]), low[i]]),
+          ],
+        },
+      ]
+    : [];
   return (
     <div>
       <div className="viz-row viz-plot-head">
@@ -141,6 +150,7 @@ export function CurveFitPlot({
       </div>
       <LinePlot
         series={[observed, predicted]}
+        areas={areas}
         xLabel={axis === "frequency" ? "Frequency (Hz)" : "Wavelength (m)"}
         yLabel="Phase velocity (m/s)"
         height={320}
@@ -152,6 +162,12 @@ export function CurveFitPlot({
           <i className="dashed" />
           {modelled}
         </span>
+        {areas.length > 0 && (
+          <span>
+            <i className="area" style={{ background: palette.modelledSoft }} />
+            10–90 % of the models
+          </span>
+        )}
       </div>
     </div>
   );

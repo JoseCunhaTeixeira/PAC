@@ -282,6 +282,11 @@ export interface FitCurve {
   observed_err: number[];
   predicted_fs: number[];
   predicted_vs: number[];
+  /** The kept models' curves at the picked frequencies: their 10th and 90th percentiles. Empty for an
+   * inversion saved before 2026-09-29, or a petrophysical one. */
+  spread_fs?: number[];
+  spread_low?: number[];
+  spread_high?: number[];
 }
 
 export interface Convergence {
@@ -295,6 +300,7 @@ export interface Convergence {
   autocorrelation: number | null;
   step: number | null;
   fixed?: number | null; // the value, fixed: not sampled
+  step_unit?: string; // "%": relative to the value (the layers chosen by the data)
 }
 
 export interface InversionAttempt extends AttemptSummary {
@@ -311,6 +317,11 @@ export interface InversionCard extends Card {
   tuning: [number, number][];
   step_factor: number | null;
   acceptance: number[];
+  /** When the data chose the layers: each move's acceptance (%) and relative step (%), the
+   * chains' medians, and the exchanges between tempered copies (%). */
+  moves?: Record<string, number>;
+  move_steps?: Record<string, number>;
+  exchanges?: number | null;
   samples_per_chain: number;
   convergence: Convergence[];
   fits: ModelFit[];

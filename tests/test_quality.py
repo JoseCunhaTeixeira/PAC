@@ -336,8 +336,13 @@ def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> N
     # No trial runs: the chains' moves follow the posterior.
     assert card["tuning"] == [] and card["step_factor"] is None
     assert len(card["acceptance"]) == PARAMETERS["n_chains"]
+    # The layers given: no moves of a layer count, nor tempered copies.
+    assert card["moves"] == {} and card["move_steps"] == {} and card["exchanges"] is None
     (gate,) = card["gates"]
     assert gate["gate"] == "G5" and gate["verdict"] is None
+    # The acceptance among the measures, reported: the chains' median.
+    acceptance = next(metric for metric in gate["metrics"] if metric["name"] == "acceptance")
+    assert acceptance["threshold"] is None and acceptance["unit"] == "%"
     profile = card["profile"]
     # The ensemble by default: each depth's median of the kept models; its fit named.
     assert profile["model"] == "ensemble" and profile["tops"][0] == 0
@@ -350,6 +355,12 @@ def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> N
     curve = card["curve"]
     assert curve["label"] == "M0" and len(curve["observed_fs"]) == len(curve["observed_vs"]) > 0
     assert len(curve["predicted_fs"]) > 0
+    # The kept models' spread around it, as the saved density figure draws it: their 10th and
+    # 90th percentiles at the picked frequencies.
+    assert 0 < len(curve["spread_fs"]) == len(curve["spread_low"]) == len(curve["spread_high"])
+    assert all(
+        low <= high for low, high in zip(curve["spread_low"], curve["spread_high"], strict=True)
+    )
     rows = [row["parameter"] for row in card["convergence"]]
     # Vs at the depths the curve resolves first, where the chains are judged; then the layers'
     # own values, the noise factor.
@@ -358,6 +369,7 @@ def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> N
     vs1 = card["convergence"][rows.index("vs1")]
     # The resulting model beside its prior: the posterior's median within its middle 80 %.
     assert vs1["prior"] == [100, 400] and 100 <= vs1["low"] <= vs1["median"] <= vs1["high"] <= 400
+    assert vs1["step"] > 0 and vs1["step_unit"] == ""  # m/s, as the layer's own
     assert card["figures"] == ["marginals", "density_curves", "dispersion_image"]
     assert any(text.startswith("Layered median: Vs ") for text in _texts(card))
     best = client.get(f"/quality/inversion/card/{run}/2.5?model=best").json()
@@ -879,3 +891,28 @@ def test_a_curves_points_past_the_images_lines_are_measured() -> None:
 
     for name in ("aliased_points", "beyond_reach_points"):
         assert metrics[name].value == 0.167 and not metrics[name].passed
+
+
+def test_an_inversion_whose_data_chose_the_layers_shows_how_its_chains_moved(run: str) -> None:
+    # On a copy of the run, a window inverted again with the layers chosen by the data: each
+    # move's acceptance and step, the exchanges between tempered copies, the rows' steps
+    # relative to their values.
+    folder = f"{run}-free"
+    shutil.copytree(OUTPUT_DIR / run, OUTPUT_DIR / folder)
+    config = {
+        "folder": folder,
+        "positions": [2.5],
+        "labels": ["M0"],
+        "parameters": {"n_iterations": 1_500, "n_chains": 2},
+        "n_workers": 1,
+    }
+    assert _wait(client.post("/inversion/run", json=config).json())["state"] == "succeeded"
+
+    card = client.get(f"/quality/inversion/card/{folder}/2.5").json()
+
+    assert {"birth", "death", "vs", "noise"} <= set(card["moves"])
+    assert set(card["move_steps"]) == {"interface", "vs", "noise", "shift", "stretch"}
+    assert card["exchanges"] is not None
+    rows = {row["parameter"]: row for row in card["convergence"]}
+    assert all(row["step_unit"] == "%" for name, row in rows.items() if name.startswith("vs@"))
+    assert rows["noise"]["step_unit"] == "%" and rows["layers"]["step"] is None

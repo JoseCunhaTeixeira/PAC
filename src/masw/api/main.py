@@ -32,8 +32,14 @@ from masw.api.routers import (
     windows,
 )
 from masw.logging_config import setup_logging
+from sigpipe.workers import one_thread_each
 
 logger = logging.getLogger(__name__)
+
+# One thread in each process of PAC's jobs (numpy's BLAS, OpenMP, TensorFlow's pools), set
+# before the first pool starts: the workers asked are the cores a job takes (the user,
+# 2026-09-29: 6 inversion workers took the 12 cores).
+one_thread_each()
 
 __version__ = _pkg_version("PAC")
 

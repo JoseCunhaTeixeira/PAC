@@ -74,6 +74,15 @@ const METRIC_LABELS: Record<string, string> = {
   water_table_max: "Deepest water table",
 };
 
+// The inversion's models, as the figures name them.
+export const MODEL_LABELS: Record<string, string> = {
+  ensemble: "median of the ensemble",
+  median: "median, layered",
+  smooth_median: "median, smooth",
+  best: "best, layered",
+  smooth_best: "best, smooth",
+};
+
 export function metricLabel(name: string): string {
   return METRIC_LABELS[name] ?? name.replaceAll("_", " ");
 }

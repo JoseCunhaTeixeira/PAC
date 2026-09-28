@@ -4,7 +4,6 @@ then the line's section and comparison figures. Stoppable: see sigpipe.masw.runs
 
 import json
 import logging
-import os
 import threading
 import time
 import traceback
@@ -24,6 +23,7 @@ from masw.runners.computing import WindowError
 from sigpipe.masw.inversion import InversionParameters
 from sigpipe.masw.runs.history import STAGE_FILES
 from sigpipe.masw.runs.stopping import Stopped, commit, finished, staging, undo
+from sigpipe.workers import one_thread_each
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,15 @@ def _invert_position_timed(
     return time.perf_counter() - start
 
 
+def chain_jobs(workers: int, windows: int, chains: int) -> int:
+    """The processes each window's chains run in: the workers the windows running at once leave
+    idle, shared between them, never more than its chains (PACo's rule,
+    paco.qc.inverting.chain_jobs). The workers asked are all the cores a job takes (the user,
+    2026-09-29: 6 workers on 12 cores took them all, each window's chains sharing the
+    machine's cores)."""
+    return max(1, min(chains, workers // max(1, windows)))
+
+
 def run_inversion(
     config: InversionRunConfig,
     on_progress: ProgressCallback | None = None,
@@ -72,14 +81,14 @@ def run_inversion(
     errors: list[WindowError] = []
     results: list[dict[str, object]] = []
     completed = 0
-    # Each window's chains in the cores its share of the workers leaves: a few windows, their
-    # chains side by side; as many windows as cores, one after the other.
-    chain_jobs = max(1, (os.cpu_count() or 1) // max(1, min(config.n_workers, total)))
+    windows = max(1, min(config.n_workers, total))
+    jobs = chain_jobs(config.n_workers, windows, config.parameters.n_chains)
     if on_progress is not None:
         on_progress(completed, total, None)
 
+    one_thread_each()
     with ProcessPoolExecutor(
-        max_workers=config.n_workers,
+        max_workers=windows,
         initializer=setup_logging,
     ) as executor:
         futures: dict[Future[float], float] = {}
@@ -92,7 +101,7 @@ def run_inversion(
                 config.labels,
                 config.parameters,
                 output,
-                chain_jobs,
+                jobs,
             )
             futures[future] = xmid
         try:

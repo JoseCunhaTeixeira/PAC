@@ -23,6 +23,8 @@ export function vizPalette(theme: Theme) {
     part: (state: PartState) => (state === "hand" ? hand : status[state]),
     series,
     seriesSoft: dark ? "rgba(79, 156, 245, 0.28)" : "rgba(42, 120, 214, 0.18)",
+    // The models' spread around their curve, drawn in the curve's red.
+    modelledSoft: dark ? "rgba(240, 106, 106, 0.3)" : "rgba(214, 60, 60, 0.2)",
     // How a window uses a shot: stacked, stacked with some traces left out, or left out (why).
     use: {
       used: series,
