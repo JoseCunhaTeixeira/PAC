@@ -1,5 +1,12 @@
 import type { ReactNode } from "react";
-import { ArrowLeftIcon, ArrowRightIcon, DepthIcon, FlaskIcon, ImageIcon, PulseIcon } from "../icons";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  DepthIcon,
+  ImageIcon,
+  OutcropIcon,
+  PulseIcon,
+} from "../icons";
 import { neighbours } from "./cells";
 import { STATE_MEANINGS } from "./format";
 import type { Card, Cell, Overview, Sentence, StageKey } from "./types";
@@ -53,7 +60,7 @@ const STAGE_ICONS: Record<StageKey, ReactNode> = {
   records: <PulseIcon size={17} />,
   dispersion: <ImageIcon size={17} />,
   inversion: <DepthIcon size={17} />,
-  petro: <FlaskIcon size={17} />,
+  petro: <OutcropIcon size={17} />,
 };
 
 export function UnitCard({

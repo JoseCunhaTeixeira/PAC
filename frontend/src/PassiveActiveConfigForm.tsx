@@ -4,29 +4,19 @@ import {
   buildFilteringParams,
   buildMutingParams,
   buildStackingParams,
-  buildWindowParams,
+  buildTriggerParams,
 } from "./builders";
 import {
   DispersionRows,
   FilteringRow,
   MutingRow,
   NextSteps,
-  Row,
   StackingRow,
-  TriggerRow,
   WindowsCard,
   WorkersField,
   type FormProps,
 } from "./components/computing";
-import { ScissorsIcon } from "./components/icons";
-import {
-  Callout,
-  Card,
-  Fields,
-  NumberField,
-  Segmented,
-} from "./components/kit";
-import { above } from "./components/numbers";
+import { Callout, Card } from "./components/kit";
 import { RunPanel } from "./components/RunPanel";
 import { useStoredState } from "./components/stored";
 import {
@@ -34,8 +24,8 @@ import {
   type MutingState,
   type PresetDefaults,
   type StackingState,
-  type WindowState,
   stage,
+  triggerDefault,
   usePreset,
 } from "./presets";
 
@@ -75,21 +65,19 @@ function Form({
     `${kept}.masw`,
     stage<Masw>(preset, "masw"),
   );
+  // @2: since the bounds may be empty and the trigger the files' (2026-09-28), an earlier
+  // session's stand-in values are not kept.
   const [trigger, setTrigger] = useStoredState(
-    `${kept}.trigger`,
-    stage<{ t0: number }>(preset, "trigger"),
+    `${kept}.trigger@2`,
+    triggerDefault(preset, acquisition.triggers),
   );
   const [muting, setMuting] = useStoredState(
-    `${kept}.muting`,
+    `${kept}.muting@2`,
     stage<MutingState>(preset, "muting"),
   );
   const [filtering, setFiltering] = useStoredState(
     `${kept}.filtering`,
     stage<FilteringState>(preset, "filtering"),
-  );
-  const [surfaceWaves, setSurfaceWaves] = useStoredState(
-    `${kept}.surfaceWaves`,
-    stage<WindowState>(preset, "correlation_window"),
   );
   const [dispersion, setDispersion] = useStoredState(
     `${kept}.dispersion`,
@@ -111,10 +99,9 @@ function Form({
     mode: "passive-active",
     overrides: {
       masw,
-      trigger,
+      trigger: buildTriggerParams(trigger, muting),
       muting: buildMutingParams(muting),
       filtering: buildFilteringParams(filtering),
-      correlation_window: buildWindowParams(surfaceWaves),
       stacking: buildStackingParams(stacking),
       dispersion,
     },
@@ -138,12 +125,12 @@ function Form({
           hint="Applied to each shot first."
         >
           <div className="rows">
-            <TriggerRow t0={trigger.t0} setT0={(t0) => setTrigger({ t0 })} />
             <MutingRow
               acquisition={acquisition}
               muting={muting}
               setMuting={setMuting}
               maxTime={maxTime}
+              trigger={{ t0: trigger.t0, setT0: (t0) => setTrigger({ t0 }) }}
             />
             <FilteringRow
               filtering={filtering}
@@ -159,58 +146,6 @@ function Form({
           hint="Each shot correlated with its nearest receiver, then stacked into a virtual shot."
         >
           <div className="rows">
-            <Row
-              icon={<ScissorsIcon size={16} />}
-              title="Surface-wave muting"
-              hint="Keeps the arrivals between two velocities, before correlating."
-              control={
-                <Segmented
-                  size="sm"
-                  label="Surface-wave window"
-                  value={surfaceWaves.method}
-                  onChange={(method) =>
-                    setSurfaceWaves({ ...surfaceWaves, method })
-                  }
-                  options={[
-                    { value: "none", label: "Off" },
-                    { value: "mute", label: "Mute" },
-                  ]}
-                />
-              }
-            >
-              {surfaceWaves.method === "mute" && (
-                <Fields>
-                  <NumberField
-                    label="Slowest"
-                    unit="m/s"
-                    value={surfaceWaves.vmin}
-                    onChange={(v) =>
-                      setSurfaceWaves({ ...surfaceWaves, vmin: v })
-                    }
-                    min={0}
-                  />
-                  <NumberField
-                    label="Fastest"
-                    unit="m/s"
-                    value={surfaceWaves.vmax}
-                    onChange={(v) =>
-                      setSurfaceWaves({ ...surfaceWaves, vmax: v })
-                    }
-                    min={0}
-                    check={above(surfaceWaves.vmin)}
-                  />
-                  <NumberField
-                    label="Taper"
-                    unit="samples"
-                    value={surfaceWaves.taper}
-                    onChange={(v) =>
-                      setSurfaceWaves({ ...surfaceWaves, taper: v })
-                    }
-                    min={0}
-                  />
-                </Fields>
-              )}
-            </Row>
             <StackingRow
               title="Correlation stacking"
               hint="How the shots' correlations add up."

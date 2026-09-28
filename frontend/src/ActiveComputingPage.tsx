@@ -1,6 +1,6 @@
 import { ConfigForm } from "./ActiveConfigForm";
 import { ComputingPage } from "./components/computing";
-import { ZapIcon } from "./components/icons";
+import { ActiveIcon } from "./components/icons";
 
 export default function ActiveComputingPage() {
   return (
@@ -8,7 +8,7 @@ export default function ActiveComputingPage() {
       mode="active"
       title="Active computing"
       subtitle="Compute dispersion images from active shots"
-      icon={<ZapIcon size={24} />}
+      icon={<ActiveIcon size={24} />}
       art="active"
       needsSources
       Form={ConfigForm}

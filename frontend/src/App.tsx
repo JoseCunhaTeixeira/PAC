@@ -15,17 +15,17 @@ import { TipLayer } from "./components/TipLayer";
 import { runsAt, useRunning } from "./components/running";
 import { applyTheme, getInitialTheme, ThemeContext, type Theme } from "./theme";
 import {
+  ActiveIcon,
   CrosshairIcon,
   DepthIcon,
   EyeIcon,
-  FlaskIcon,
   HomeIcon,
-  LayersIcon,
   MoonIcon,
+  OutcropIcon,
+  PassiveActiveIcon,
+  PassiveIcon,
   SparklesIcon,
   SunIcon,
-  WavesIcon,
-  ZapIcon,
 } from "./components/icons";
 // PAC's version in the sidebar: the frontend's own, kept in step with pyproject.toml.
 import packageJson from "../package.json";
@@ -46,9 +46,9 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   {
     label: "Compute",
     items: [
-      { to: "/active", label: "Active", icon: <ZapIcon /> },
-      { to: "/passive", label: "Passive", icon: <WavesIcon /> },
-      { to: "/passive-active", label: "Passive-active", icon: <LayersIcon /> },
+      { to: "/active", label: "Active", icon: <ActiveIcon /> },
+      { to: "/passive", label: "Passive", icon: <PassiveIcon /> },
+      { to: "/passive-active", label: "Passive-active", icon: <PassiveActiveIcon /> },
     ],
   },
   {
@@ -56,7 +56,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
     items: [
       { to: "/dispersion_picking", label: "Dispersion picking", icon: <CrosshairIcon /> },
       { to: "/seismic_inversion", label: "Seismic inversion", icon: <DepthIcon /> },
-      { to: "/petro_inversion", label: "Petrophysical inversion", icon: <FlaskIcon /> },
+      { to: "/petro_inversion", label: "Petrophysical inversion", icon: <OutcropIcon /> },
     ],
   },
   {

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { API } from "../api";
 import { useJson } from "./viz/useJson";
-import type { Cell, Overview, StageKey } from "./viz/types";
+import type { Cell, Overview, RunCard, StageKey } from "./viz/types";
 
 // Each window's state at a stage, as Visualization shows it (passed, flagged, rejected; none: no
 // curve, or not inverted), for the position rails of the picking and inversion pages.
@@ -23,6 +23,15 @@ export function useStageStates(folder: string, stage: StageKey, version: unknown
     [overview.data],
   );
   return { states, loading: overview.loading };
+}
+
+const NO_RECEIVERS: number[] = [];
+
+/** The line's receivers (its run card's), so that a rail's cells are their spacing wide whatever
+ * the windows' step; none without a card, `loading` until it comes. */
+export function useReceivers(folder: string) {
+  const card = useJson<RunCard>(folder ? `${API}/quality/run/${encodeURIComponent(folder)}` : null);
+  return { receivers: card.data?.receivers ?? NO_RECEIVERS, loading: card.loading };
 }
 
 /** A cell's verdict, or null when it has none (not picked, not inverted). */

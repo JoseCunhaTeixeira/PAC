@@ -32,7 +32,7 @@ import {
   type RailTone,
 } from "./components/PositionRail";
 import { useStoredState } from "./components/stored";
-import { judged, useStageStates, xmidKey } from "./components/railStates";
+import { judged, useReceivers, useStageStates, xmidKey } from "./components/railStates";
 import { num } from "./components/viz/format";
 
 const LABEL_PATTERN = /^[A-Z]{1,3}[0-9]+$/;
@@ -53,6 +53,8 @@ const CURVE_TONES: [RailTone, string][] = [
   ["none", "not picked"],
 ];
 const LABEL_PARTS = /^([A-Z]{1,3})([0-9]+)$/;
+// The line of the checks' hover naming the modes picked, which the page says as the picks are now.
+const MODES_LINE = /^\d+ modes? picked: /;
 
 function sanitizeLabel(raw: string): string {
   return raw
@@ -120,6 +122,8 @@ export default function DispersionPickingPage() {
     "dispersion",
     picks,
   );
+  // The line's receivers: a window's cell is their spacing wide, whatever the step.
+  const { receivers, loading: receiversLoading } = useReceivers(folder);
 
   const [error, setError] = useState<string | null>(null);
   // Starts true so the first render after picking a folder shows "Loading…"
@@ -349,10 +353,10 @@ export default function DispersionPickingPage() {
           : "auto";
     const image = state?.parts && state.parts.length > 1 ? state.parts[0] : undefined;
     const tone: RailTone = image === undefined ? curve : hand ? "hand" : (verdict ?? curve);
-    // The hover as Visualization's (its image, then its curve, apart), its curve as the picks
-    // are now, and every mode picked after it.
+    // The hover as Visualization's (its image, then its curve, apart), its curve and its modes
+    // as the picks are now.
     const lines = state
-      ? [...state.hover]
+      ? state.hover.filter((line) => !MODES_LINE.test(line))
       : [
           `xmid ${num(position.xmid, 4)} m`,
           hasCurve ? (hand ? "Curve: by hand" : "Curve: picked automatically") : "No curve",
@@ -360,13 +364,19 @@ export default function DispersionPickingPage() {
     const at = lines.findIndex((line) => line.startsWith("Curve") || line === "No curve");
     const now = !hasCurve ? "No curve" : hand ? "Curve: by hand" : undefined;
     if (now !== undefined && at >= 0) lines[at] = now;
-    if (hasCurve && position.labels.length > 1)
-      lines.splice(at >= 0 ? at + 1 : lines.length, 0, position.labels.join(", "));
+    const n = position.labels.length;
+    if (hasCurve)
+      lines.splice(
+        at >= 0 ? at + 1 : lines.length,
+        0,
+        `${n} mode${n > 1 ? "s" : ""} picked: ${position.labels.join(", ")}`,
+      );
     return {
       xmid: position.xmid,
       tone,
       title: lines.join("\n"),
       parts: image === undefined ? undefined : [image === "hand" ? "none" : image, curve],
+      modes: position.labels,
     };
   });
   // What the rail's colours say, each part's states present: the image's, the curve's.
@@ -407,7 +417,7 @@ export default function DispersionPickingPage() {
             title="Windows"
             hint="Click one, or ← →."
             aside={
-              <RailLegend groups={legend}>
+              <RailLegend groups={legend} modes={picked.some((position) => position.labels.length > 1)}>
                 <Badge
                   tone={
                     picked.length === positionPicks.length ? "ok" : "neutral"
@@ -418,10 +428,12 @@ export default function DispersionPickingPage() {
               </RailLegend>
             }
           >
-            {/* Once the checks are in, so that no cell changes colour as they come. */}
-            {!statesLoading && (
+            {/* Once the checks and the receivers are in, so that no cell changes colour or size
+                as they come. */}
+            {!statesLoading && !receiversLoading && (
               <PositionRail
                 cells={cells}
+                receivers={receivers}
                 isActive={(x) => x === xmid}
                 onClick={setXmid}
               />

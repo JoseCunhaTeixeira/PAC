@@ -15,6 +15,8 @@ export interface RunEntry {
   mode: string | null;
   by: "assistant" | "pac" | null;
   windows: number;
+  /** Receivers per window; null: not said (the older layout). */
+  window_length: number | null;
 }
 
 export interface ProfileRuns {
@@ -116,6 +118,8 @@ export interface Cell {
   total: number | null;
   /** Its checks said apart, top down, in the order of the overview's parts; none: `status`. */
   parts?: PartState[];
+  /** The modes picked in it (a window, the dispersion stage): M0, M1... */
+  modes?: string[];
 }
 
 /** What one of the cells' parts says: what it checks, and each of its states present. */

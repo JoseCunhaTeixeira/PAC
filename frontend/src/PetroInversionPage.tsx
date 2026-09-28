@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { API } from "./api";
-import { ArrowRightIcon, CpuIcon, FlaskIcon } from "./components/icons";
+import { ArrowRightIcon, CpuIcon, OutcropIcon } from "./components/icons";
 import {
   Callout,
   Card,
@@ -13,7 +13,7 @@ import {
   RailLegend,
   type RailCell,
 } from "./components/PositionRail";
-import { judged, useStageStates, xmidKey } from "./components/railStates";
+import { judged, useReceivers, useStageStates, xmidKey } from "./components/railStates";
 import { num } from "./components/viz/format";
 import { WorkersField } from "./components/computing";
 import { RunPanel } from "./components/RunPanel";
@@ -93,6 +93,8 @@ export default function PetroInversionPage() {
     "petro",
     runs,
   );
+  // The line's receivers: a window's cell is their spacing wide, whatever the step.
+  const { receivers, loading: receiversLoading } = useReceivers(folder);
   // Starts true so the first render after picking a folder doesn't flash
   // "No picked dispersion data found" before the effect below runs.
   const [loadingPicks, setLoadingPicks] = useState(true);
@@ -181,7 +183,7 @@ export default function PetroInversionPage() {
 
   return (
     <Page
-      icon={<FlaskIcon size={24} />}
+      icon={<OutcropIcon size={24} />}
       title="Petrophysical inversion"
       subtitle="Invert the fundamental mode into soil types"
       art="petro"
@@ -251,9 +253,10 @@ export default function PetroInversionPage() {
                   </button>
                 </span>
               </div>
-              {!statesLoading && (
+              {!statesLoading && !receiversLoading && (
                 <PositionRail
                   cells={cells}
+                  receivers={receivers}
                   isActive={(xmid) =>
                     !!selectedPositions[xmid] && eligible.includes(xmid)
                   }

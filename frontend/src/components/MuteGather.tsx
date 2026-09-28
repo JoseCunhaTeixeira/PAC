@@ -4,8 +4,8 @@ import type { Range } from "./useZoom";
 import { LineGather, type GatherData, type MuteOverlay } from "./viz/LineGather";
 
 // The muting's preview on a computing page: a record drawn as Visualization draws one (each
-// trace at its receiver along the line, the shot a star above it), what the muting removes
-// veiled. A drag zooms, a double-click shows all of it.
+// trace at its receiver along the line, the shot a star above it), what the muting and the
+// trigger's shift remove veiled. A drag zooms, a double-click shows all of it.
 
 interface RawGather {
   dt: number;
@@ -16,11 +16,15 @@ interface RawGather {
 export function MuteGather({
   acquisition,
   muting,
+  trigger = 0,
   file: fileProp,
   norm = "trace",
 }: {
   acquisition: Acquisition;
   muting?: Muting;
+  /** The trigger's shift, s: what it drops veiled, the muting measured after it; null (or
+   * empty) for the previewed file's own. */
+  trigger?: number | null;
   // Controlled file selection: when omitted, the component owns its own
   // selector (the config forms' preview, one file at a time).
   file?: string;
@@ -74,18 +78,26 @@ export function MuteGather({
 
   // Each trace's offset along the ground (x, z), as sigpipe measures it: on a slope, longer than
   // the horizontal distance.
+  // The shift keeps the record's length: what a late trigger pads at the end is veiled too. A
+  // bound left empty is none.
+  const shift = trigger !== null && Number.isFinite(trigger) ? trigger : (acquisition.triggers?.[index] ?? 0);
   const mute = useMemo((): MuteOverlay | undefined => {
-    if (!muting || !raw) return undefined;
+    if ((!muting && shift === 0) || !raw) return undefined;
     const source = acquisition.source_positions[index] ?? [0, 0];
+    const duration = (raw.n_samples - 1) * raw.dt;
+    const given = (value: number | null | undefined, none: number) =>
+      value !== null && value !== undefined && Number.isFinite(value) ? value : none;
     return {
       offsets: acquisition.receiver_positions.map(([x, z]) => Math.hypot(x - source[0], z - source[1])),
-      tmin: muting.tmin,
-      tmax: muting.tmax,
-      vmin: muting.vmin,
-      vmax: muting.vmax,
-      taper: muting.taper * raw.dt,
+      tmin: given(muting?.tmin, 0),
+      tmax: Math.min(given(muting?.tmax, duration), duration - Math.max(0, shift)),
+      vmin: given(muting?.vmin, 0),
+      vmax: given(muting?.vmax, 0),
+      width: muting?.width ?? 0,
+      taper: (muting?.taper ?? 0) * raw.dt,
+      shift,
     };
-  }, [muting, raw, acquisition, index]);
+  }, [muting, shift, raw, acquisition, index]);
 
   const extent = useMemo((): Range => {
     const xs = [...(data?.positions ?? []), ...(data?.source != null ? [data.source] : [])];

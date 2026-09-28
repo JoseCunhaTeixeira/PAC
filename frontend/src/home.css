@@ -128,90 +128,62 @@
   fill: rgba(220, 230, 250, 0.55);
 }
 
+/* The shot's front (HeroArt's SMIL moves it). */
 .hero-front {
   fill: none;
   stroke: rgba(126, 224, 238, 0.7);
   stroke-width: 1.4;
   vector-effect: non-scaling-stroke;
-  opacity: 0;
-  transform: scale(0.05);
-  animation: hero-front 4.4s cubic-bezier(0.25, 0.6, 0.35, 1) infinite;
 }
 
-@keyframes hero-front {
-  0% {
-    transform: scale(0.05);
-    opacity: 0.95;
-  }
-  100% {
-    transform: scale(4.4);
-    opacity: 0;
-  }
-}
-
-.hero-pulse {
-  stroke-dasharray: 110 1100;
-  stroke-dashoffset: 1100;
-  animation: hero-pulse 3.2s linear infinite;
-}
-
-@keyframes hero-pulse {
-  to {
-    stroke-dashoffset: -110;
-  }
-}
-
+/* A receiver turns blue as the front reaches it (its delay the arrival, HeroArt's). */
 .hero-receiver {
   fill: rgba(255, 255, 255, 0.88);
-  animation: hero-receiver 3.2s linear infinite;
+  animation: hero-receiver 4.4s linear infinite;
 }
 
 @keyframes hero-receiver {
-  0%,
-  14%,
+  0% {
+    fill: #7ee0ee;
+  }
+  8%,
   100% {
     fill: rgba(255, 255, 255, 0.88);
   }
-  5% {
-    fill: #7ee0ee;
-  }
 }
 
+/* What each shot gives, drawn as its front crosses the receivers (HeroArt's SMIL): hidden until
+   then. */
 .hero-profile {
   fill: none;
   stroke: #f5c14b;
   stroke-width: 2.4;
   stroke-linejoin: round;
-  opacity: 0.9;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
 }
 
 .hero-curve {
-  stroke-dasharray: 260;
-  stroke-dashoffset: 260;
-  animation: hero-draw 2.2s ease-out 0.3s forwards;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
 }
 
-@keyframes hero-draw {
-  to {
-    stroke-dashoffset: 0;
-  }
+.hero-dot {
+  opacity: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-front,
-  .hero-pulse,
-  .hero-receiver,
-  .hero-curve {
+  .hero-receiver {
     animation: none;
   }
 
-  .hero-curve {
+  .hero-curve,
+  .hero-profile {
     stroke-dashoffset: 0;
   }
 
-  .hero-front {
-    opacity: 0.35;
-    transform: scale(1.6);
+  .hero-dot {
+    opacity: 0.9;
   }
 }
 

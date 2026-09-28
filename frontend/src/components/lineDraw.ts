@@ -1,11 +1,11 @@
-import { CANVAS_FONT, type Theme } from "../theme";
+import { CANVAS_FONT, canvasFont, type Theme } from "../theme";
 import { tickDecimals } from "./useZoom";
 import type { PartState } from "./viz/types";
 
 // What every plot of a line from above shares, so that the computing pages' geometry and
-// Visualization's line look alike: the lanes, the symbols' sizes and shapes (a star a shot, an
-// inverted triangle a receiver), the position axis under them, and for a line that is not flat,
-// its elevation.
+// Visualization's line look alike: the lanes, the line's extent (a window as wide on both), the
+// symbols' sizes and shapes (a star a shot, an inverted triangle a receiver), the position axis
+// under them, and for a line that is not flat, its elevation.
 
 export const LANE = {
   left: 84, // the lanes' labels
@@ -21,11 +21,24 @@ export const LANE = {
 /** The windows' lane's bottom, where the position axis starts. */
 export const LANE_BOTTOM = LANE.windowY + LANE.windowH;
 
+/** The line's extent along x: `xs` (its receivers, shots and windows), a margin around. */
+export function lineSpan(xs: readonly number[]): [number, number] {
+  if (xs.length === 0) return [0, 1];
+  const lo = Math.min(...xs);
+  const hi = Math.max(...xs);
+  const pad = (hi - lo) * 0.015 || 1;
+  return [lo - pad, hi + pad];
+}
+
 // A window's cell, as the rails draw theirs (kit.css's .rail-cell), so that a window looks the
 // same on every page: as tall, 2 px from the next, rounded 4 px; a state's colour mixed into the
 // page, stronger under the pointer (and 12 % taller) and when selected (and edged); a cell telling
 // its checks apart, a band each, 1 px apart, rounded 2 px.
-export const CELL = { gap: 2, radius: 4, bandGap: 1, bandRadius: 2 } as const;
+export const CELL = { gap: 2, radius: 4, bandGap: 1, bandRadius: 2, edge: 1, maxW: 12 } as const;
+// A figure in a cell (how many modes were picked in it, when more than one), as the rails write
+// it: in a cell as wide as a digit at least.
+const CELL_FONT = canvasFont(9, 600);
+export const COUNT_MIN_W = 5;
 
 /** A cell's tone: a state, a part's (by hand), picked but not judged (auto), or a window as the
  * computing pages show it (series). */
@@ -88,8 +101,9 @@ export function cellColour(theme: Theme, tone: CellTone, strength: CellStrength,
 }
 
 /** A window's cell centred on `x`, `w` wide, as the rails draw theirs: its tones top down (one,
- * or a band each), at `strength`; selected, edged as a rail's (2 px of the text's colour and a
- * faint ring); under the pointer, 12 % taller. */
+ * or a band each), at `strength`, `label` written small in the last (its curve's: how many modes
+ * were picked in it, when more than one); selected, edged as a rail's (1 px of the text's colour and a faint ring);
+ * under the pointer, 12 % taller. */
 export function drawCell(
   ctx: CanvasRenderingContext2D,
   theme: Theme,
@@ -98,41 +112,72 @@ export function drawCell(
   tones: readonly CellTone[],
   strength: CellStrength,
   selected = false,
+  label?: string,
 ): void {
   const h = LANE.windowH * (strength === "hover" ? 1.12 : 1);
   const top = LANE.windowY + (LANE.windowH - h) / 2;
   const left = x - w / 2;
+  const band = tones.length <= 1 ? h : (h - CELL.bandGap * (tones.length - 1)) / tones.length;
   if (tones.length <= 1) {
     ctx.fillStyle = cellColour(theme, tones[0] ?? "none", strength);
     roundedRect(ctx, left, top, w, h, CELL.radius);
     ctx.fill();
   } else {
-    const band = (h - CELL.bandGap * (tones.length - 1)) / tones.length;
     tones.forEach((tone, i) => {
       ctx.fillStyle = cellColour(theme, tone, strength, true);
       roundedRect(ctx, left, top + i * (band + CELL.bandGap), w, band, CELL.bandRadius);
       ctx.fill();
     });
   }
+  if (label && w >= COUNT_MIN_W) {
+    ctx.font = CELL_FONT;
+    ctx.fillStyle = TOKENS[theme].text;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x, top + h - band / 2 + 0.5);
+  }
   if (selected) {
+    // The edge inside the cell, the ring against it outside: each `CELL.edge` wide, as a rail's
+    // border and box-shadow.
     const tokens = TOKENS[theme];
-    ctx.lineWidth = 2;
+    const half = CELL.edge / 2;
+    ctx.lineWidth = CELL.edge;
     ctx.strokeStyle = tokens.text;
-    roundedRect(ctx, left + 1, top + 1, w - 2, h - 2, CELL.radius - 1);
+    roundedRect(ctx, left + half, top + half, w - CELL.edge, h - CELL.edge, CELL.radius - half);
     ctx.stroke();
     ctx.strokeStyle = withAlpha(tokens.text, 0.16);
-    roundedRect(ctx, left - 2, top - 2, w + 4, h + 4, CELL.radius + 2);
+    roundedRect(ctx, left - half, top - half, w + CELL.edge, h + CELL.edge, CELL.radius + half);
     ctx.stroke();
   }
 }
 
-/** The cells' width on screen: the tightest gap between windows, less the rails' gap. */
-export function cellWidth(xmids: readonly number[], span: number, plotW: number): number {
-  const xs = [...xmids].sort((a, b) => a - b);
+/** The tightest gap between `xs`; Infinity without two apart. */
+function tightestGap(xs: readonly number[]): number {
+  const sorted = [...xs].sort((a, b) => a - b);
   let gap = Infinity;
-  for (let i = 1; i < xs.length; i++) gap = Math.min(gap, xs[i] - xs[i - 1]);
-  const px = Number.isFinite(gap) && span > 0 ? (gap / span) * plotW : 14;
-  return Math.max(2, px - CELL.gap);
+  for (let i = 1; i < sorted.length; i++) if (sorted[i] > sorted[i - 1]) gap = Math.min(gap, sorted[i] - sorted[i - 1]);
+  return gap;
+}
+
+/** The receivers' usual spacing: the median of their gaps; Infinity without two apart. */
+function receiverSpacing(receivers: readonly number[]): number {
+  const xs = [...receivers].sort((a, b) => a - b);
+  const gaps = xs.slice(1).map((x, i) => x - xs[i]).filter((gap) => gap > 0).sort((a, b) => a - b);
+  return gaps.length ? gaps[Math.floor(gaps.length / 2)] : Infinity;
+}
+
+/** A cell's share of the line, in metres: a receiver's spacing, whatever the windows' step (the
+ * tightest gap between windows at most, so that none overlap; that gap without receivers). */
+export function cellMetres(xmids: readonly number[], receivers: readonly number[]): number {
+  return Math.min(tightestGap(xmids), receiverSpacing(receivers));
+}
+
+/** The cells' width on screen: their share of the line, less the rails' gap, never wider than
+ * `CELL.maxW`: small cells whatever the step, a larger one leaving larger gaps between them. */
+export function cellWidth(xmids: readonly number[], receivers: readonly number[], span: number, plotW: number): number {
+  const metres = cellMetres(xmids, receivers);
+  const px = Number.isFinite(metres) && span > 0 ? (metres / span) * plotW : 14;
+  return Math.max(2, Math.min(CELL.maxW, px - CELL.gap));
 }
 
 /** A rounded rectangle's path, its corners never rounder than half its side. */

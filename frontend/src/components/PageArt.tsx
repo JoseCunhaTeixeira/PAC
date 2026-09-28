@@ -1,5 +1,7 @@
 // Each page's small artwork, in its header band: the home page's hero, in miniature, for what
-// the page does. Shots are stars, receivers inverted triangles, as in every plot.
+// the page does. Shots are stars, receivers inverted triangles, as in every plot. The passive
+// pages tell how a line becomes its own source: the noise (or a shot) recorded, then correlated
+// at the first receiver, which turns into a virtual shot (a dashed star) and fires.
 
 export type ArtKind =
   | "active"
@@ -13,6 +15,28 @@ export type ArtKind =
 
 const GROUND = 74;
 const RECEIVERS = Array.from({ length: 11 }, (_, i) => 150 + i * 22);
+const FIRST = RECEIVERS[0];
+const RIGHT = 400; // the drawing's right edge, past which the fronts leave the array
+// Every front in the soil moves at this speed, px/s: a receiver lights as one reaches it.
+const SPEED = 110;
+// The processing pages' cycles, s: the active shot's, and the passive pages' story.
+const ACTIVE = 4;
+const STORY = 9;
+// When the virtual shot fires: on the passive page after the noise, on the passive-active page
+// after its shot (kit.css's art-shot-fade glides that shot into the first receiver before).
+const VIRTUAL = { passive: 6, "passive-active": 4.8 };
+const SHOT_AT = 0.3; // the passive-active shot fires
+// The noise: fronts from sources out of the drawing, on either side and below, reaching the
+// array `begin` s into the story.
+const NOISE = [
+  { x: -60, y: 80, begin: 0 },
+  { x: 500, y: 110, begin: 0.5 },
+  { x: 210, y: 330, begin: 1.1 },
+  { x: -40, y: 150, begin: 1.7 },
+  { x: 340, y: 320, begin: 2.3 },
+  { x: 520, y: 70, begin: 2.9 },
+];
+const SOIL = { left: FIRST - 40, right: RIGHT + 10, top: GROUND, bottom: GROUND + 60 };
 
 function star(cx: number, cy: number, outer: number): string {
   const points: string[] = [];
@@ -24,17 +48,44 @@ function star(cx: number, cy: number, outer: number): string {
   return points.join(" ");
 }
 
-function Line({ pulse = 0 }: { pulse?: number }) {
+/** Whether the viewer asked for less motion: SMIL's animations then left out (kit.css stills
+ * the CSS ones). */
+function still(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** SMIL timing of a move lasting `travel` s once a `cycle` s from `begin` s, held after: where
+ * in the cycle it ends (`end`, for keyTimes), and the animation's own attributes (`clock`). */
+function timing(travel: number, cycle: number, begin: number) {
+  return {
+    end: Math.min(travel / cycle, 0.999).toFixed(4),
+    clock: { dur: `${cycle}s`, begin: `${begin.toFixed(2)}s`, repeatCount: "indefinite" as const },
+  };
+}
+
+/** A receiver at `x`: an inverted triangle on the ground. */
+function receiver(x: number): string {
+  return `${x - 4},${GROUND - 9} ${x + 4},${GROUND - 9} ${x},${GROUND - 2}`;
+}
+
+/** The ground and the receivers, each flashing once a `cycle` s at the times `flashes` give it
+ * (one flash a front, as it reaches the receiver). */
+function Line({ flashes = [], cycle = 0 }: { flashes?: ((x: number) => number)[]; cycle?: number }) {
   return (
     <>
-      <path d={`M-600 ${GROUND} H400`} className="art-ground" />
+      <path d={`M-600 ${GROUND} H${RIGHT}`} className="art-ground" />
       {RECEIVERS.map((x) => (
-        <polygon
-          key={x}
-          className={pulse ? "art-receiver lit" : "art-receiver"}
-          style={pulse ? { animationDelay: `${((x / 400) * pulse).toFixed(2)}s`, animationDuration: `${pulse}s` } : undefined}
-          points={`${x - 4},${GROUND - 9} ${x + 4},${GROUND - 9} ${x},${GROUND - 2}`}
-        />
+        <g key={x}>
+          <polygon className="art-receiver" points={receiver(x)} />
+          {flashes.map((at, k) => (
+            <polygon
+              key={k}
+              className="art-flash"
+              points={receiver(x)}
+              style={{ animationDelay: `${at(x).toFixed(2)}s`, animationDuration: `${cycle}s` }}
+            />
+          ))}
+        </g>
       ))}
     </>
   );
@@ -49,27 +100,105 @@ function Shot({ x }: { x: number }) {
   );
 }
 
-function Fronts({ x, id }: { x: number; id: string }) {
+/** The soil, for fronts to travel in and nowhere else. */
+function Soil({ id }: { id: string }) {
+  return (
+    <defs>
+      <clipPath id={id}>
+        <rect x={-600} y={GROUND} width={1000} height={60} />
+      </clipPath>
+    </defs>
+  );
+}
+
+/** A shot's front in the soil: a circle from `x` growing at SPEED, once a `cycle` s from `begin`
+ * s, until it has crossed the array (fading as it leaves). */
+function Front({ x, id, begin = 0, cycle }: { x: number; id: string; begin?: number; cycle: number }) {
+  const radius = RIGHT + 10 - x;
+  const time = timing(radius / SPEED, cycle, begin);
   return (
     <>
-      <defs>
-        <clipPath id={id}>
-          <rect x={-600} y={GROUND} width={1000} height={60} />
-        </clipPath>
-      </defs>
+      <Soil id={id} />
+      <circle className="art-wave" cx={x} cy={GROUND} r={0} opacity={0} clipPath={`url(#${id})`}>
+        {!still() && (
+          <>
+            <animate attributeName="r" values={`0;${radius};${radius}`} keyTimes={`0;${time.end};1`} {...time.clock} />
+            <animate
+              attributeName="opacity"
+              values="0.9;0.55;0;0"
+              keyTimes={`0;${(0.8 * Number(time.end)).toFixed(4)};${time.end};1`}
+              {...time.clock}
+            />
+          </>
+        )}
+      </circle>
+    </>
+  );
+}
+
+/** The radii a noise front from `source` enters the soil with (its nearest point) and leaves it
+ * with, the array crossed (its farthest). */
+function noiseRadii(source: (typeof NOISE)[number]): [number, number] {
+  const nearestX = Math.min(Math.max(source.x, SOIL.left), SOIL.right);
+  const nearestY = Math.min(Math.max(source.y, SOIL.top), SOIL.bottom);
+  const farthest = Math.max(
+    ...[SOIL.left, SOIL.right].flatMap((x) => [SOIL.top, SOIL.bottom].map((y) => Math.hypot(x - source.x, y - source.y))),
+  );
+  return [Math.hypot(nearestX - source.x, nearestY - source.y), farthest];
+}
+
+/** When a noise front reaches the receiver at `x`. */
+function noiseAt(source: (typeof NOISE)[number], x: number): number {
+  const [from] = noiseRadii(source);
+  return source.begin + (Math.hypot(x - source.x, GROUND - source.y) - from) / SPEED;
+}
+
+/** The ambient noise: fronts from sources out of the drawing, on either side and below, crossing
+ * the soil and the array at SPEED. */
+function Noise({ id }: { id: string }) {
+  return (
+    <>
+      <Soil id={id} />
       <g clipPath={`url(#${id})`}>
-        {[0, 1, 2].map((k) => (
-          <circle
-            key={k}
-            className="art-front"
-            cx={x}
-            cy={GROUND}
-            r={40}
-            style={{ animationDelay: `${k * 1.2}s`, transformOrigin: `${x}px ${GROUND}px` }}
-          />
-        ))}
+        {NOISE.map((source, k) => {
+          const [from, to] = noiseRadii(source);
+          const time = timing((to - from) / SPEED, STORY, source.begin);
+          return (
+            <circle
+              key={k}
+              className={k % 2 ? "art-wave back" : "art-wave"}
+              cx={source.x}
+              cy={source.y}
+              r={from}
+              opacity={0}
+            >
+              {!still() && (
+                <>
+                  <animate attributeName="r" values={`${from};${to};${to}`} keyTimes={`0;${time.end};1`} {...time.clock} />
+                  <animate
+                    attributeName="opacity"
+                    values="0;0.85;0.85;0;0"
+                    keyTimes={`0;${(0.08 * Number(time.end)).toFixed(4)};${(0.88 * Number(time.end)).toFixed(4)};${time.end};1`}
+                    {...time.clock}
+                  />
+                </>
+              )}
+            </circle>
+          );
+        })}
       </g>
     </>
+  );
+}
+
+/** The first receiver as a virtual shot: itself turned gold, a source's colour, a halo round
+ * it, shown about when it fires (`at`, s). */
+function VirtualShot({ at }: { at: number }) {
+  return (
+    <g className="art-virtual" style={{ animationDelay: `${(at - 0.45).toFixed(2)}s` }}>
+      <circle cx={FIRST} cy={GROUND - 5.5} r={11} className="art-glow" />
+      <polygon points={receiver(FIRST)} className="art-receiver virtual" />
+    </g>
   );
 }
 
@@ -99,40 +228,43 @@ export function PageArt({ kind }: { kind: ArtKind }) {
       {kind === "active" && (
         <>
           <Strata />
-          <Fronts x={70} id="art-active" />
-          <Line pulse={3} />
-          <path d={`M0 ${GROUND} H400`} className="art-pulse" />
+          <Front x={70} id="art-active" cycle={ACTIVE} />
+          <Line flashes={[(x) => (x - 70) / SPEED]} cycle={ACTIVE} />
           <Shot x={70} />
         </>
       )}
       {kind === "passive" && (
         <>
           <Strata />
-          <Line />
-          {[0, 1, 2].map((k) => (
-            <path
-              key={k}
-              d={wave(-70, 70, 6, GROUND - 22 - k * 9)}
-              className={`art-noise ${k % 2 ? "back" : ""}`}
-              style={{ animationDelay: `${k * 1.3}s`, animationDuration: `${4.4 + k * 0.9}s` }}
-            />
-          ))}
+          <Noise id="art-noise" />
+          <Front x={FIRST} id="art-virtual-p" begin={VIRTUAL.passive} cycle={STORY} />
+          <Line
+            flashes={[
+              ...NOISE.map((source) => (x: number) => noiseAt(source, x)),
+              (x) => VIRTUAL.passive + (x - FIRST) / SPEED,
+            ]}
+            cycle={STORY}
+          />
+          <VirtualShot at={VIRTUAL.passive} />
         </>
       )}
       {kind === "passive-active" && (
         <>
           <Strata />
-          <Fronts x={60} id="art-pa" />
-          <Line />
-          {[0, 1].map((k) => (
-            <path
-              key={k}
-              d={wave(-70, 70, 6, GROUND - 26 - k * 8)}
-              className="art-noise"
-              style={{ animationDelay: `${k * 1.6}s`, animationDuration: "4.2s" }}
-            />
-          ))}
-          <Shot x={60} />
+          {/* The shot, recorded; gone, it returns as the first receiver, which fires. */}
+          <Front x={60} id="art-shot-pa" begin={SHOT_AT} cycle={STORY} />
+          <Front x={FIRST} id="art-virtual-pa" begin={VIRTUAL["passive-active"]} cycle={STORY} />
+          <Line
+            flashes={[
+              (x) => SHOT_AT + (x - 60) / SPEED,
+              (x) => VIRTUAL["passive-active"] + (x - FIRST) / SPEED,
+            ]}
+            cycle={STORY}
+          />
+          <g className="art-shot-fade">
+            <Shot x={60} />
+          </g>
+          <VirtualShot at={VIRTUAL["passive-active"]} />
         </>
       )}
       {kind === "picking" && (
@@ -163,13 +295,12 @@ export function PageArt({ kind }: { kind: ArtKind }) {
               />
             );
           })}
+          <path d="M198 12 V40 H236 V66 H276 V108 H308 V66 H264 V40 H226 V12 Z" className="art-spread" />
           <path d="M212 12 V40 H250 V66 H292 V108" className="art-profile" />
           <path d="M150 12 V108" className="art-axis" />
           {[12, 40, 66, 108].map((y) => (
             <path key={y} d={`M146 ${y} H154`} className="art-axis" />
           ))}
-          <path d="M330 30 C345 20 360 44 375 34" className="art-chain" />
-          <path d="M330 60 C345 50 360 74 375 64" className="art-chain late" />
         </>
       )}
       {kind === "petro" && (
@@ -199,7 +330,7 @@ export function PageArt({ kind }: { kind: ArtKind }) {
             <rect
               key={i}
               x={130 + i * 21}
-              y={30 + ((i * 7) % 13)}
+              y={16}
               width={17}
               height={70 - ((i * 7) % 13)}
               rx={3}
@@ -207,8 +338,8 @@ export function PageArt({ kind }: { kind: ArtKind }) {
               style={{ animationDelay: `${i * 0.25}s` }}
             />
           ))}
-          <path d="M126 104 H384" className="art-axis" />
-          <path d="M130 58 C180 40 230 76 280 52 S360 44 384 60" className="art-trend" />
+          <path d="M126 16 H384" className="art-axis" />
+          <path d="M130 62 C180 80 230 44 280 68 S360 76 384 60" className="art-trend" />
         </>
       )}
       {kind === "assistant" && (

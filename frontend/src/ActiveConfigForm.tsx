@@ -4,6 +4,7 @@ import {
   buildFilteringParams,
   buildMutingParams,
   buildStackingParams,
+  buildTriggerParams,
 } from "./builders";
 import {
   DispersionRows,
@@ -11,7 +12,6 @@ import {
   MutingRow,
   NextSteps,
   StackingRow,
-  TriggerRow,
   WindowsCard,
   WorkersField,
   type FormProps,
@@ -25,6 +25,7 @@ import {
   type PresetDefaults,
   type StackingState,
   stage,
+  triggerDefault,
   usePreset,
 } from "./presets";
 
@@ -64,12 +65,14 @@ function Form({
     `${kept}.masw`,
     stage<Masw>(preset, "masw"),
   );
+  // @2: since the bounds may be empty and the trigger the files' (2026-09-28), an earlier
+  // session's stand-in values are not kept.
   const [trigger, setTrigger] = useStoredState(
-    `${kept}.trigger`,
-    stage<{ t0: number }>(preset, "trigger"),
+    `${kept}.trigger@2`,
+    triggerDefault(preset, acquisition.triggers),
   );
   const [muting, setMuting] = useStoredState(
-    `${kept}.muting`,
+    `${kept}.muting@2`,
     stage<MutingState>(preset, "muting"),
   );
   const [filtering, setFiltering] = useStoredState(
@@ -99,7 +102,7 @@ function Form({
     mode: "active",
     overrides: {
       masw,
-      trigger,
+      trigger: buildTriggerParams(trigger, muting),
       muting: buildMutingParams(muting),
       filtering: buildFilteringParams(filtering),
       dispersion,
@@ -127,12 +130,12 @@ function Form({
           hint="Applied to each shot first."
         >
           <div className="rows">
-            <TriggerRow t0={trigger.t0} setT0={(t0) => setTrigger({ t0 })} />
             <MutingRow
               acquisition={acquisition}
               muting={muting}
               setMuting={setMuting}
               maxTime={maxTime}
+              trigger={{ t0: trigger.t0, setT0: (t0) => setTrigger({ t0 }) }}
             />
             <FilteringRow
               filtering={filtering}

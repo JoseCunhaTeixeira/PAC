@@ -82,8 +82,10 @@ function Form({
     `${kept}.masw`,
     stage<Masw>(preset, "masw"),
   );
+  // @2: since the bounds may be empty (2026-09-28), an earlier session's stand-in values are
+  // not kept.
   const [muting, setMuting] = useStoredState(
-    `${kept}.muting`,
+    `${kept}.muting@2`,
     stage<MutingState>(preset, "muting"),
   );
   const [filtering, setFiltering] = useStoredState(
@@ -97,7 +99,7 @@ function Form({
     ),
   );
   const [selection, setSelection] = useStoredState(
-    `${kept}.selection`,
+    `${kept}.selection@2`,
     stage<SelectionState>(preset, "selection"),
   );
   const [whitening, setWhitening] = useStoredState(
@@ -239,17 +241,19 @@ function Form({
                   <NumberField
                     label="Slowest"
                     unit="m/s"
-                    value={selection.vmin}
+                    value={selection.vmin ?? Number.NaN}
+                    optional="none"
                     onChange={(v) => setSelection({ ...selection, vmin: v })}
                     min={0}
                   />
                   <NumberField
                     label="Fastest"
                     unit="m/s"
-                    value={selection.vmax}
+                    value={selection.vmax ?? Number.NaN}
+                    optional="none"
                     onChange={(v) => setSelection({ ...selection, vmax: v })}
                     min={0}
-                    check={above(selection.vmin)}
+                    check={above(selection.vmin ?? Number.NaN)}
                   />
                 </Fields>
               )}

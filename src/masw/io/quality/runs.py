@@ -83,6 +83,7 @@ class RunEntry(BaseModel):
     mode: str | None
     by: Maker | None
     windows: int
+    window_length: int | None = None  # receivers per window; None: not said (the older layout)
 
 
 class ProfileRuns(BaseModel):
@@ -449,6 +450,8 @@ def stage_text(name: str, values: Mapping[str, Any]) -> str:
     if method == "none":
         return f"no {name}"
     t0 = values.get("t0")
+    if name == "trigger" and t0 is None:
+        return "trigger from each record's file"
     if name == "trigger" and isinstance(t0, int | float):
         return (
             f"trigger at {number(t0 * 1000)} ms"
@@ -538,6 +541,7 @@ def _entry(folder: str, path: Path, manifest: RunManifest | None) -> RunEntry:
             by=None,
             windows=len(window_folders(path)),
         )
+    length = preset_stage(manifest, "masw").get("length")
     return RunEntry(
         folder=folder,
         run_id=manifest.run_id,
@@ -545,6 +549,7 @@ def _entry(folder: str, path: Path, manifest: RunManifest | None) -> RunEntry:
         mode=manifest.preset.mode,
         by=maker(path),
         windows=len(manifest.windows),
+        window_length=int(length) if length is not None else None,
     )
 
 

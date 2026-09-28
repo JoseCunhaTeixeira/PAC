@@ -1,4 +1,4 @@
-import type { Metric, Origin, StageKey, Status } from "./types";
+import type { Metric, Origin, RunEntry, StageKey, Status } from "./types";
 
 // How Visualization says things: the gates' metrics (a name a geophysicist reads, and the value
 // in the unit it is judged in), numbers, dates, and where a setting comes from.
@@ -223,10 +223,11 @@ export function runDate(iso: string | null): string {
 }
 
 /** A run in a selector: when, by whom, how many windows. */
-export function runLabel(run: { run_id: string | null; folder: string; started_at: string | null; by: string | null; windows: number }): string {
+export function runLabel(run: RunEntry): string {
   if (run.run_id === null) return `${run.folder} (older layout)`;
   const by = run.by === "assistant" ? "assistant" : "by hand";
-  return `${runDate(run.started_at)} · ${by} · ${run.windows} windows`;
+  const length = run.window_length ? ` of ${run.window_length} receivers` : "";
+  return `${runDate(run.started_at)} · ${by} · ${run.windows} windows${length}`;
 }
 
 /** A window's folder as its position: "xmid_103.50" as 103.5. */

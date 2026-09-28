@@ -123,10 +123,10 @@ export function ProfilePlot({
   const selectedWindow = mode === "windows" ? card.windows.find((one) => one.key === selected) : undefined;
   const stacked = useMemo(() => new Set(stacking ?? []), [stacking]);
 
-  // A cell's width: the tightest gap between windows, on screen.
+  // A cell's width: a receiver's spacing on screen, whatever the windows' step.
   const cellW = useMemo(
-    () => cellWidth(card.windows.map((window) => window.xmid), x1 - x0, plotW),
-    [card.windows, x0, x1, plotW],
+    () => cellWidth(card.windows.map((window) => window.xmid), card.receivers, x1 - x0, plotW),
+    [card.windows, card.receivers, x0, x1, plotW],
   );
 
   function hitAt(px: number, py: number): Hit | null {
@@ -321,7 +321,9 @@ export function ProfilePlot({
       }
       const chosen = mode === "windows" && window === selectedWindow;
       const strength = chosen ? "active" : window === hovered ? "hover" : "rest";
-      drawCell(ctx, theme, X(window.xmid), cellW, tones, strength, chosen);
+      // How many modes were picked in it, written in its curve's band when more than one.
+      const modes = cellOf.get(window.key)?.modes?.length ?? 0;
+      drawCell(ctx, theme, X(window.xmid), cellW, tones, strength, chosen, modes > 1 ? String(modes) : undefined);
     }
 
     // The selected cell's guide down to the axis.

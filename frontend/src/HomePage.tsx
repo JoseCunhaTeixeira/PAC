@@ -2,17 +2,17 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { HeroArt } from "./components/HeroArt";
 import {
+  ActiveIcon,
   ArrowRightIcon,
   BookIcon,
   CrosshairIcon,
   DepthIcon,
   EyeIcon,
-  FlaskIcon,
   GithubIcon,
-  LayersIcon,
+  OutcropIcon,
+  PassiveActiveIcon,
+  PassiveIcon,
   SparklesIcon,
-  WavesIcon,
-  ZapIcon,
 } from "./components/icons";
 import fieldIllustration from "./assets/logo.png";
 import partners from "./assets/logo2.png";
@@ -30,21 +30,21 @@ interface Way {
 
 // The workflow; its first and third steps come in several kinds, listed under it.
 const STEPS: Way[] = [
-  { to: "/active", icon: <ZapIcon />, title: "Compute", text: "Records to dispersion images" },
+  { to: "/active", icon: <ActiveIcon />, title: "Compute", text: "Records to dispersion images" },
   { to: "/dispersion_picking", icon: <CrosshairIcon />, title: "Pick", text: "Dispersion images to curves" },
   { to: "/seismic_inversion", icon: <DepthIcon />, title: "Invert", text: "Curves to ground models" },
   { to: "/visualization", icon: <EyeIcon />, title: "Review", text: "Every window, check and model" },
 ];
 
 const COMPUTE: Way[] = [
-  { to: "/active", icon: <ZapIcon size={20} />, title: "Active", text: "Hammer or weight-drop shots" },
-  { to: "/passive", icon: <WavesIcon size={20} />, title: "Passive", text: "Traffic or ambient noise" },
-  { to: "/passive-active", icon: <LayersIcon size={20} />, title: "Passive-active", text: "Shots, correlated like noise" },
+  { to: "/active", icon: <ActiveIcon size={20} />, title: "Active", text: "Hammer or weight-drop shots" },
+  { to: "/passive", icon: <PassiveIcon size={20} />, title: "Passive", text: "Traffic or ambient noise" },
+  { to: "/passive-active", icon: <PassiveActiveIcon size={20} />, title: "Passive-active", text: "Shots, correlated like noise" },
 ];
 
 const INVERT: Way[] = [
   { to: "/seismic_inversion", icon: <DepthIcon size={20} />, title: "Seismic", text: "Vs profiles by MCMC" },
-  { to: "/petro_inversion", icon: <FlaskIcon size={20} />, title: "Petrophysical", text: "Soil types and penetration resistance" },
+  { to: "/petro_inversion", icon: <OutcropIcon size={20} />, title: "Petrophysical", text: "Soil types and penetration resistance" },
 ];
 
 const TOOLS = [
