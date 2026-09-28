@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from masw.api.main import app
 from masw.io.paths import OUTPUT_DIR
-from sigpipe.masw.inversion.measuring import InversionMeasures
+from sigpipe.masw.inversion.measuring import USEFUL_REFERENCE, InversionMeasures
 
 client = TestClient(app)
 
@@ -290,6 +290,24 @@ def test_an_inversion_newer_than_its_measures_is_measured_again(run: str) -> Non
     client.get(f"/quality/inversion/overview/{run}")
 
     assert json.loads(path.read_text())["samples_per_chain"] > 0
+
+
+def test_measures_read_against_the_runs_own_prior_are_read_again(run: str) -> None:
+    client.get(f"/quality/inversion/overview/{run}")
+    path = OUTPUT_DIR / run / "xmid_5.50" / "SeismicInversion_Measures_0000.json"
+    before = json.loads(path.read_text())
+    # As saved before 2026-09-28: no yardstick named, the depth read against the run's prior.
+    older = {key: value for key, value in before.items() if key != "useful_reference"}
+    older |= {"useful_depth_m": 0.123, "samples_per_chain": 7}
+    path.write_text(json.dumps(older))
+
+    client.get(f"/quality/inversion/overview/{run}")
+
+    after = json.loads(path.read_text())
+    assert after["useful_reference"] == USEFUL_REFERENCE
+    assert after["useful_depth_m"] == before["useful_depth_m"]
+    assert after["samples_per_chain"] == 7  # the rest as saved: only the depth read again
+    path.write_text(json.dumps(before))
 
 
 def test_an_inversion_that_cannot_be_measured_is_left_out(run: str) -> None:
