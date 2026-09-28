@@ -9,11 +9,11 @@ import type { FitCurve, SoilColumn, VsProfile } from "./types";
 // inform; its picked curve against the one its model gives back; its soil column.
 
 const MODEL_LABELS: Record<string, string> = {
-  best: "best layered model",
-  smooth_best: "smooth best model",
-  median: "median layered model",
-  smooth_median: "smooth median model",
   ensemble: "median of the ensemble",
+  median: "median, layered",
+  smooth_median: "median, smooth",
+  best: "best, layered",
+  smooth_best: "best, smooth",
 };
 
 /** Points of a step profile: each layer's value from its top to the next one's, the last down
@@ -34,14 +34,14 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
   const high = profile.vs.map((vs, i) => vs + profile.std[i]);
   const left = steps(profile.tops, low, bottom);
   const right = steps(profile.tops, high, bottom).reverse();
-  const xs = [...low, ...high, ...profile.layered_vs];
+  const xs = [...low, ...high];
   const xLo = Math.min(...xs);
   const xHi = Math.max(...xs);
   const areas: PlotArea[] = [{ color: palette.seriesSoft, polygon: [...left, ...right] }];
   const refs: PlotRef[] = [];
   const informed = profile.informed;
   if (informed !== null && informed < bottom) {
-    // Below the depth the data inform, the samples spread as the prior does.
+    // Below the depth the data inform, the kept models spread as widely as the curve allows.
     areas.push({
       color: palette.selected,
       polygon: [
@@ -59,13 +59,6 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
     });
   }
   const series: PlotSeries[] = [
-    {
-      label: "Layered median",
-      color: palette.muted,
-      points: steps(profile.layered_tops, profile.layered_vs, bottom),
-      dash: [5, 4],
-      width: 1.4,
-    },
     {
       label: MODEL_LABELS[profile.model] ?? profile.model,
       color: palette.series,
@@ -97,10 +90,6 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
         </span>
         <span>
           <i className="area" style={{ background: palette.seriesSoft }} />± its spread
-        </span>
-        <span style={{ color: palette.muted }}>
-          <i className="dashed" />
-          layered median
         </span>
         {informed !== null && informed < bottom && (
           <span>

@@ -85,10 +85,10 @@ LATER = timedelta(minutes=1)
 BAND_NAMES = {3: ("short", "middle", "long")}
 # A model's name in a sentence.
 MODEL_WORDS: dict[str, str] = {
-    "ensemble": "The ensemble",
+    "ensemble": "The median of the ensemble",
     "median": "The layered median",
     "smooth_median": "The smooth median",
-    "best": "The best model",
+    "best": "The layered best model",
     "smooth_best": "The smooth best model",
 }
 # The share of proposals the trial runs aimed at (%), for the runs saved before 2026-09-27.
@@ -144,8 +144,6 @@ class VsProfile(BaseModel):
     tops: tuple[float, ...]  # m, each layer's top, the half-space's last
     vs: tuple[float, ...]  # m/s
     std: tuple[float, ...]  # m/s
-    layered_tops: tuple[float, ...]  # the layered median's
-    layered_vs: tuple[float, ...]
     bottom: float  # m, the bottom of the models sigpipe builds
     informed: float | None  # m, how deep the data inform them; None: to the bottom, or unknown
     deepest_top: float  # m, the deepest the half-space's top could be (the prior's)
@@ -947,14 +945,11 @@ def _profile(
     std = np.asarray(velocity.vs_s_std, dtype=float)
     stride = max(1, -(-tops.size // PROFILE_POINTS))
     keep = np.unique(np.concatenate((np.arange(0, tops.size, stride), [tops.size - 1])))
-    layered_tops = (0.0, *measures.interfaces_m)
     return VsProfile(
         model=model,
         tops=tuple(round(float(value), 3) for value in tops[keep]),
         vs=tuple(round(float(value), 1) for value in vs[keep]),
         std=tuple(round(float(value), 1) for value in std[keep]),
-        layered_tops=tuple(round(value, 3) for value in layered_tops),
-        layered_vs=measures.vs_layers,
         bottom=measures.depth_max_m,
         informed=measures.useful_depth_m if informed_to(measures) is not None else None,
         deepest_top=model_depth(parameters),
