@@ -633,6 +633,11 @@
   white-space: nowrap;
 }
 
+/* A number column's title over its values. */
+.viz table.viz-table th.num {
+  text-align: right;
+}
+
 .viz table.viz-table tr.failed td {
   color: var(--bad);
 }

@@ -280,8 +280,8 @@ export function GateTables({ gates }: { gates: GateView[] }) {
                 <thead>
                   <tr>
                     <th>Measure</th>
-                    <th>Value</th>
-                    <th>Limit</th>
+                    <th className="num">Value</th>
+                    <th className="num">Limit</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -318,7 +318,7 @@ export function AttemptTable<T extends AttemptSummary>({
       <table className="viz-table">
         <thead>
           <tr>
-            <th>#</th>
+            <th className="num">#</th>
             <th>Stage</th>
             <th>Why</th>
             {extra.map((column) => (
