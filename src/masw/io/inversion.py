@@ -28,6 +28,7 @@ from sigpipe.masw.inversion.section import (
     ModelName,
     VelocityGrid,
     comparison_grids,
+    informed_levels,
     is_inverted,
     picked_curve,
     predicted_curve,
@@ -85,6 +86,9 @@ class SectionWindow:
 class VelocitySection:
     grid: VelocityGrid
     windows: list[SectionWindow]  # by position
+    # Per column of the grid, the elevation down to which the data inform it (NaN: not known),
+    # smoothed across positions as the grid is.
+    levels: np.ndarray
 
 
 def get_velocity_section(
@@ -104,9 +108,14 @@ def get_velocity_section(
         )
     ordered = sorted(found.items(), key=lambda item: item[1].position.x)
     section = VelocityModelsSection(velocity_models=tuple(one for _, one in ordered))
+    grid = velocity_grid(section, lateral_smoothing)
+    windows = [_section_window(run_folder / unit, one) for unit, one in ordered]
+    informed = [
+        (one.x, one.top, None if one.informed is None else min(one.informed, one.depth))
+        for one in windows
+    ]
     return VelocitySection(
-        grid=velocity_grid(section, lateral_smoothing),
-        windows=[_section_window(run_folder / unit, one) for unit, one in ordered],
+        grid=grid, windows=windows, levels=informed_levels(grid, informed, lateral_smoothing)
     )
 
 

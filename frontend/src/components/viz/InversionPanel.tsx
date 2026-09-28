@@ -7,7 +7,11 @@ import { Card, Segmented } from "../kit";
 import { ModeHead } from "../PseudoSectionCanvas";
 import { PseudoSectionComparisonCanvas, type PseudoSectionComparisonData } from "../PseudoSectionComparisonCanvas";
 import { useZoomLink } from "../useZoom";
-import { VelocitySectionCanvas, type InformedWindow } from "../VelocitySectionCanvas";
+import {
+  VelocitySectionCanvas,
+  type InformedOverlay,
+  type InformedWindow,
+} from "../VelocitySectionCanvas";
 import { ChainLegend, ChainTracesCanvas, MarginalsGrid } from "./ChainPlots";
 import { num, parameterLabel, xmidOf } from "./format";
 import { StageHead, UnitCard } from "./panel";
@@ -38,6 +42,8 @@ interface VelocitySection {
   vs_std_grid: (number | null)[][];
   // Each window's column, how deep its data inform it as its inversion measured.
   windows: InformedWindow[];
+  // Per column: the elevation down to which the data inform it, smoothed as the section.
+  informed_levels: (number | null)[];
 }
 
 /** The legend's swatch of the veil: the Vs colours seen through it. */
@@ -175,7 +181,10 @@ export function InversionPanel({
   const section = useJson<VelocitySection>(
     `${API}/inversion/velocity_section/${at(folder)}?model=${model}&lateral_smoothing=${smoothing}`,
   );
-  const informedWindows = informed ? section.data?.windows : undefined;
+  const overlay: InformedOverlay | undefined =
+    informed && section.data
+      ? { levels: section.data.informed_levels, windows: section.data.windows }
+      : undefined;
   const labels = useJson<Record<string, number>>(`${API}/dispersion_image_labels/${at(folder)}`);
   const modes = Object.keys(labels.data ?? {});
   const modelLabel = MODELS.find((one) => one.value === model)?.label.toLowerCase() ?? model;
@@ -357,7 +366,7 @@ export function InversionPanel({
                   colorRange={range}
                   marker={xmid ?? undefined}
                   onPick={pick}
-                  informed={informedWindows}
+                  informed={overlay}
                 />
                 <VelocitySectionCanvas
                   positions={section.data.positions}
@@ -369,12 +378,12 @@ export function InversionPanel({
                   link={zoomLink}
                   marker={xmid ?? undefined}
                   onPick={pick}
-                  informed={informedWindows}
+                  informed={overlay}
                 />
-                {informedWindows?.some((one) => one.informed !== null) && (
+                {overlay?.windows.some((one) => one.informed !== null) && (
                   <div className="viz-legend-inline">
                     <span style={{ color: colours.informed }}>
-                      <i className="dashed" />
+                      <i className="dashed" style={{ borderTopWidth: 1 }} />
                       depth informed
                     </span>
                     <span>
