@@ -43,19 +43,15 @@ export function stage<T>(preset: PresetDefaults, name: string): T {
 
 // A bound may be empty (null, or NaN in its field): none, no stand-in value.
 export interface MutingState { method: string; tmin: number | null; tmax: number | null; vmin: number | null; vmax: number | null; width: number | null; taper: number | null; }
-// Null: each record's own trigger, from its file.
+// Empty (null, or NaN once emptied): each record's own trigger, from its file (0 when it says
+// none).
 export interface TriggerState { t0: number | null; }
 
-/** The trigger a form starts from: the preset's when given; else the files' when they all say
- * the same, 0 when none says one, null (each file's own) when they differ. */
-export function triggerDefault(preset: PresetDefaults, triggers: (number | null)[] | undefined): TriggerState {
+/** The trigger a form starts from: the preset's when given, else empty (the user, 2026-09-28):
+ * each record's own, from its file. */
+export function triggerDefault(preset: PresetDefaults): TriggerState {
   const given = stage<TriggerState>(preset, "trigger").t0;
-  if (given !== null && given !== undefined) return { t0: given };
-  const all = triggers ?? [];
-  const known = all.filter((t): t is number => t !== null);
-  const said = [...new Set(known)];
-  if (known.length === 0) return { t0: 0 };
-  return { t0: said.length === 1 && known.length === all.length ? said[0] : null };
+  return { t0: given !== null && given !== undefined ? given : null };
 }
 export interface FilteringState { method: string; fmin: number; fmax: number; order: number; }
 export interface StackingState { method: string; nu: number; n: number; }

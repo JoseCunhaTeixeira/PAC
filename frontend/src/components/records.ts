@@ -16,11 +16,12 @@ export function sampleOf(acquisition: Acquisition): number {
 }
 
 /** Where the records' data end once the muting moves them by their trigger, the first to end:
- * each record's length less its shift, the trigger typed (emptied, 0) or, left to the files,
- * its own (0 when its file says none). As sigpipe checks a preset (its resolving.py). */
+ * each record's length less its shift, the trigger typed or, empty, each record's own from its
+ * file (0 when it says none). As sigpipe checks a preset (its resolving.py). */
 export function dataEnd(acquisition: Acquisition, t0: number | null): number {
+  const typed = t0 !== null && Number.isFinite(t0) ? t0 : null;
   const ends = acquisition.durations.map((duration, i) => {
-    const shift = t0 !== null ? (Number.isFinite(t0) ? t0 : 0) : (acquisition.triggers?.[i] ?? 0);
+    const shift = typed ?? acquisition.triggers?.[i] ?? 0;
     return duration - shift;
   });
   const finite = ends.filter((end) => Number.isFinite(end));

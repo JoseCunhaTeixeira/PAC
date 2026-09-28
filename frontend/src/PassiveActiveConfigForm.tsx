@@ -68,8 +68,8 @@ function Form({
   // @2: since the bounds may be empty and the trigger the files' (2026-09-28), an earlier
   // session's stand-in values are not kept.
   const [trigger, setTrigger] = useStoredState(
-    `${kept}.trigger@2`,
-    triggerDefault(preset, acquisition.triggers),
+    `${kept}.trigger@3`,
+    triggerDefault(preset),
   );
   const [muting, setMuting] = useStoredState(
     `${kept}.muting@2`,
