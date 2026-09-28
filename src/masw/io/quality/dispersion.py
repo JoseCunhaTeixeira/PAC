@@ -50,7 +50,7 @@ from masw.io.quality.view import (
     worst,
 )
 from sigpipe.algorithms.picking.dispersion.curve import (
-    max_resolvable_wavelength,
+    longest_reached_wavelength,
     min_resolvable_wavelength,
 )
 from sigpipe.base.dispersion_curve import DispersionCurve
@@ -127,7 +127,8 @@ class DispersionCard(Card):
     picked_by: Origin | None  # None: nothing picked
     curves: tuple[CurveStats, ...]
     band_hz: tuple[float, float] | None  # the image's coherent band
-    wavelength_limits_m: tuple[float | None, float | None]  # what the window resolves
+    # Where G3's flags start: under, the aliasing zone; over, beyond the window's reach.
+    wavelength_limits_m: tuple[float | None, float | None]
 
 
 def thresholds_of(run_folder: Path) -> DispersionThresholds:
@@ -165,7 +166,7 @@ def dispersion_overview(folder: str) -> Overview:
             by_hand.add(unit)
         g2, g3, g4 = _results(log, unit, picked_by)
         stats = curve_stats(curve) if curve is not None else None
-        image, picks = _states(g2, g3, g4, curve, picked_by, thresholds, None)
+        image, picks = _states(g2, g3, g4, curve, picked_by, thresholds, (None, None))
         # The image's state only when the assistant checked the images.
         parts = (image, picks) if log is not None else (picks,)
         present.update(enumerate(parts))
@@ -255,11 +256,11 @@ def _states(
     curve: DispersionCurve | None,
     picked_by: Origin | None,
     thresholds: DispersionThresholds,
-    lambda_min: float | None,
+    limits: tuple[float | None, float | None],
 ) -> tuple[PartState, PartState]:
     """A window's image and curve apart: its image by G2's verdict (none: not checked); its curve
     by hand, none (no curve), by G3's and G4's verdicts, or by its measures against their
-    limits."""
+    limits, the wavelengths' among them."""
     image: PartState = verdict_status(g2) if g2 is not None else "none"
     if curve is None:
         return image, "none"
@@ -267,7 +268,7 @@ def _states(
         return image, "hand"
     if g3 is not None or g4 is not None:
         return image, verdict_status(g3, g4)
-    return image, measured_status(curve_metrics(curve, thresholds.curve, lambda_min))
+    return image, measured_status(curve_metrics(curve, thresholds.curve, *limits))
 
 
 def _part_line(
@@ -325,7 +326,7 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
     picked_by = pick_origin(window, log, bool(curves))
     g2, g3, g4 = _results(log, unit, picked_by)
     lambda_min = min_resolvable_wavelength(image.acquisition) if image is not None else None
-    lambda_max = max_resolvable_wavelength(image.acquisition) if image is not None else None
+    lambda_max = longest_reached_wavelength(image.acquisition) if image is not None else None
     measured_image = image_metrics(image, thresholds.image) if image is not None else ()
     image_measures = g2.metrics if g2 is not None else measured_image
     band, share = (
@@ -338,7 +339,7 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
     curve_measures = (
         g3.metrics
         if g3 is not None
-        else curve_metrics(m0, thresholds.curve, lambda_min)
+        else curve_metrics(m0, thresholds.curve, lambda_min, lambda_max)
         if m0 is not None
         else ()
     )
@@ -388,7 +389,8 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
             gates.append(gate_view("G4", g4))
     # Its image and its curve apart, as its cell's parts: the image's only when the assistant
     # checked the images.
-    image_state, curve_state = _states(g2, g3, g4, m0, picked_by, thresholds, lambda_min)
+    limits = (lambda_min, lambda_max)
+    image_state, curve_state = _states(g2, g3, g4, m0, picked_by, thresholds, limits)
     parts = (Part(label="image", state=image_state),) if log is not None else ()
     return DispersionCard(
         key=unit,
@@ -406,7 +408,7 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         picked_by=picked_by,
         curves=tuple(stats),
         band_hz=band,
-        wavelength_limits_m=(lambda_min, lambda_max),
+        wavelength_limits_m=limits,
     )
 
 
@@ -654,11 +656,15 @@ def curve_stats(curve: DispersionCurve) -> CurveStats:
 
 
 def curve_metrics(
-    curve: DispersionCurve, thresholds: CurveThresholds, lambda_min: float | None
+    curve: DispersionCurve,
+    thresholds: CurveThresholds,
+    lambda_min: float | None,
+    lambda_max: float | None = None,
 ) -> tuple[Metric, ...]:
     """What the curve's file gives against G3's limits, as G3 names them: its points, the
-    points below the shortest wavelength the window resolves, the largest step between
-    neighbours by wavelength (a jump onto another mode), its median uncertainty."""
+    points under `lambda_min` (the aliasing zone) and over `lambda_max` (beyond the window's
+    reach), the largest step between neighbours by wavelength (a jump onto another mode), its
+    median uncertainty."""
     vs = np.asarray(curve.vs, dtype=float)
     lengths = wavelengths(curve)
     order = np.argsort(lengths)
@@ -680,8 +686,10 @@ def curve_metrics(
             passed=jump <= thresholds.max_jump,
         ),
     ]
+    # A point on a limit is within it (a curve resampled every metre can hold one at exactly
+    # twice a 1.5 m spacing, which its float32 values put a hair under).
     if lambda_min is not None:
-        below = float(np.mean(lengths < lambda_min))
+        below = float(np.mean((lengths < lambda_min) & ~np.isclose(lengths, lambda_min)))
         metrics.append(
             Metric(
                 name="aliased_points",
@@ -689,6 +697,17 @@ def curve_metrics(
                 threshold=0,
                 bound="max",
                 passed=below == 0,
+            )
+        )
+    if lambda_max is not None:
+        beyond = float(np.mean((lengths > lambda_max) & ~np.isclose(lengths, lambda_max)))
+        metrics.append(
+            Metric(
+                name="beyond_reach_points",
+                value=round(beyond, 3),
+                threshold=0,
+                bound="max",
+                passed=beyond == 0,
             )
         )
     uncertainty = _uncertainty(curve, vs)

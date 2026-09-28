@@ -48,10 +48,10 @@ export function buildMaswParams(m: { length: number; step: number; distance_min:
 
 // The trigger is part of the muting: its shift with the muting on (emptied: 0; null, untouched
 // on files that differ: each record's own, from its file), none with it off.
-// Off, no shift; on, the t0 typed, or empty (null) each record's own trigger, from its file.
+// Off, no shift; on, the t0 typed, empty 0 (the user, 2026-09-28).
 export function buildTriggerParams(t: { t0: number | null; }, muting: { method: string; }) {
   if (muting.method !== "mute") return { t0: 0 };
-  return { t0: bound(t.t0) };
+  return { t0: bound(t.t0) ?? 0 };
 }
 
 

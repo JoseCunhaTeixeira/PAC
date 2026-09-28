@@ -150,9 +150,9 @@ export function DispersionImageCanvas({
       }
     }
 
-    // array resolution bounds: v = f * lambda, clipped to the velocity axis.
-    // Below lambda_min picks are spatially aliased; above lambda_max they
-    // aren't resolvable by the array's aperture.
+    // Where the checks' flags start: v = f * lambda, clipped to the velocity axis. Below
+    // lambda_min (two spacings) picks may be aliased; above lambda_max (three window lengths)
+    // they lie beyond the window's reach.
     const lambdaLabels: { x: number; y: number; text: string }[] = [];
     function drawLambdaBound(lambda: number | null, labelText: string) {
       if (!ctx || lambda === null) return;

@@ -43,12 +43,11 @@ export function stage<T>(preset: PresetDefaults, name: string): T {
 
 // A bound may be empty (null, or NaN in its field): none, no stand-in value.
 export interface MutingState { method: string; tmin: number | null; tmax: number | null; vmin: number | null; vmax: number | null; width: number | null; taper: number | null; }
-// Empty (null, or NaN once emptied): each record's own trigger, from its file (0 when it says
-// none).
+// Empty (null, or NaN once emptied): 0, no shift (the user, 2026-09-28).
 export interface TriggerState { t0: number | null; }
 
-/** The trigger a form starts from: the preset's when given, else empty (the user, 2026-09-28):
- * each record's own, from its file. */
+/** The trigger a form starts from: the preset's when given, else empty (the user, 2026-09-28:
+ * unfilled at start, 0). */
 export function triggerDefault(preset: PresetDefaults): TriggerState {
   const given = stage<TriggerState>(preset, "trigger").t0;
   return { t0: given !== null && given !== undefined ? given : null };

@@ -117,8 +117,9 @@ def test_a_run_is_listed_first_and_holds_its_windows(run: str) -> None:
 
 def test_the_picks_replace_their_modes_curve(run: str) -> None:
     image = client.get(f"/dispersion_images/{run}/2.5").json()
-    # The window's resolution limits: twice its spacing, and its length (6 receivers 1 m apart).
-    assert image["curves"] == [] and (image["lambda_min"], image["lambda_max"]) == (2.0, 5.0)
+    # Where the checks' flags start: two spacings, and three window lengths (6 receivers 1 m
+    # apart, 5 m long).
+    assert image["curves"] == [] and (image["lambda_min"], image["lambda_max"]) == (2.0, 15.0)
 
     box = {"fmin": 10, "fmax": 60, "vmin": 100, "vmax": 400, "label": "M0"}
     picked = client.post(f"/dispersion_images/{run}/2.5/pick/box", json=box).json()

@@ -338,10 +338,6 @@ export function MutingRow({
   const known = (acquisition.triggers ?? []).filter((t): t is number => t !== null);
   const said = distinct(known);
   const where = known.length === acquisition.files.length ? "the files' headers" : `${known.length} of ${acquisition.files.length} files' headers`;
-  // What an empty trigger means: the files' one value, "files" when they differ, 0 when none
-  // says one (a file that says none, 0).
-  const filesSay =
-    said.length === 0 ? "0" : said.length === 1 && known.length === acquisition.files.length ? `${said[0]}` : "files";
   const files =
     said.length === 0
       ? "none in the files' headers"
@@ -398,8 +394,8 @@ export function MutingRow({
                 label="Trigger delay"
                 unit="s"
                 value={trigger.t0 ?? Number.NaN}
-                // Empty (the default): each record's own, from its file; the placeholder says it.
-                optional={filesSay}
+                // Unfilled at start: 0, no shift; the files' values in its hint.
+                optional="0"
                 hint={files}
                 onChange={trigger.setT0}
                 min={0}
@@ -461,7 +457,7 @@ export function MutingRow({
             <MuteGather
               acquisition={acquisition}
               muting={muting}
-              trigger={trigger ? bound(trigger.t0) : 0}
+              trigger={trigger ? (bound(trigger.t0) ?? 0) : 0}
             />
           )}
         </>
