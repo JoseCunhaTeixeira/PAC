@@ -32,6 +32,7 @@ from masw.io.quality.view import (
     Status,
     Track,
     gate_view,
+    line_gate,
     measured_status,
     number,
     plural,
@@ -53,6 +54,7 @@ from sigpipe.masw.inversion.measuring import ModelFit
 from sigpipe.masw.petro import load_modeled_curve
 from sigpipe.masw.petro.measuring import PetroMeasures
 from sigpipe.masw.petro.window import MODEL_FILE
+from sigpipe.masw.quality.soil import SoilLimits, measure_soil
 from sigpipe.masw.runs import window_folders, xmid_of
 
 MEASURES_FILE = "PetroInversion_Measures_0000.json"  # the assistant's
@@ -114,19 +116,13 @@ def thresholds_of(run_folder: Path) -> PetroThresholds:
     )
 
 
-def fit_metrics(fit: ModelFit, thresholds: PetroThresholds) -> tuple[Metric, ...]:
-    """G7's measures of a soil column's fit, against its limit, as G7 names them."""
-    names = BAND_NAMES.get(len(fit.bands), tuple(f"band{i + 1}" for i in range(len(fit.bands))))
+def fit_metrics(measures: PetroMeasures, thresholds: PetroThresholds) -> tuple[Metric, ...]:
+    """A soil column measured as G7 measures it (sigpipe's measure_soil: one definition), each
+    saying what it covers: its curve's fit by band, their residuals, its water table."""
+    limits = SoilLimits(max_misfit=thresholds.max_misfit, n_bands=thresholds.n_bands)
     return tuple(
-        Metric(
-            name=f"misfit_{name}",
-            value=band.misfit,
-            threshold=thresholds.max_misfit,
-            bound="max",
-            # A band with no point to weigh is not measured, as G7's.
-            passed=band.misfit is None or band.misfit <= thresholds.max_misfit,
-        )
-        for name, band in zip(names, fit.bands, strict=True)
+        Metric(**one.model_dump())
+        for one in measure_soil(measures.fit, measures.water_table_m, limits)
     )
 
 
@@ -160,7 +156,7 @@ def petro_overview(folder: str) -> Overview:
         status = (
             verdict_status(g7, g8)
             if g7 is not None
-            else measured_status(fit_metrics(measures.fit, thresholds))
+            else measured_status(fit_metrics(measures, thresholds))
         )
         statuses.append(status)
         misfits = [band.misfit for band in measures.fit.bands if band.misfit is not None]
@@ -206,6 +202,7 @@ def petro_overview(folder: str) -> Overview:
         },
         cells=tuple(cells),
         track=Track(label="Water table (m)", short="Water table", kind="depth"),
+        gates=line_gate(log, "petro_inversion", "G8"),
     )
 
 
@@ -241,7 +238,7 @@ def petro_card(folder: str, xmid: float) -> PetroCard:
             )
         )
     else:
-        metrics = fit_metrics(measures.fit, thresholds)
+        metrics = fit_metrics(measures, thresholds)
         said.append(_column_sentence(measures))
         said += _fit_sentences(measures.fit, thresholds)
         said += _neighbours(g8, thresholds)

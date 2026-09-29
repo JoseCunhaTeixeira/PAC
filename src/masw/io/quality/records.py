@@ -36,6 +36,7 @@ from masw.io.quality.view import (
     Track,
     flag_text,
     gate_view,
+    line_gate,
     measured_status,
     number,
     plural,
@@ -129,7 +130,8 @@ def measure_records(run_folder: Path) -> None:
             excluded=manifest.exclusions.traces.get(record.name, ()),
             reach_m=reach_m,
             unmuted=unmuted.get(record.name),
-            spectra=str(manifest.preset.mode) in ("passive", "passive-active"),
+            # On every line, as G1's (the user, 2026-09-29: the same measures for every line).
+            spectra=True,
             image_band=image_band(manifest.preset),
         )
         measures = SignalMeasures(metrics=metrics, band_hz=band)
@@ -260,6 +262,7 @@ def records_overview(folder: str) -> Overview:
             "none": "not measured",
         },
         cells=tuple(cells),
+        gates=line_gate(log, "preprocessing", "G1"),
         track=Track(
             label="Median SNR (dB)",
             short="SNR",

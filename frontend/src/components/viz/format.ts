@@ -19,6 +19,7 @@ const METRIC_LABELS: Record<string, string> = {
   pulse_s: "Shot pulse",
   spectral_outliers: "Traces off their neighbours' spectra",
   spectral_receivers: "Receivers off their neighbours' spectra",
+  off_decay_receivers: "Receivers too weak or strong for their offset",
   // G2, an image
   coherent_columns: "Coherent columns",
   virtual_shot_snr_db: "Virtual shot's SNR",
@@ -42,6 +43,7 @@ const METRIC_LABELS: Record<string, string> = {
   aliased_points: "Points under λmin",
   beyond_reach_points: "Points over λmax",
   curve_points: "Points of the resampled curve",
+  wavelength_ratio: "Longest / shortest wavelength",
   max_jump: "Largest step between points",
   air_wave_share: "Points in the air wave's band",
   trend: "Normal dispersion trend",
@@ -100,25 +102,42 @@ export const MODEL_LABELS: Record<string, string> = {
   smooth_best: "best, smooth",
 };
 
-// The objects a gate's measures describe, a table each; a window's signal, its stacked
-// correlations (the virtual shot's).
+// The things a gate's measures describe, a menu each: a window's signal is its stacked
+// correlations (the virtual shot's); "neighbours" and "line", what each line check compares.
 const OBJECT_TITLES: Record<string, string> = {
   signal: "Signal",
   spectrum: "Spectrum",
   selection: "fk selection",
   image: "Image",
   curve: "Curve",
+  fit: "Fit to the curve",
+  chains: "Chains",
   model: "Model",
+  soil: "Soil column",
 };
-const WINDOW_OBJECTS: Record<string, string> = {
-  signal: "Stacked correlations",
-  spectrum: "Their spectrum",
+const GATE_OBJECTS: Record<string, Record<string, string>> = {
+  G1: { line: "The line's receivers" },
+  G2: { signal: "Stacked correlations", spectrum: "Their spectrum" },
+  G4: { neighbours: "Curve against its neighbours", line: "The line's curves" },
+  G6: { neighbours: "Model against its neighbours", line: "The line's models" },
+  G8: { neighbours: "Soil column against its neighbours", line: "The line's soil columns" },
+};
+// What each gate measures, for one that measured nothing.
+const GATE_OBJECT: Record<string, string> = {
+  G1: "signal",
+  G2: "image",
+  G3: "curve",
+  G4: "neighbours",
+  G5: "model",
+  G6: "neighbours",
+  G7: "soil",
+  G8: "neighbours",
 };
 
-/** The title of a gate's table of one object's measures; none for a log's older ones. */
+/** The title of a gate's menu of the measures of one thing it measures. */
 export function objectTitle(gate: string, of: string): string {
-  if (!of) return "";
-  return (gate === "G2" ? WINDOW_OBJECTS[of] : undefined) ?? OBJECT_TITLES[of] ?? capitalized(of);
+  const thing = of || GATE_OBJECT[gate] || "";
+  return GATE_OBJECTS[gate]?.[thing] ?? OBJECT_TITLES[thing] ?? capitalized(thing || gate);
 }
 
 export function metricLabel(name: string): string {

@@ -10,7 +10,18 @@ import {
 import { neighbours } from "./cells";
 import { metricLabel, STATE_MEANINGS } from "./format";
 import type { Card, Cell, GateView, Overview, Sentence, StageKey } from "./types";
-import { Empty, ErrorBox, Fold, GateBadge, PartBadge, Sentences, SettingsList, Skeleton, StatusBadge } from "./ui";
+import {
+  Empty,
+  ErrorBox,
+  Fold,
+  GateBadge,
+  GateTables,
+  PartBadge,
+  Sentences,
+  SettingsList,
+  Skeleton,
+  StatusBadge,
+} from "./ui";
 
 // What every stage's panel is made of: its summary, and the selected unit's card, with its
 // neighbours a click away. A card says its verdict and its warnings, shows the unit, and holds
@@ -59,6 +70,8 @@ export function StageHead({
       </p>
       {aside}
       </div>
+      {/* The line check's measures, in the same menu as a unit's. */}
+      <GateTables gates={overview.gates ?? []} />
     </section>
   );
 }
@@ -92,8 +105,8 @@ export function UnitCard({
   details?: ReactNode;
   /** The stage the card is of: what its state means there. */
   stage?: StageKey;
-  /** Its name and its neighbours alone above its displays, nothing else (a passive record's
-   * signal and spectrum). */
+  /** Its name and its neighbours alone above its displays, and its details (a passive record's
+   * signal and spectrum, and its measures). */
   bare?: boolean;
 }) {
   if (error) return <ErrorBox message={error} />;
@@ -175,7 +188,7 @@ export function UnitCard({
           <SettingsList settings={card.settings} />
         </Fold>
       )}
-      {!bare && details}
+      {details}
     </section>
   );
 }

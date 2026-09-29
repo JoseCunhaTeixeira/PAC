@@ -711,12 +711,20 @@
   width: 12%;
 }
 
-/* The object a table's measures describe (a record's signal, its spectrum). */
-.viz table.viz-table caption {
-  caption-side: top;
-  text-align: left;
-  font-weight: 600;
-  padding: 0 0 4px;
+/* A card's measures: a submenu for each thing they measure, its gate's verdict beside it. */
+.viz-measure-menus {
+  padding-left: 14px;
+}
+
+.viz-measure-menus > .viz-fold {
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.viz-measure-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* What a measure covers, one cell for the rows it covers alike; a failed row's own colour

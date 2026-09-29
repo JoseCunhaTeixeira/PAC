@@ -20,12 +20,13 @@ from paco.qc.g1_signal import SignalThresholds, judge_signal
 
 from masw.api.main import app
 from masw.io.paths import OUTPUT_DIR, workspace
-from masw.io.quality.dispersion import CurveThresholds, curve_metrics
+from masw.io.quality.dispersion import curve_metrics
 from masw.io.quality.records import before_muting, signal_metrics, thresholds_of
 from masw.io.quality.view import DASH
 from sigpipe.base import (
     Coordinate,
     DispersionCurve,
+    DispersionImage,
     LinearAcquisition,
     Mode,
     Stream,
@@ -38,6 +39,7 @@ from sigpipe.masw.inversion.window import (
 )
 from sigpipe.masw.presets import make_preset, resolve_preset
 from sigpipe.masw.profiles import load_profile
+from sigpipe.masw.quality.curve import CurveLimits
 from sigpipe.masw.quality.measures import SignalLimits, line_reach
 from sigpipe.masw.quality.signal import signal_windows
 
@@ -255,7 +257,14 @@ def test_a_pac_run_shows_its_records_measures_without_verdicts(run: str) -> None
     ((gate),) = card["gates"]
     assert gate["gate"] == "G1" and gate["verdict"] is None
     names = [metric["name"] for metric in gate["metrics"]]
-    assert names[:5] == ["dead_traces", "clipped_traces", "nan_traces", "rms_outliers", "snr_db"]
+    # Its spectra measured as a passive record's (the user, 2026-09-29: every line alike).
+    assert names[:5] == [
+        "dead_traces",
+        "clipped_traces",
+        "nan_traces",
+        "spectral_outliers",
+        "rms_outliers",
+    ]
     assert card["attempts"] == [] and card["windows"] == ["xmid_2.50", "xmid_5.50", "xmid_8.50"]
     # Its measures in their tables, by object; its sentences, what they do not say.
     assert {metric["of"] for metric in gate["metrics"]} == {"signal", "spectrum"}
@@ -304,6 +313,7 @@ def test_pac_measures_a_record_as_the_assistants_g1_does(run: str) -> None:
         load_stream([folder / "Stream_0000.hdf5"])[0],
         SignalThresholds(),
         reach_m=reach,
+        spectra=True,
         image_band=(dispersion["fmin"], dispersion["fmax"]),
     )
 
@@ -381,7 +391,13 @@ def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:
         ("pass", True),
         (None, True),
     ]
-    assert gates["G3"]["metrics"] == [] and gates["G4"]["metrics"] == []
+    # Measured as G3 measures a pick, not judged; nothing of it compared along the line.
+    curve = {metric["name"]: metric for metric in gates["G3"]["metrics"]}
+    assert {"sharpness", "on_data", "wavelength_ratio"} <= set(curve)
+    assert {metric["of"] for metric in curve.values()} == {"curve"}
+    assert gates["G4"]["metrics"] == []
+    # No check over the line: nothing in the stage's menu.
+    assert overview["gates"] == []
     assert {metric["name"] for metric in gates["G2"]["metrics"]} >= {
         "coherent_columns",
         "competing_ridges",
@@ -906,6 +922,25 @@ def test_an_assistant_run_shows_g2_g3_g4(judged: str) -> None:
     assert len(card["attempts"]) == 2  # the phase shift's and the picking's
 
 
+def test_each_stage_shows_the_check_over_its_line(judged: str) -> None:
+    # G4 checked this line's curves and G6 its models; G1 not its receivers, G8 not its soil
+    # columns. Each stage holds its own, in the menu a unit's measures are in: from a log
+    # before the measures said what they cover, said generally.
+    gates = {
+        stage: client.get(f"/quality/{stage}/overview/{judged}").json()["gates"]
+        for stage in ("records", "dispersion", "inversion", "petro")
+    }
+
+    assert gates["records"] == [] and gates["petro"] == []
+    ((curves,),) = [gate["metrics"] for gate in gates["dispersion"]]
+    assert [(gate["gate"], gate["verdict"]) for gate in gates["dispersion"]] == [("G4", "pass")]
+    assert (curves["name"], curves["of"]) == ("curves", "line")
+    assert curves["over"] == "the line's windows: a curve G3 passed"
+    ((models,),) = [gate["metrics"] for gate in gates["inversion"]]
+    assert gates["inversion"][0]["gate"] == "G6"
+    assert (models["of"], models["over"]) == ("line", "the line's windows: a model G5 passed")
+
+
 def test_a_pick_changed_by_hand_leaves_the_assistants_curve_checks_behind(
     judged: str,
 ) -> None:
@@ -1124,10 +1159,21 @@ def test_a_curves_points_past_the_images_lines_are_measured() -> None:
         type=VelocityType.PHASE,
     )
 
-    metrics = {one.name: one for one in curve_metrics(curve, CurveThresholds(), 2.0, 15.0)}
+    # Its image's grid: the pick measured on it, as G3 measures one (sigpipe's measure_curve).
+    fs, vs = np.arange(1.0, 101.0), np.arange(50.0, 301.0)
+    image = DispersionImage(
+        fv_map=np.full((fs.size, vs.size), 0.5),
+        fs=fs,
+        vs=vs,
+        type=VelocityType.PHASE,
+        acquisition=curve.acquisition,
+    )
+
+    metrics = {one.name: one for one in curve_metrics(image, curve, CurveLimits())}
 
     for name in ("aliased_points", "beyond_reach_points"):
         assert metrics[name].value == 0.167 and not metrics[name].passed
+        assert metrics[name].of == "curve" and metrics[name].over.startswith("the curve's 6 points")
 
 
 def test_an_inversion_whose_data_chose_the_layers_shows_how_its_chains_moved(run: str) -> None:
