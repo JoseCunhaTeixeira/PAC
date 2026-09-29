@@ -7,6 +7,7 @@ from obspy import read
 from pydantic import BaseModel
 
 from masw.io.paths import INPUT_DIR
+from sigpipe.dataio.signal_plotting import trace_spectra
 
 logger = logging.getLogger(__name__)
 
@@ -51,32 +52,23 @@ def get_gather(
 
 
 class SpectrumResponse(BaseModel):
-    freqs: list[float]  # Hz
-    power_db: list[float]  # the traces' mean power, in dB of its largest
-
-
-# The most frequencies a spectrum's preview gets: a plot shows no more.
-SPECTRUM_POINTS = 1000
+    freqs: list[float]  # Hz, 0 to Nyquist
+    # Each trace's amplitude spectrum, in the file's order (traces x freqs), 0 to 1 of its largest.
+    amplitude: list[list[float]]
 
 
 @router.get("/spectrum/{folder}/{file}")
 def get_spectrum(folder: str, file: str) -> SpectrumResponse:
-    """The record's mean power spectrum over its traces, each trace's mean removed, in dB of its
-    largest: where its energy lies, for a filter's band to be chosen by it (a computing page's
-    preview). The largest of each group of frequencies kept, at most SPECTRUM_POINTS."""
+    """Each trace's amplitude spectrum as the record's saved figure has it (sigpipe's
+    trace_spectra: its mean removed, the whole of it, 0 to Nyquist, each scaled to its own
+    largest): where its energy lies, for a filter's band to be chosen by it (a computing page's
+    preview)."""
     path = INPUT_DIR / folder / file
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {file}")
     stream = read(str(path))
     data = np.array([tr.data for tr in stream], dtype=float)
-    data -= data.mean(axis=1, keepdims=True)
-    power = (np.abs(np.fft.rfft(data, axis=1)) ** 2).mean(axis=0)
-    freqs = np.fft.rfftfreq(data.shape[1], d=float(stream[0].stats.delta))
-    group = max(1, -(-freqs.size // SPECTRUM_POINTS))
-    n = freqs.size // group * group
-    peaks = np.concatenate((power[:n].reshape(-1, group).max(axis=1), power[n:][:1]))
-    kept = np.concatenate((freqs[:n:group], freqs[n:][:1]))
-    db = 10 * np.log10(peaks / (peaks.max() or 1.0) + 1e-30)
+    freqs, amplitude = trace_spectra(data, 1.0 / float(stream[0].stats.delta))
     return SpectrumResponse(
-        freqs=np.round(kept, 3).tolist(), power_db=np.round(np.maximum(db, -120.0), 2).tolist()
+        freqs=np.round(freqs, 3).tolist(), amplitude=np.round(amplitude, 3).tolist()
     )

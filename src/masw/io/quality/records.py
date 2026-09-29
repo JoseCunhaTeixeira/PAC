@@ -7,12 +7,12 @@ each record's shot: the records strip of Visualization, and the selected record'
 
 import logging
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
-import matplotlib.pyplot as plt
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
+from masw.io.paths import workspace
 from masw.io.quality.done import record_settings
 from masw.io.quality.files import folder_path, line_geometry, read_manifest
 from masw.io.quality.log import (
@@ -44,30 +44,29 @@ from masw.io.quality.view import (
     warnings,
 )
 from sigpipe.base.stream import Stream
-from sigpipe.dataio.signal_plotting import plot_record_spectrum
 from sigpipe.dataio.stream.loading import load_stream
-from sigpipe.dataio.stream.plotting import signal_end
+from sigpipe.masw.pipelines import shot_time_s, unmuted_record
 from sigpipe.masw.pipelines.common import PREPROCESSED
+from sigpipe.masw.presets import Preset
+from sigpipe.masw.profiles import Profile, ProfileError, load_profile
 from sigpipe.masw.quality.signal import (
     Windows,
     dead_clipped_nan,
     first_breaks,
     lateral_coherence,
-    mean_spectrum,
     signal_windows,
     snr_db,
     trigger_shift,
     usable_band,
 )
+from sigpipe.masw.quality.spectra import save_record_spectra
 from sigpipe.masw.runs import RunManifest, xmid_of
-from sigpipe.transformers import Plot
 
 STAGE = "preprocessing"
 GATE = "G1"
 logger = logging.getLogger(__name__)
 
 MEASURES_FILE = "SignalMeasures_0000.json"  # beside a record's preprocessed file, PAC's job's
-SPECTRUM_FIGURE = "Spectrum_0000.png"  # beside it too: its spectrum, as G1 measures it
 GATHER_SAMPLES = 1_200  # the most samples a trace keeps for the wiggle plot
 
 
@@ -102,72 +101,53 @@ class SignalMeasures(BaseModel):
 
 def measure_records(run_folder: Path) -> None:
     """Save the measures of every record run `run_folder` preprocessed, beside it (a run PAC made:
-    the assistant's own are in its QC log)."""
+    the assistant's own are in its QC log), and its spectra's figure (the preprocessed record's):
+    measured as G1 measures it, its noise before its muting (before_muting)."""
     manifest = read_manifest(run_folder)
     if manifest is None:
         return
     thresholds = thresholds_of(run_folder)
     active = manifest.profile.kind == "active"
+    try:
+        profile: Profile | None = load_profile(manifest.profile.name, workspace())
+    except ProfileError:
+        profile = None
     for record in manifest.records:
         path = run_folder / record.folder / PREPROCESSED
         if record.status != "succeeded" or not path.exists():
             continue
-        metrics, band = signal_metrics(path, thresholds, active)
+        stream = load_stream([path])[0]
+        unmuted = before_muting(manifest.preset, profile, record.name)
+        metrics, band = signal_metrics(stream, thresholds, active, unmuted)
         measures = SignalMeasures(metrics=metrics, band_hz=band)
         (path.parent / MEASURES_FILE).write_text(measures.model_dump_json(indent=2))
-        snr = next((one.value for one in metrics if one.name == "snr_db"), None)
         try:
-            save_spectrum(path, thresholds, active, band, snr)
+            save_record_spectra(stream, path.parent, band)
         except Exception:  # a figure must not lose the measures
-            logger.exception("Could not draw the spectrum of %s", path.parent)
+            logger.exception("Could not draw the spectra of %s", path.parent)
 
 
-def save_spectrum(
-    path: Path,
-    thresholds: SignalThresholds,
-    active: bool,
-    band: tuple[float, float] | None,
-    snr: float | None,
-) -> Path:
-    """The spectrum figure of the preprocessed record in `path`, beside it (SPECTRUM_FIGURE): a
-    shot's surface-wave window against its noise window (the windows signal_metrics measures), the
-    usable band G1 found shaded, its median SNR; a passive record's whole length."""
-    stream = load_stream([path])[0]
-    xt = np.nan_to_num(np.asarray(stream.xt, dtype=float))
-    dead, clipped, nan = dead_clipped_nan(xt, thresholds.dead_ratio, thresholds.clip_share)
-    usable = ~(dead | clipped | nan)
-    offsets = np.asarray(stream.acquisition.offsets, dtype=float)
-    ts = np.asarray(stream.ts, dtype=float)
-    windows = (
-        signal_windows(offsets, ts, thresholds.vg_min, thresholds.vg_max, thresholds.pad_s)
-        if active
-        else None
-    )
-    kept = xt[usable] if usable.any() else xt
-    if windows is not None and usable.any():
-        rows = _rows(windows, usable)
-        signal = mean_spectrum(kept, rows.signal, stream.sampling_freq)
-        noise = mean_spectrum(kept, rows.noise, stream.sampling_freq)
-        title = (f"Median SNR {snr:.1f} dB" if snr is not None else "SNR not measured") + (
-            f"; noise {windows.where}"
-        )
-    else:
-        signal = mean_spectrum(kept, np.ones_like(kept, dtype=bool), stream.sampling_freq)
-        noise = None
-        title = "The whole record"
-    if signal is None:
-        raise ValueError(f"No spectrum of {path}")
-    if noise is not None and float(noise[1].max()) <= 1e-12 * float(signal[1].max()):
-        # Muted after the slowest arrival: nothing left to measure the noise by.
-        noise = None
-        title += " (muted: nothing left in it)"
-    figure = plot_record_spectrum(
-        signal[0], signal[1], None if noise is None else noise[1], band, title
-    )
-    target = path.parent / SPECTRUM_FIGURE
-    Plot.savefig(path=target, figure=figure)
-    plt.close(figure)
-    return target
+def before_muting(
+    preset: Preset, profile: Profile | None, name: str
+) -> tuple[Stream, float] | None:
+    """Record `name` before its muting, and where its shot is on it (s): what G1 measures its
+    noise on (a muting zeroes the noise window after the slowest arrival; a trigger's shift,
+    part of the muting, drops the one before the trigger), preprocessed as `preset` has it from
+    its input file (sigpipe's unmuted_record: neither its trigger shifted nor muted, its shot
+    at shot_time_s). None when it is not muted (its saved record is the same), or its input is
+    not at hand."""
+    values: dict[str, Any] = preset.model_dump()
+    muting: dict[str, Any] = values.get("muting") or {}
+    records = profile.records if profile is not None else ()
+    found = next((one for one in records if one.path.name == name), None)
+    if (
+        profile is None
+        or found is None
+        or muting.get("method", "none") == "none"
+        or not found.path.exists()
+    ):
+        return None
+    return unmuted_record(preset, found, profile), shot_time_s(preset, found)
 
 
 class RecordCard(Card):
@@ -304,15 +284,11 @@ def gather_of(
     norm: str = "trace",
     with_source: bool = True,
     excluded: tuple[int, ...] = (),
-    up_to_signal: bool = False,
 ) -> RecordGather:
-    """`stream` as the wiggle plot takes it: every trace at most GATHER_SAMPLES samples (kept one
-    in several: the display does not need the rest), up to where the traces carry signal when
-    `up_to_signal` (sigpipe's signal_end: a correlation's quiet lags left out), normalized by
-    trace or over the gather; its source's position when `with_source`."""
+    """`stream` as the wiggle plot takes it, the whole of it: every trace at most GATHER_SAMPLES
+    samples (kept one in several: the display does not need the rest), normalized by trace or
+    over the gather; its source's position when `with_source`."""
     xt = np.nan_to_num(np.asarray(stream.xt, dtype=float))
-    if up_to_signal:
-        xt = xt[:, : signal_end(xt)]
     stride = max(1, -(-xt.shape[1] // GATHER_SAMPLES))
     kept = xt[:, ::stride]
     scale = (
@@ -511,14 +487,17 @@ def _sentence(text: str) -> str:
 
 
 def signal_metrics(
-    path: Path, thresholds: SignalThresholds, active: bool
+    stream: Stream,
+    thresholds: SignalThresholds,
+    active: bool,
+    unmuted: tuple[Stream, float] | None = None,
 ) -> tuple[tuple[Metric, ...], tuple[float, float] | None]:
-    """sigpipe's measures of the preprocessed record in `path` against G1's limits, as G1 names
-    them, over every trace (G1 leaves out those beyond the line's reach, and the traces already
-    excluded): the bad traces; for a shot, the median SNR in the surface-wave window, the usable
-    band's width, the median coherence of neighbouring traces and the trigger the first breaks
-    point to. Returns the metrics, and the usable band itself."""
-    stream = load_stream([path])[0]
+    """sigpipe's measures of preprocessed record `stream` against G1's limits, as G1 names and
+    measures them, over every trace (G1 leaves out those beyond the line's reach, and the traces
+    already excluded): the bad traces; for a shot, the median SNR in the surface-wave window and
+    the usable band, their noise on the record before its muting (`unmuted`: it and where its
+    shot is on it, before_muting; none, not muted), the median coherence of neighbouring traces
+    and the trigger the first breaks point to. Returns the metrics and the usable band itself."""
     xt = np.asarray(stream.xt, dtype=float)
     dead, clipped, nan = dead_clipped_nan(xt, thresholds.dead_ratio, thresholds.clip_share)
     metrics = [
@@ -532,13 +511,14 @@ def signal_metrics(
         return tuple(metrics), None
     usable = ~(dead | clipped | nan)
     finite = np.nan_to_num(xt)
-    snr = snr_db(finite, windows)
+    noisy, noise = _noise(unmuted, finite, windows, offsets, thresholds)
+    snr = snr_db(noisy, noise)
     median_snr = float(np.median(snr[usable])) if usable.any() else None
     snr_ok = median_snr is not None and median_snr >= thresholds.min_snr_db
     band = usable_band(
-        finite[usable],
+        noisy[usable],
         stream.sampling_freq,
-        _rows(windows, usable),
+        _rows(noise, usable),
         thresholds.band_db,
         thresholds.peak_db,
     )
@@ -592,7 +572,33 @@ def signal_metrics(
             unit="s",
         ),
     ]
-    return tuple(metrics), None if band is None else (round(band[0], 2), round(band[1], 2))
+    rounded = None if band is None else (round(band[0], 2), round(band[1], 2))
+    return tuple(metrics), rounded
+
+
+def _noise(
+    unmuted: tuple[Stream, float] | None,
+    finite: np.ndarray,
+    windows: Windows,
+    offsets: np.ndarray,
+    thresholds: SignalThresholds,
+) -> tuple[np.ndarray, Windows]:
+    """The traces and windows G1 measures the noise on (its _before_muting): the record before
+    its muting's, its times from its shot; the preprocessed record's (`finite`, `windows`) when
+    not muted, or when the record before its muting leaves no room for a noise window."""
+    if unmuted is None:
+        return finite, windows
+    stream, shot_s = unmuted
+    found = signal_windows(
+        offsets,
+        np.asarray(stream.ts, dtype=float) - shot_s,
+        thresholds.vg_min,
+        thresholds.vg_max,
+        thresholds.pad_s,
+    )
+    if found is None or stream.xt.shape != finite.shape:
+        return finite, windows
+    return np.nan_to_num(np.asarray(stream.xt, dtype=float)), found
 
 
 def _measured(path: Path) -> tuple[tuple[Metric, ...], tuple[float, float] | None]:
