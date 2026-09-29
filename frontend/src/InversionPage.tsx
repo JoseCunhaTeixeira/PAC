@@ -93,7 +93,7 @@ interface InversionSettings {
 }
 
 // Kept under a name of its own since the layers can be chosen by the data: the earlier
-// settings' table is taken over, their effort (the sampler's before 2026-09-27) is not.
+// settings' table is taken over, their effort (an older sampler's) is not.
 const SETTINGS_KEY = "pac.inversion.settings.2";
 const DROP_TIP =
   "How much slower a layer may be than the one above\n0: Vs only increases with depth";

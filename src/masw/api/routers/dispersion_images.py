@@ -106,9 +106,9 @@ def _to_image_out(image: DispersionImage) -> DispersionImageOut:
         else []
     )
 
-    # Where the checks' flags start (the user, 2026-09-28): under lambda_min (twice the smallest
-    # spacing) the aliasing zone, over lambda_max (three window lengths) beyond the window's
-    # reach. Both along the ground, and undefined for an unknown geometry.
+    # Where the checks' flags start: under lambda_min (twice the smallest spacing) the aliasing
+    # zone, over lambda_max (three window lengths) beyond the window's reach. Both along the
+    # ground, and undefined for an unknown geometry.
     # The map normalized (0 to 1): four decimals finer than any colour step.
     return DispersionImageOut(
         fv_map=[rounded(row, 4) for row in image.fv_map],

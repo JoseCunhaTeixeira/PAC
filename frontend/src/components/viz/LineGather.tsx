@@ -82,7 +82,7 @@ export function LineGather({
   const [mouse, setMouse] = useState<{ x: number; y: number } | null>(null);
   const samples = data.traces[0]?.length ?? 0;
   const duration = Math.max(data.dt * Math.max(samples - 1, 1), 1e-6);
-  // The whole record first (the user); the wheel and the box's tools zoom.
+  // The whole record first; the wheel and the box's tools zoom.
   const [ownY, setOwnY] = useState<Range | null>(null);
   const full = useMemo(() => ({ x: extent, y: [0, duration] as Range }), [extent, duration]);
   const plots: PlotRect[] = [{ left: ML, top: MT, width: plotW, height: plotH, xAxis: MB, yAxis: ML }];

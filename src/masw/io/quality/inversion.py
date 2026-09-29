@@ -111,7 +111,7 @@ MODEL_WORDS: dict[str, str] = {
     "best": "The layered best model",
     "smooth_best": "The smooth best model",
 }
-# The share of proposals the trial runs aimed at (%), for the runs saved before 2026-09-27.
+# The share of proposals the trial runs aimed at (%), for older runs.
 TRIAL_BAND = (20.0, 30.0)
 # How the assistant chooses its parameters, as it says it (PACo's inversion rules).
 RULES = {
@@ -172,8 +172,7 @@ class FitCurve(BaseModel):
     predicted_fs: tuple[float, ...]
     predicted_vs: tuple[float, ...]
     # The kept models' curves at the picked frequencies, their 10th and 90th percentiles (the
-    # density figure's band); empty for an inversion saved before 2026-09-29, or a petrophysical
-    # one.
+    # density figure's band); empty for an older inversion, or a petrophysical one.
     spread_fs: tuple[float, ...] = ()
     spread_low: tuple[float, ...] = ()
     spread_high: tuple[float, ...] = ()
@@ -216,15 +215,14 @@ class InversionCard(Card):
     step_factor: float | None  # the factor the run kept; None: steps not tuned
     acceptance: tuple[float, ...]  # %, per chain
     # When the data chose the layers: each move's acceptance (%) and step (relative, %), the
-    # chains' medians, and the exchanges between tempered copies accepted (%); saved since
-    # 2026-09-29.
+    # chains' medians, and the exchanges between tempered copies accepted (%); none in older runs.
     moves: dict[str, float] = Field(default_factory=dict)
     move_steps: dict[str, float] = Field(default_factory=dict)
     exchanges: float | None = None
     samples_per_chain: int
     convergence: tuple[Convergence, ...]
-    # The monitored model's (the ensemble's; the smooth median's in measures from before
-    # 2026-09-28), then the layered median's.
+    # The monitored model's (the ensemble's; the smooth median's in older measures), then the
+    # layered median's.
     fits: tuple[ModelFit, ...]
     at_bounds: tuple[BoundShare, ...]  # the most piled first
     profile: VsProfile | None
@@ -1017,7 +1015,7 @@ def _convergence(measures: InversionMeasures) -> tuple[float | None, float | Non
 
 
 def _judged(measures: InversionMeasures) -> set[str]:
-    """The series the chains are judged on: Vs at depths; every one for runs measured before."""
+    """The series the chains are judged on: Vs at depths; every one for older runs."""
     return set(measures.watched) or set(measures.rhat)
 
 

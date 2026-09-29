@@ -1,8 +1,8 @@
 import type { Acquisition } from "../api";
 
 // What a profile's records set the settings' limits by. Files that differ (their lengths, their
-// triggers): the least of each is the reference (the user, 2026-09-28), so that every record
-// keeps to the limits; the pages list every value the files say.
+// triggers): the least of each is the reference, so that every record keeps to the limits; the
+// pages list every value the files say.
 
 /** The shortest record, s: its last sample's time. */
 export function shortestRecord(acquisition: Acquisition): number {

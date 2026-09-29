@@ -236,7 +236,7 @@ export interface ThicknessLayer {
 }
 
 export interface InversionParameters {
-  layering?: "free" | "fixed"; // runs saved before: the layers given
+  layering?: "free" | "fixed"; // older runs: the layers given
   free?: {
     vs_min: number | null;
     vs_max: number | null;
@@ -302,7 +302,7 @@ export interface FitCurve {
   predicted_fs: number[];
   predicted_vs: number[];
   /** The kept models' curves at the picked frequencies: their 10th and 90th percentiles. Empty for an
-   * inversion saved before 2026-09-29, or a petrophysical one. */
+   * older inversion, or a petrophysical one. */
   spread_fs?: number[];
   spread_low?: number[];
   spread_high?: number[];

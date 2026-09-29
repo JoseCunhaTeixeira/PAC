@@ -232,7 +232,7 @@ def test_a_passive_window_stacks_every_record() -> None:
     assert metrics["fk_kept"]["value"] == round(selection["kept_share"], 4)
     # Judged as G2 judges them: the share kept against its limit; the stacked correlations
     # measured as a record is, from the virtual source, as the job saved them.
-    assert metrics["fk_kept"]["threshold"] == 0.2 and metrics["fk_kept"]["of"] == "selection"
+    assert metrics["fk_kept"]["threshold"] == 0.01 and metrics["fk_kept"]["of"] == "selection"
     snr = metrics["snr_db"]
     assert snr["of"] == "signal" and snr["threshold"] == 6.0
     assert "the virtual source's own aside" in snr["over"]
@@ -257,7 +257,7 @@ def test_a_pac_run_shows_its_records_measures_without_verdicts(run: str) -> None
     ((gate),) = card["gates"]
     assert gate["gate"] == "G1" and gate["verdict"] is None
     names = [metric["name"] for metric in gate["metrics"]]
-    # Its spectra measured as a passive record's (the user, 2026-09-29: every line alike).
+    # Its spectra measured as a passive record's: every line alike.
     assert names[:5] == [
         "dead_traces",
         "clipped_traces",
@@ -462,8 +462,8 @@ def test_what_an_older_inversion_lacks_is_neither_shown_nor_made(run: str) -> No
     window = OUTPUT_DIR / run / "xmid_5.50"
     path = window / "SeismicInversion_Measures_0000.json"
     saved, band = path.read_text(), (window / VS_SPREAD_FILE).read_text()
-    # As saved before 2026-09-29: the depth read against a prior, neither the interfaces nor the
-    # band of the models' Vs.
+    # As an older inversion saved its measures: the depth read against a prior, neither the
+    # interfaces nor the band of the models' Vs.
     older = json.dumps(
         json.loads(saved) | {"useful_reference": "curve", "useful_depth_m": 0.123, "interfaces": []}
     )
@@ -616,7 +616,7 @@ def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> N
     assert vs1["prior"] == [100, 400] and 100 <= vs1["low"] <= vs1["median"] <= vs1["high"] <= 400
     assert vs1["step"] > 0 and vs1["step_unit"] == ""  # m/s, as the layer's own
     assert card["figures"] == ["marginals", "density_curves", "dispersion_image", "chains"]
-    # The median of the ensemble alone said (the user, 2026-09-29): no layered median.
+    # The median of the ensemble alone said: no layered median.
     assert not any(text.startswith("Layered median") for text in _texts(card))
     best = client.get(f"/quality/inversion/card/{run}/2.5?model=best").json()
     assert best["profile"]["model"] == "best"

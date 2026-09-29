@@ -38,7 +38,7 @@ def read_manifest(folder: Path) -> RunManifest | None:
     return RunManifest.model_validate_json(path.read_text()) if path.exists() else None
 
 
-# The farthest distance older runs recorded for none (sigpipe's stand-in before 2026-09-28).
+# The farthest distance older runs recorded for none (an older sigpipe's stand-in).
 FORMER_UNBOUNDED_M = 1_000.0
 
 

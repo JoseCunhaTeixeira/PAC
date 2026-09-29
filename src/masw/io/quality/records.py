@@ -130,7 +130,7 @@ def measure_records(run_folder: Path) -> None:
             excluded=manifest.exclusions.traces.get(record.name, ()),
             reach_m=reach_m,
             unmuted=unmuted.get(record.name),
-            # On every line, as G1's (the user, 2026-09-29: the same measures for every line).
+            # On every line, as G1's: the same measures for every line.
             spectra=True,
             image_band=image_band(manifest.preset),
         )
@@ -370,8 +370,8 @@ def _as_view(found: TraceSpectra) -> SavedSpectra:
 
 def record_spectra(folder: str, name: str) -> SavedSpectra:
     """Record `name`'s spectra, preprocessed, as its job saved them; computed from its saved
-    record when it saved none (a run from before: the user allowed it for a record's spectra,
-    2026-09-29), with the usable band its measures give."""
+    record when it saved none (a run from before they were saved), with the usable band its
+    measures give."""
     run_folder = folder_path(folder)
     manifest = _manifest(run_folder, folder)
     record = next((one for one in manifest.records if one.name == name), None)

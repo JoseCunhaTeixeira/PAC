@@ -270,7 +270,7 @@ export function drawLaneLabels(ctx: CanvasRenderingContext2D, color: string, sho
 
 /** The position axis under the lanes (from `top`, the last lane's bottom): ticks at round
  * distances with their values, the first with its unit, and "Position" left of them as the
- * lanes' labels are written; no baseline (the user's choice). */
+ * lanes' labels are written; no baseline. */
 export function drawLineAxis(
   ctx: CanvasRenderingContext2D,
   view: readonly [number, number],

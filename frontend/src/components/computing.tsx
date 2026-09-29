@@ -325,7 +325,7 @@ export function WindowsCard({
  * none, the shot's pulse kept after the slowest; the record previewed, what the muting removes
  * veiled. Off, none of it applies. Each number kept to what the records hold, as sigpipe checks
  * it: the shortest record, the data that ends first once moved (see records.ts). A passive line
- * has no muting (the user, 2026-09-28): no shot to count a velocity from. */
+ * has no muting: no shot to count a velocity from. */
 export function MutingRow({
   acquisition,
   muting,

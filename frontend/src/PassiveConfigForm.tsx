@@ -85,7 +85,7 @@ function Form({
     `${kept}.filtering`,
     stage<FilteringState>(preset, "filtering"),
   );
-  // The step, empty: the segment's length, segments end to end (the user, 2026-09-28).
+  // The step, empty: the segment's length, segments end to end.
   const [slicing, setSlicing] = useState(() => {
     const given = stage<{ segment_duration: number; segment_step: number }>(preset, "slicing");
     return {

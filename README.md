@@ -3,8 +3,6 @@
 [![License: CC BY 4.0](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14808813.svg)](https://doi.org/10.5281/zenodo.14808813)
 
-New faster version of PAC, rebuilt with a React frontend and a cleaned-up backend!
-
 PAC is an app for processing **Multichannel Analysis of Surface Waves (MASW)** on linear arrays. It can handle both **passive** and **active** seismic data to automatically optimize and extract dispersion images, and it can apply cross-correlation to active data to sometimes improve dispersion retrieval quality. Dispersion curves can be semi-automatically picked on an interactive interface and then inverted into shear-wave velocity profiles.
 
 PAC runs entirely **on your own computer**. You start it once, then use it through your web browser at a local address (`http://localhost:5173`). Nothing is uploaded anywhere — your data never leaves your machine.
@@ -198,7 +196,7 @@ The assistant is an AI agent, **PACo**, that works PAC for you. You ask it in pl
 
 It runs a language model (Qwen3-8B), which needs a **graphics card (GPU) with at least 16 GB of memory**. Everything stays on your own machines: the model does not run on the internet, and it never sees your seismic records, only short summaries of PAC's results. (A larger model, or one from an online service, is possible too: see [Another model](#another-model).)
 
-The assistant is optional. Without it, PAC works exactly as before, and its menu has no Assistant page.
+The assistant is optional. Without it, the rest of PAC works the same, and its menu has no Assistant page.
 
 ### Which setup is yours?
 

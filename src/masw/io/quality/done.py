@@ -54,7 +54,7 @@ _WINDOW_STAGES = {
 # it, when so few; more are counted.
 _SPREAD_VALUES = 3
 _SPREAD_UNITS = 3
-# From sigpipe c17b3de (2026-09-28 16:46, +02:00) on, a shot's trigger is corrected with its
+# From sigpipe c17b3de on (its commit's time, in UTC), a shot's trigger is corrected with its
 # muting only; the runs before corrected it whatever the muting.
 _TRIGGER_WITH_MUTING = datetime(2026, 9, 28, 14, 46, tzinfo=UTC)
 

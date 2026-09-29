@@ -43,9 +43,8 @@ const at = (folder: string) => encodeURIComponent(folder);
 // their square root, so that those show too (the colour bar keeps the shares).
 const interfaceColours = (t: number) => purples(Math.sqrt(t));
 
-// The model shown, for now the only one (the user, 2026-09-29): at each depth, the kept models'
-// median Vs. The inversion saves the others still (the assistant's checks read the layered
-// median).
+// The model shown, the only one: at each depth, the kept models' median Vs. The inversion saves
+// the others too (the assistant's checks read the layered median).
 const MODEL: ModelName = "ensemble";
 
 interface VelocitySection {
