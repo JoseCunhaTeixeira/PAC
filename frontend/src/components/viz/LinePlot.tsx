@@ -53,6 +53,7 @@ export function LinePlot({
   resetKey,
   minWidth = 240,
   depthLink,
+  yAxis = true,
 }: {
   series: PlotSeries[];
   areas?: PlotArea[];
@@ -69,13 +70,16 @@ export function LinePlot({
   minWidth?: number;
   /** A zoom along y shared with plots beside it (null: all of it); x the plot's own. */
   depthLink?: { y: Range | null; setY: (y: Range | null) => void };
+  /** Its y axis drawn (ticks, title); without, a plot beside another sharing it. */
+  yAxis?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
   const palette = canvasPalette(theme);
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
   const width = Math.max(minWidth, Math.floor(containerWidth || 360));
-  const plotW = width - ML - MR;
+  const ml = yAxis ? ML : 6;
+  const plotW = width - ml - MR;
   const plotH = height - MT - MB;
   const [mouse, setMouse] = useState<{ x: number; y: number } | null>(null);
 
@@ -106,7 +110,7 @@ export function LinePlot({
     };
     return { x: fit(xs, xRange), y: fit(ys, yRange) };
   }, [series, areas, refs, xRange, yRange]);
-  const plots: PlotRect[] = [{ left: ML, top: MT, width: plotW, height: plotH, xAxis: MB, yAxis: ML }];
+  const plots: PlotRect[] = [{ left: ml, top: MT, width: plotW, height: plotH, xAxis: MB, yAxis: yAxis ? ML : 0 }];
   // Sharing y: its x zoom its own, back to all of it with new data (`resetKey`).
   const [ownX, setOwnX] = useState<{ key: unknown; x: Range | null }>({ key: resetKey, x: null });
   const xZoom = Object.is(ownX.key, resetKey) ? ownX.x : null;
@@ -118,8 +122,8 @@ export function LinePlot({
   const [y0, y1] = zoom.view.y;
 
   const hover = useMemo(() => {
-    if (!mouse || mouse.x < ML || mouse.x > ML + plotW || mouse.y < MT || mouse.y > MT + plotH) return null;
-    const X = (x: number) => ML + ((x - x0) / (x1 - x0)) * plotW;
+    if (!mouse || mouse.x < ml || mouse.x > ml + plotW || mouse.y < MT || mouse.y > MT + plotH) return null;
+    const X = (x: number) => ml + ((x - x0) / (x1 - x0)) * plotW;
     const Y = (y: number) =>
       yDown ? MT + ((y - y0) / (y1 - y0)) * plotH : MT + plotH - ((y - y0) / (y1 - y0)) * plotH;
     let best: { label: string; point: [number, number]; d: number } | null = null;
@@ -130,13 +134,13 @@ export function LinePlot({
         if (d < 14 && (!best || d < best.d)) best = { label: one.label, point, d };
       }
     }
-    const x = x0 + ((mouse.x - ML) / plotW) * (x1 - x0);
+    const x = x0 + ((mouse.x - ml) / plotW) * (x1 - x0);
     const t = (mouse.y - MT) / plotH;
     const y = yDown ? y0 + t * (y1 - y0) : y1 - t * (y1 - y0);
     return best
       ? [best.label, `${xLabel}: ${num(best.point[0])}`, `${yLabel}: ${num(best.point[1])}`]
       : [`${xLabel}: ${num(x)}`, `${yLabel}: ${num(y)}`];
-  }, [mouse, series, x0, x1, y0, y1, plotW, plotH, yDown, xLabel, yLabel]);
+  }, [mouse, series, x0, x1, y0, y1, plotW, plotH, yDown, xLabel, yLabel, ml]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -150,7 +154,7 @@ export function LinePlot({
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
-    const X = (x: number) => ML + ((x - x0) / (x1 - x0)) * plotW;
+    const X = (x: number) => ml + ((x - x0) / (x1 - x0)) * plotW;
     const Y = (y: number) =>
       yDown ? MT + ((y - y0) / (y1 - y0)) * plotH : MT + plotH - ((y - y0) / (y1 - y0)) * plotH;
 
@@ -167,14 +171,14 @@ export function LinePlot({
     }
     for (const t of yTicks) {
       ctx.beginPath();
-      ctx.moveTo(ML, Y(t));
-      ctx.lineTo(ML + plotW, Y(t));
+      ctx.moveTo(ml, Y(t));
+      ctx.lineTo(ml + plotW, Y(t));
       ctx.stroke();
     }
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(ML, MT, plotW, plotH);
+    ctx.rect(ml, MT, plotW, plotH);
     ctx.clip();
     for (const area of areas) {
       if (area.polygon.length < 3) continue;
@@ -193,8 +197,8 @@ export function LinePlot({
         ctx.moveTo(X(ref.at), MT);
         ctx.lineTo(X(ref.at), MT + plotH);
       } else {
-        ctx.moveTo(ML, Y(ref.at));
-        ctx.lineTo(ML + plotW, Y(ref.at));
+        ctx.moveTo(ml, Y(ref.at));
+        ctx.lineTo(ml + plotW, Y(ref.at));
       }
       ctx.stroke();
       ctx.setLineDash([]);
@@ -203,7 +207,7 @@ export function LinePlot({
       if (ref.axis === "y") {
         ctx.textAlign = "right";
         ctx.textBaseline = "bottom";
-        ctx.fillText(ref.label, ML + plotW - 4, Y(ref.at) - 2);
+        ctx.fillText(ref.label, ml + plotW - 4, Y(ref.at) - 2);
       } else {
         ctx.save();
         ctx.translate(X(ref.at) + 3, MT + 4);
@@ -247,7 +251,7 @@ export function LinePlot({
     // Axes.
     ctx.strokeStyle = palette.axis;
     ctx.lineWidth = 1;
-    ctx.strokeRect(ML + 0.5, MT + 0.5, plotW - 1, plotH - 1);
+    ctx.strokeRect(ml + 0.5, MT + 0.5, plotW - 1, plotH - 1);
     ctx.font = CANVAS_FONT;
     ctx.fillStyle = palette.tick;
     ctx.textAlign = "center";
@@ -257,19 +261,21 @@ export function LinePlot({
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     const yDecimals = tickDecimals(yTicks.length > 1 ? yTicks[1] - yTicks[0] : 1);
-    for (const t of yTicks) ctx.fillText(t.toFixed(yDecimals), ML - 5, Y(t));
+    if (yAxis) for (const t of yTicks) ctx.fillText(t.toFixed(yDecimals), ml - 5, Y(t));
     ctx.fillStyle = palette.title;
     ctx.font = CANVAS_FONT;
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    ctx.fillText(xLabel, ML + plotW / 2, height - 2);
-    ctx.save();
-    ctx.translate(13, MT + plotH / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textBaseline = "middle";
-    ctx.fillText(yLabel, 0, 0);
-    ctx.restore();
-  }, [series, areas, refs, width, height, plotW, plotH, x0, x1, y0, y1, yDown, palette, theme, xLabel, yLabel]);
+    ctx.fillText(xLabel, ml + plotW / 2, height - 2);
+    if (yAxis) {
+      ctx.save();
+      ctx.translate(13, MT + plotH / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textBaseline = "middle";
+      ctx.fillText(yLabel, 0, 0);
+      ctx.restore();
+    }
+  }, [series, areas, refs, width, height, plotW, plotH, x0, x1, y0, y1, yDown, palette, theme, xLabel, yLabel, ml, yAxis]);
 
   return (
     <div ref={containerRef} style={{ position: "relative", width: "100%" }}>

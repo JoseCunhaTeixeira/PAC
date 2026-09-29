@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { API } from "../../api";
 import { canvasPalette, useTheme } from "../../theme";
-import { afmhotR, purples, terrain } from "../colormaps";
+import { afmhotR, purples, terrain, viridis } from "../colormaps";
 import { LayersIcon, StrataIcon } from "../icons";
 import { BoxTools, Card, PlotBox, Segmented } from "../kit";
 import { ModeHead } from "../PseudoSectionCanvas";
@@ -32,13 +32,10 @@ const at = (folder: string) => encodeURIComponent(folder);
 // their square root, so that those show too (the colour bar keeps the shares).
 const interfaceColours = (t: number) => purples(Math.sqrt(t));
 
-const MODELS: { value: ModelName; label: string }[] = [
-  { value: "ensemble", label: "Median of the ensemble" },
-  { value: "median", label: "Median, layered" },
-  { value: "smooth_median", label: "Median, smooth" },
-  { value: "best", label: "Best, layered" },
-  { value: "smooth_best", label: "Best, smooth" },
-];
+// The model shown, for now the only one (the user, 2026-09-29): at each depth, the kept models'
+// median Vs. The inversion saves the others still (the assistant's checks read the layered
+// median).
+const MODEL: ModelName = "ensemble";
 
 interface VelocitySection {
   positions: number[];
@@ -47,6 +44,8 @@ interface VelocitySection {
   // The kept models' relative uncertainty of Vs, U = (P90 - P10) / (2 P50), %: the depth
   // informed read from it.
   vs_uncertainty_grid: (number | null)[][];
+  // How far below each depth (m) their Vs stays correlated with its own.
+  correlation_grid: (number | null)[][];
   // The share of the kept models with an interface, % (null: not known).
   interface_grid: (number | null)[][];
   floors?: number[]; // per column, the elevation its models end at
@@ -234,7 +233,7 @@ function FitsTable({ card }: { card: InversionCard }) {
           </tr>
         </thead>
         <tbody>
-          {card.fits.map((fit) => (
+          {card.fits.filter((fit) => fit.model === MODEL).map((fit) => (
             <tr key={fit.model}>
               <td>{MODEL_LABELS[fit.model] ?? fit.model}</td>
               <td className="num">{num(fit.misfit)}</td>
@@ -303,7 +302,7 @@ export function InversionPanel({
   overviewError: string | null;
   onSelect: (key: string) => void;
 }) {
-  const [model, setModel] = useState<ModelName>("ensemble");
+  const model = MODEL;
   const [smoothing, setSmoothing] = useState(false);
   // The depth each window's data inform, over the sections.
   const [informed, setInformed] = useState(true);
@@ -328,7 +327,7 @@ export function InversionPanel({
       : undefined;
   const labels = useJson<Record<string, number>>(`${API}/dispersion_image_labels/${at(folder)}`);
   const modes = Object.keys(labels.data ?? {});
-  const modelLabel = MODELS.find((one) => one.value === model)?.label.toLowerCase() ?? model;
+  const modelLabel = MODEL_LABELS[model] ?? model;
   const inverted = (overview?.cells ?? []).some((cell) => cell.status !== "none");
   const pick = (position: number) => {
     const cell = nearestCell(overview?.cells ?? [], position);
@@ -342,22 +341,7 @@ export function InversionPanel({
   const inversionCard = card.data;
   return (
     <>
-      <StageHead
-        overview={overview}
-        error={overviewError}
-        aside={
-          <label className="viz-field" data-tip="Shown in the plots below">
-            Model
-            <select value={model} onChange={(e) => setModel(e.target.value as ModelName)}>
-              {MODELS.map((one) => (
-                <option key={one.value} value={one.value}>
-                  {one.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        }
-      />
+      <StageHead overview={overview} error={overviewError} />
       {overview && !inverted ? (
         <section className="viz-section viz-card">
           <Empty>No window inverted yet: invert them in Seismic inversion, or ask the assistant.</Empty>
@@ -448,11 +432,12 @@ export function InversionPanel({
           <Card
             className="viz-section"
             icon={<LayersIcon size={17} />}
-            title="Vs, Vs uncertainty and interface sections"
+            title="Vs, uncertainty, correlation and interface sections"
             plots
             hint={
               "Of the kept models\nVs: their median at each depth, P50\n" +
               "Vs uncertainty: (P90 − P10) / (2 P50), %\n" +
+              "Correlation length: how far below each depth their Vs stays correlated, m\n" +
               "Interfaces: the share placing a layer boundary there"
             }
             aside={
@@ -509,6 +494,19 @@ export function InversionPanel({
                   values={section.data.vs_uncertainty_grid}
                   colorLabel="Vs uncertainty (%)"
                   colormap={afmhotR}
+                  height={200}
+                  link={zoomLink}
+                  marker={xmid ?? undefined}
+                  onPick={pick}
+                  informed={overlay}
+                />
+                <VelocitySectionCanvas
+                  positions={section.data.positions}
+                  elevations={section.data.elevations}
+                  values={section.data.correlation_grid}
+                  colorLabel="Correlation length (m)"
+                  colormap={viridis}
+                  colorRange={{ min: 0 }}
                   height={200}
                   link={zoomLink}
                   marker={xmid ?? undefined}

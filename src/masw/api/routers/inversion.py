@@ -50,6 +50,8 @@ class VelocitySectionOut(BaseModel):
     # The kept models' relative uncertainty of Vs, U = (P90 - P10) / (2 P50), %: the depth
     # informed read from it.
     vs_uncertainty_grid: list[list[float | None]]
+    # How far below each depth (m) the kept models' Vs stays correlated with its own.
+    correlation_grid: list[list[float | None]]
     # The share of the kept models with an interface, % (None: not known).
     interface_grid: list[list[float | None]]
     floors: list[float]  # per column, the elevation its models end at
@@ -126,6 +128,7 @@ def get_velocity_section(
         elevations=rounded(grid.elevations, 3),
         vs_grid=nan_to_none(grid.vs, 1),
         vs_uncertainty_grid=nan_to_none(100 * section.uncertainty, 1),
+        correlation_grid=nan_to_none(section.correlation, 2),
         interface_grid=nan_to_none(100 * section.interfaces, 1),
         floors=rounded(grid.floor, 3),
         windows=[
