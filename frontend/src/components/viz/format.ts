@@ -13,7 +13,7 @@ const METRIC_LABELS: Record<string, string> = {
   usable_band_hz: "Usable band width",
   lateral_coherence: "Neighbouring traces' coherence",
   trigger_error_s: "Trigger error",
-  trigger_shift_s: "Trigger error", // its name before 2026-09-29
+  trigger_shift_s: "Trigger error", // its name in older logs
   trigger_scatter_s: "First breaks' scatter",
   energy_removed: "Energy the mute removed",
   pulse_s: "Shot pulse",
@@ -51,7 +51,7 @@ const METRIC_LABELS: Record<string, string> = {
   near_offset: "Nearest shot's offset",
   // G4, the line's curves
   neighbour_misfit: "Misfit to the neighbours",
-  misfit: "Misfit to the neighbours", // its name before 2026-09-29
+  misfit: "Misfit to the neighbours", // its name in older logs
   sides_compared: "Sides compared",
   curves: "Curves",
   without_curve: "Windows without a curve",
@@ -72,9 +72,9 @@ const METRIC_LABELS: Record<string, string> = {
   samples_per_chain: "Samples a chain",
   at_bound: "Share at a prior's bound",
   depth_informed: "Depth informed",
-  useful_depth: "Depth informed", // its name before 2026-09-29
+  useful_depth: "Depth informed", // its name in older logs
   depth_informed_spread: "Spread of the depths informed",
-  // Before 2026-09-29, G6 compared the models down to half their curve's longest wavelength.
+  // In older logs, G6 compared the models down to half their curve's longest wavelength.
   useful_depth_spread: "Spread of the depths of investigation",
   contrast: "Least contrast between layers",
   // G7 and G8, a petrophysical model

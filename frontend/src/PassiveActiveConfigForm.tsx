@@ -65,8 +65,8 @@ function Form({
     `${kept}.masw`,
     stage<Masw>(preset, "masw"),
   );
-  // @2: since the bounds may be empty and the trigger the files' (2026-09-28), an earlier
-  // session's stand-in values are not kept.
+  // @2: since the bounds may be empty and the trigger the files', an earlier session's
+  // stand-in values are not kept.
   const [trigger, setTrigger] = useStoredState(
     `${kept}.trigger@3`,
     triggerDefault(preset),

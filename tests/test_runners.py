@@ -12,9 +12,8 @@ from masw.runners.inversion import chain_jobs
 def test_an_inversion_takes_the_workers_asked_and_no_more(
     workers: int, windows: int, expected: int
 ) -> None:
-    # 6 workers on 12 cores took the 12 (the user, 2026-09-29): the windows running at once and
-    # each window's chains in the workers they leave idle, never more processes than the
-    # workers, nor than a window's 5 chains.
+    # The windows running at once and each window's chains in the workers they leave idle,
+    # never more processes than the workers, nor than a window's 5 chains.
     running = min(workers, windows)
 
     assert chain_jobs(workers, running, chains=5) == expected

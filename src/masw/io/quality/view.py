@@ -214,7 +214,7 @@ _CORRELATIONS = frozenset(
     {"snr_db", "lateral_coherence", "dead_traces", "clipped_traces", "nan_traces",
      "virtual_shot_snr_db"}
 )  # fmt: skip
-# What each measure covers, said generally: a log from before the measures said it (2026-09-29).
+# What each measure covers, said generally: a log from before the measures said it.
 _COVERS = {
     "dead_traces": "the record's traces",
     "clipped_traces": "the record's traces",

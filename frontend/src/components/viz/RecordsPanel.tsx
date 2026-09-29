@@ -205,9 +205,7 @@ export function RecordsPanel({
 }) {
   const place = card ? { record: card.key } : null;
   const figures = useRunFigures(folder, place);
-  // A passive record (no shot): its signal and its spectrum, nothing else (the user,
-  // 2026-09-29), and its measures folded in their menu ("all measures inside a menu ... for
-  // every view", the user, later that day).
+  // A passive record (no shot): its signal and its spectrum, and its measures folded in their menu.
   const passive = card !== null && card.x === null;
   return (
     <>

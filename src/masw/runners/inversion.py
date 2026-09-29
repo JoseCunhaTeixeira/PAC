@@ -53,9 +53,7 @@ def _invert_position_timed(
 def chain_jobs(workers: int, windows: int, chains: int) -> int:
     """The processes each window's chains run in: the workers the windows running at once leave
     idle, shared between them, never more than its chains (PACo's rule,
-    paco.qc.inverting.chain_jobs). The workers asked are all the cores a job takes (the user,
-    2026-09-29: 6 workers on 12 cores took them all, each window's chains sharing the
-    machine's cores)."""
+    paco.qc.inverting.chain_jobs). The workers asked are all the cores a job takes."""
     return max(1, min(chains, workers // max(1, windows)))
 
 
