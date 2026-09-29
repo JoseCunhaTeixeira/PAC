@@ -20,12 +20,9 @@ from masw.api.main import app
 from masw.io.paths import OUTPUT_DIR
 from masw.io.quality.dispersion import CurveThresholds, curve_metrics
 from sigpipe.base import Coordinate, DispersionCurve, LinearAcquisition, Mode, VelocityType
-from sigpipe.masw.inversion.measuring import USEFUL_REFERENCE, InversionMeasures, useful_depth
+from sigpipe.masw.inversion.measuring import USEFUL_REFERENCE, InversionMeasures
 from sigpipe.masw.inversion.window import (
-    SAMPLES_FILE,
     VS_SPREAD_FILE,
-    load_profiles,
-    load_vs_spread,
 )
 
 client = TestClient(app)
@@ -313,29 +310,66 @@ def test_an_inversion_newer_than_its_measures_shows_none_of_them(run: str) -> No
     path.write_text(saved)
 
 
-def test_a_depth_measured_by_an_older_rule_is_read_again_from_the_models_band(run: str) -> None:
+def test_what_an_older_inversion_lacks_is_neither_shown_nor_made(run: str) -> None:
     window = OUTPUT_DIR / run / "xmid_5.50"
     path = window / "SeismicInversion_Measures_0000.json"
-    saved = path.read_text()
-    # As saved before 2026-09-29: the depth read against a prior, and no band of the models' Vs.
-    older = json.loads(saved) | {"useful_reference": "curve", "useful_depth_m": 0.123}
-    path.write_text(json.dumps(older))
+    saved, band = path.read_text(), (window / VS_SPREAD_FILE).read_text()
+    # As saved before 2026-09-29: the depth read against a prior, neither the interfaces nor the
+    # band of the models' Vs.
+    older = json.dumps(
+        json.loads(saved) | {"useful_reference": "curve", "useful_depth_m": 0.123, "interfaces": []}
+    )
+    path.write_text(older)
     (window / VS_SPREAD_FILE).unlink()
 
     card = client.get(f"/quality/inversion/card/{run}/5.5").json()
     section = client.get(f"/inversion/velocity_section/{run}").json()
 
-    # Read again from the kept models' band, made from them once and kept beside them.
-    spread = load_vs_spread(window)
-    assert spread is not None
-    # None: the whole model.
-    expected = useful_depth(spread, load_profiles(window / SAMPLES_FILE), 0.25)
-    assert card["profile"]["informed"] == expected != 0.123
-    assert any("inform" in text for text in _texts(card))
+    # Visualization only reads: none of them shown, none made.
+    profile = card["profile"]
+    assert profile["informed"] is None and profile["interfaces"] == []
+    assert profile["spread_depths"] == [] and profile["uncertainty"] == []
+    assert not any(text.startswith("The data inform") for text in _texts(card))
     column = next(one for one in section["windows"] if one["x"] == 5.5)
-    assert column["informed"] == (column["depth"] if expected is None else expected)
-    assert json.loads(path.read_text())["useful_depth_m"] == 0.123  # never measured here
+    assert column["informed"] is None
+    assert not (window / VS_SPREAD_FILE).exists() and path.read_text() == older
     path.write_text(saved)
+    (window / VS_SPREAD_FILE).write_text(band)
+
+
+def test_the_figures_a_run_saved_are_listed_and_served_as_they_are(run: str) -> None:
+    names = client.get(f"/quality/run_figures/{run}").json()
+
+    # The jobs' sections, each smoothed along the line too, then their pseudo-section
+    # comparisons, each by wavelength too.
+    assert {
+        "SeismicInversion_VelocitySection_0000.png",
+        "SeismicInversion_VelocitySection_0000_lateralsmooth.png",
+        "SeismicInversion_PseudoSectionComparison_0000_M0.png",
+        "SeismicInversion_PseudoSectionComparison_0000_M0_wavelength.png",
+        "PetroInversion_Section_0000.png",
+        "PetroInversion_Section_0000_lateralsmooth.png",
+    } <= set(names)
+    sections = names.index("SeismicInversion_VelocitySection_0000.png")
+    assert sections < names.index("SeismicInversion_PseudoSectionComparison_0000_M0.png")
+    served = client.get(f"/quality/run_figure/{run}/{names[0]}")
+    assert served.status_code == 200 and served.headers["content-type"] == "image/png"
+    # Nothing else of the run's folder.
+    assert client.get(f"/quality/run_figure/{run}/run.json").status_code == 404
+
+
+def test_a_windows_and_a_records_figures_are_listed_and_served(run: str) -> None:
+    manifest = json.loads((OUTPUT_DIR / run / "run.json").read_text())
+    record = manifest["records"][0]["name"]
+
+    # A record's preprocessed traces; a window's processing figures, not its inversion's.
+    assert client.get(f"/quality/run_figures/{run}?record={record}").json() == ["Stream_0000.png"]
+    served = client.get(f"/quality/run_figure/{run}/Stream_0000.png?record={record}")
+    assert served.status_code == 200 and served.headers["content-type"] == "image/png"
+    assert client.get(f"/quality/run_figures/{run}?xmid=2.5").json() == ["DispersionImage_0000.png"]
+    assert client.get(f"/quality/run_figures/{run}?record=nothing.dat").status_code == 404
+    # An active window stacks images, not correlations: no gather of them.
+    assert client.get(f"/quality/dispersion/gather/{run}/2.5").status_code == 404
 
 
 def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> None:
@@ -394,7 +428,7 @@ def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> N
     # The resulting model beside its prior: the posterior's median within its middle 80 %.
     assert vs1["prior"] == [100, 400] and 100 <= vs1["low"] <= vs1["median"] <= vs1["high"] <= 400
     assert vs1["step"] > 0 and vs1["step_unit"] == ""  # m/s, as the layer's own
-    assert card["figures"] == ["marginals", "density_curves", "dispersion_image"]
+    assert card["figures"] == ["marginals", "density_curves", "dispersion_image", "chains"]
     # The median of the ensemble alone said (the user, 2026-09-29): no layered median.
     assert not any(text.startswith("Layered median") for text in _texts(card))
     best = client.get(f"/quality/inversion/card/{run}/2.5?model=best").json()

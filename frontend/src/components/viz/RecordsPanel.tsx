@@ -5,7 +5,8 @@ import type { Range } from "../useZoom";
 import { LineGather, type GatherData } from "./LineGather";
 import { StageHead, UnitCard } from "./panel";
 import type { Overview, RecordCard } from "./types";
-import { Details, Empty, PlotHead, Skeleton } from "./ui";
+import { runFigures, useRunFigures } from "./runFigures";
+import { Details, Empty, PlotHead, SavedFigures, Skeleton } from "./ui";
 import { useJson } from "./useJson";
 
 // The records: the selected record's card (its signal, what the checks said and redid, the
@@ -47,7 +48,7 @@ function RunGather({
   );
 }
 
-function Normalization({ value, onChange }: { value: "trace" | "global"; onChange: (value: "trace" | "global") => void }) {
+export function Normalization({ value, onChange }: { value: "trace" | "global"; onChange: (value: "trace" | "global") => void }) {
   return (
     <Segmented
       size="sm"
@@ -136,6 +137,8 @@ export function RecordsPanel({
   xZoom: Range | null;
   onXZoom: (x: Range | null) => void;
 }) {
+  const place = card ? { record: card.key } : null;
+  const figures = useRunFigures(folder, place);
   return (
     <>
       <StageHead overview={overview} error={overviewError} />
@@ -146,7 +149,14 @@ export function RecordsPanel({
           error={cardError}
           cells={overview?.cells ?? []}
           onSelect={onSelect}
-          details={card && <Details gates={card.gates} attempts={card.attempts} />}
+          details={
+            card && (
+              <>
+                <Details gates={card.gates} attempts={card.attempts} />
+                <SavedFigures figures={runFigures(folder, figures, "", place ?? {})} />
+              </>
+            )
+          }
         >
           {card && (
             <div style={{ marginTop: 16 }}>

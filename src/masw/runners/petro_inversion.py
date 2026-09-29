@@ -15,7 +15,7 @@ from masw.models.petro_inversion import PetroInversionRunConfig
 from masw.runners.computing import WindowError
 from sigpipe.masw.petro import PetroOutcome, invert_line_petro, save_line_sections
 from sigpipe.masw.petro.measuring import measure_petro
-from sigpipe.masw.runs import Stopped
+from sigpipe.masw.runs import Stopped, window_length
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ def run_petro_inversion(
 
     # Over every window of the folder holding a model, those inverted before included.
     units = [xmid_folder(config.folder, xmid).name for xmid in get_xmid_folders(config.folder)]
-    save_line_sections(out_dir, units)
+    save_line_sections(out_dir, units, window_length(out_dir))
 
     return list(errors.values())
 

@@ -7,7 +7,6 @@ window's middle: the inversion strip of Visualization, the selected window's car
 parameters the line was inverted with, each with why. The measures of a window are read from the
 file the assistant writes next to its inversion, and written there when PAC inverted it."""
 
-import contextlib
 import logging
 import statistics
 from collections.abc import Iterable, Sequence
@@ -48,7 +47,6 @@ from masw.io.quality.view import (
     verdict_status,
     warnings,
 )
-from sigpipe.algorithms.inversion.rayleigh.seismic.data import NOISE_BOUNDS
 from sigpipe.base.dispersion_curve import DispersionCurve
 from sigpipe.masw.inversion import (
     PARAMETERS_FILE,
@@ -58,12 +56,12 @@ from sigpipe.masw.inversion import (
 )
 from sigpipe.masw.inversion.measuring import (
     INTERFACE_DZ,
-    USEFUL_REFERENCE,
+    MEASURES_FILE,
     BoundShare,
     InversionMeasures,
     ModelFit,
-    interface_shares,
-    useful_depth,
+    informed_depth,
+    saved_measures,
 )
 from sigpipe.masw.inversion.section import (
     DEFAULT_MODEL,
@@ -73,22 +71,25 @@ from sigpipe.masw.inversion.section import (
     window_model,
 )
 from sigpipe.masw.inversion.window import (
+    CHAINS_FIGURE,
+    IMAGE_FIGURE,
+    MARGINALS_FIGURE,
     SAMPLES_FILE,
-    VS_SPREAD_FILE,
+    WINDOW_FIGURE,
     Spread,
-    VsSpread,
+    chain_series,
+    depth_of,
     load_profiles,
     load_samples,
     load_spread,
     load_vs_spread,
-    save_vs_spread,
-    vs_spread,
+    series_order,
+    series_priors,
 )
 from sigpipe.masw.runs import window_folders, xmid_of
 
 logger = logging.getLogger(__name__)
 
-MEASURES_FILE = "SeismicInversion_Measures_0000.json"  # the assistant's name, and its content
 PAC_CONFIG_FILE = "seismic_inversion_config.json"  # what PAC's page inverted with
 STAGE = "inversion"
 GATE = "G5"
@@ -122,11 +123,12 @@ RULES = {
     "effort": "the default effort, longer where the chains did not agree (G5)",
 }
 
-type FigureName = Literal["marginals", "density_curves", "dispersion_image"]
+type FigureName = Literal["marginals", "density_curves", "dispersion_image", "chains"]
 FIGURES: dict[FigureName, str] = {
-    "marginals": "SeismicInversion_Marginals_0000.png",
-    "density_curves": "SeismicInversion_DensityCurves_0000.png",
-    "dispersion_image": "SeismicInversion_DispersionImage_0000.png",
+    "marginals": MARGINALS_FIGURE,
+    "density_curves": WINDOW_FIGURE,
+    "dispersion_image": IMAGE_FIGURE,
+    "chains": CHAINS_FIGURE,
 }
 
 
@@ -286,55 +288,13 @@ def thresholds_of(run_folder: Path) -> InversionThresholds:
 
 def window_measures(folder: Path) -> tuple[WindowParameters, InversionMeasures | None] | None:
     """The parameters window `folder` was inverted with and the measures its inversion saved with
-    it (PAC's job or the assistant, never Visualization); None when it holds no inversion sigpipe
-    saved its samples for. No measures when none are as new as its samples: an inversion from
-    before they were saved with it, shown without them."""
-    samples = folder / SAMPLES_FILE
-    if not (folder / PARAMETERS_FILE).exists() or not samples.exists():
+    it (PAC's job or the assistant, never Visualization: sigpipe's saved_measures); None when it
+    holds no inversion sigpipe saved its samples for. No measures when none are as new as its
+    samples: an inversion from before they were saved with it, shown without them. Measures an
+    older rule read the depth informed with are shown without it (informed_depth)."""
+    if not (folder / PARAMETERS_FILE).exists() or not (folder / SAMPLES_FILE).exists():
         return None
-    ran = load_parameters(folder / PARAMETERS_FILE)
-    path = folder / MEASURES_FILE
-    if not path.exists() or path.stat().st_mtime < samples.stat().st_mtime:
-        return ran, None
-    measures = InversionMeasures.model_validate_json(path.read_text())
-    if measures.useful_reference != USEFUL_REFERENCE:
-        # Measured before the depth informed was read from the kept models' band: read again
-        # here, as the run's checks set it; the measures' file left as it is.
-        spread = window_spread(folder, ran.parameters.bottom)
-        if spread is not None:
-            limit = thresholds_of(folder.parent).useful_uncertainty
-            measures = measures.model_copy(
-                update={
-                    "useful_depth_m": useful_depth(spread, load_profiles(samples), limit),
-                    "useful_reference": USEFUL_REFERENCE,
-                }
-            )
-    return ran, measures
-
-
-def window_spread(folder: Path, bottom: float) -> VsSpread | None:
-    """The kept models' Vs at each depth (their 10th, 50th and 90th percentiles) saved beside
-    window `folder`'s inversion; for one saved before it was, made from its kept models down to
-    `bottom` (m) and kept beside them, once (a section reads every window's). None without its
-    kept models."""
-    spread = load_vs_spread(folder)
-    if spread is not None:
-        return spread
-    samples = folder / SAMPLES_FILE
-    if not samples.exists():
-        return None
-    spread = vs_spread(load_profiles(samples), bottom)
-    with contextlib.suppress(OSError):  # a folder not writable: made again the next time
-        save_vs_spread(spread, folder / VS_SPREAD_FILE)
-    return spread
-
-
-def informed_to(measures: InversionMeasures) -> float | None:
-    """How deep the data inform the model (m), its bottom when all of it; None when unknown
-    (window_measures reads it again from the kept models' band when measured before it was)."""
-    if measures.useful_reference != USEFUL_REFERENCE:
-        return None
-    return measures.depth_max_m if measures.useful_depth_m is None else measures.useful_depth_m
+    return load_parameters(folder / PARAMETERS_FILE), saved_measures(folder)
 
 
 def model_depth(parameters: InversionParameters) -> float:
@@ -432,7 +392,7 @@ def model_metrics(
             passed=piled is None or piled.share <= thresholds.max_at_bound,
         ),
     ]
-    if informed_to(measures) is not None:
+    if informed_depth(measures) is not None:
         metrics.append(
             Metric(
                 name="useful_depth",
@@ -474,7 +434,7 @@ def inversion_overview(folder: str) -> Overview:
         status = verdict_status(g5, g6) if g5 is not None else measured_status(metrics)
         statuses.append(status)
         bottom = measures.depth_max_m
-        useful = informed_to(measures)
+        useful = informed_depth(measures)
         hover = [
             f"xmid {number(x, 4)} m",
             f"{_layers(len(measures.vs_layers))}, modelled to {number(bottom)} m",
@@ -713,22 +673,12 @@ def _measures_of(window: Path) -> InversionMeasures | None:
 def _series(
     window: Path, parameters: InversionParameters, watched: Sequence[str]
 ) -> tuple[dict[str, np.ndarray], int]:
-    """What the chains sampled, by name: Vs at the depths watched, the layers' own values when
-    given (a value fixed stays the same: left out), the number of layers, the noise factor."""
+    """What the chains sampled, by name (sigpipe's chain_series, as its chains figure draws
+    them): Vs at the depths watched, the layers' own values when given (a value fixed stays the
+    same: left out), the number of layers, the noise factor; and the number of chains."""
     samples, n_chains = load_samples(window / SAMPLES_FILE)
-    fixed = parameters.fixed()
-    series: dict[str, np.ndarray] = {}
-    if watched:
-        depths = np.array([_depth_of(name) for name in watched])
-        at = load_profiles(window / SAMPLES_FILE).at(depths)
-        series = {name: at[:, j] for j, name in enumerate(watched)}
-    series |= {name: values for name, values in samples.items() if name not in fixed}
-    return series, n_chains
-
-
-def _depth_of(name: str) -> float:
-    """The depth of a series of Vs at a depth: "vs@2.5m" is 2.5."""
-    return float(name.removeprefix("vs@").removesuffix("m"))
+    profiles = load_profiles(window / SAMPLES_FILE)
+    return chain_series(samples, profiles, parameters, watched), n_chains
 
 
 def figure_path(folder: str, xmid: float, name: FigureName) -> Path:
@@ -798,7 +748,7 @@ def _depth_sentences(
     """How deep the model goes, and how much of it the data inform: where the kept models'
     relative uncertainty of Vs, U(z) = (P90 - P10) / (2 P50), gets above a limit, but at an
     interface they place at depths a little apart (sigpipe's useful_depth)."""
-    if informed_to(measures) is None:
+    if informed_depth(measures) is None:
         return []
     bottom = measures.depth_max_m
     useful = measures.useful_depth_m
@@ -870,7 +820,7 @@ def _convergence_sentence(measures: InversionMeasures, thresholds: InversionThre
     rhat, ess, acceptance = _convergence(measures)
     agree = rhat is not None and rhat <= thresholds.max_rhat
     enough = ess is None or ess >= thresholds.min_ess
-    depths = [f"{number(_depth_of(name))} m" for name in measures.watched]
+    depths = [f"{number(depth_of(name))} m" for name in measures.watched]
     parts = [
         f"R-hat {number(rhat, 3)} (at most {number(thresholds.max_rhat)})"
         if rhat is not None
@@ -1028,7 +978,7 @@ def _profile(
     vs = np.asarray(velocity.vs_s, dtype=float)
     stride = max(1, -(-tops.size // PROFILE_POINTS))
     keep = np.unique(np.concatenate((np.arange(0, tops.size, stride), [tops.size - 1])))
-    depths, low, high, uncertain = _models_spread(window, parameters.bottom)
+    depths, low, high, uncertain = _models_spread(window)
     return VsProfile(
         model=model,
         tops=tuple(round(float(value), 3) for value in tops[keep]),
@@ -1037,30 +987,18 @@ def _profile(
         spread_low=tuple(round(float(value), 1) for value in low),
         spread_high=tuple(round(float(value), 1) for value in high),
         uncertainty=tuple(round(100 * float(value), 1) for value in uncertain),
-        interfaces=tuple(
-            round(100 * share, 1)
-            for share in measures.interfaces or _interface_shares(window, parameters.bottom)
-        ),
+        interfaces=tuple(round(100 * share, 1) for share in measures.interfaces),
         bottom=measures.depth_max_m,
-        informed=measures.useful_depth_m if informed_to(measures) is not None else None,
+        informed=measures.useful_depth_m if informed_depth(measures) is not None else None,
         deepest_top=model_depth(parameters),
     )
 
 
-def _interface_shares(window: Path, bottom: float) -> tuple[float, ...]:
-    """Per INTERFACE_DZ from the surface down to `bottom`, the share of the kept models with an
-    interface there, for measures from before they held it; empty without the kept models."""
-    samples = window / SAMPLES_FILE
-    return interface_shares(load_profiles(samples), bottom) if samples.exists() else ()
-
-
-def _models_spread(
-    window: Path, bottom: float
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """The kept models' Vs at PROFILE_POINTS depths at most (`window_spread`'s), as their 10th
-    and 90th percentiles (the curve's band's) and their relative uncertainty U: depths, low,
-    high, U; empty without the kept models."""
-    spread = window_spread(window, bottom)
+def _models_spread(window: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """The kept models' Vs at PROFILE_POINTS depths at most (the band saved with the inversion),
+    as their 10th and 90th percentiles (the curve's band's) and their relative uncertainty U:
+    depths, low, high, U; empty without the band (an inversion saved before it was)."""
+    spread = load_vs_spread(window)
     if spread is None:
         empty = np.zeros(0)
         return empty, empty, empty, empty
@@ -1170,7 +1108,7 @@ def _traces(samples: dict[str, np.ndarray], n_chains: int) -> tuple[ChainTraces,
                 chains=tuple(tuple(round(float(v), 3) for v in chain[::step]) for chain in chains),
             )
         )
-    return tuple(sorted(traces, key=lambda one: _order(one.parameter)))
+    return tuple(sorted(traces, key=lambda one: series_order(one.parameter)))
 
 
 def _relative_steps(steps: dict[str, float]) -> dict[str, float]:
@@ -1197,10 +1135,10 @@ def _rows(
     own values when given (Vs first, top down; a value fixed, as it was), the number of layers,
     the noise factor."""
     series, _ = _series(window, parameters, measures.watched)
-    priors = _priors(parameters, series)
+    priors = series_priors(parameters, series)
     fixed = parameters.fixed()
     rows: list[Convergence] = []
-    for name in sorted(set(series) | set(fixed), key=_order):
+    for name in sorted(set(series) | set(fixed), key=series_order):
         if name in fixed:
             rows.append(
                 Convergence(
@@ -1245,47 +1183,11 @@ def _round(value: float | None) -> float | None:
     return None if value is None else round(value, 3)
 
 
-def _priors(
-    parameters: InversionParameters, series: Iterable[str]
-) -> dict[str, tuple[float, float]]:
-    """Each series' prior bounds, by name: a layer's own; Vs at a depth, the widest any layer
-    allows; the number of layers, 1 to the most allowed; the noise factor's. A value fixed has
-    none."""
-    if parameters.layering == "free":
-        free = parameters.free
-        vs_range = (free.vs_min or 0.0, free.vs_max or 0.0)
-        layers = (1.0, float(free.max_layers))
-    else:
-        vs_range = (
-            min(layer.vs_min for layer in parameters.vs_layers),
-            max(layer.vs_max for layer in parameters.vs_layers),
-        )
-        layers = (float(parameters.n_layers), float(parameters.n_layers))
-    priors = {
-        f"vs{i + 1}": (layer.vs_min, layer.vs_max) for i, layer in enumerate(parameters.vs_layers)
-    } | {
-        f"thick{i + 1}": (layer.thickness_min, layer.thickness_max)
-        for i, layer in enumerate(parameters.thickness_layers)
-    }
-    fixed = parameters.fixed()
-    found: dict[str, tuple[float, float]] = {}
-    for name in series:
-        if name.startswith("vs@"):
-            found[name] = vs_range
-        elif name == "layers":
-            found[name] = layers
-        elif name == "noise":
-            found[name] = NOISE_BOUNDS
-        elif parameters.layering == "fixed" and name in priors and name not in fixed:
-            found[name] = priors[name]
-    return found
-
-
 def _marginals(
     series: dict[str, np.ndarray], n_chains: int, parameters: InversionParameters
 ) -> tuple[Marginal, ...]:
     marginals: list[Marginal] = []
-    for name, (low, high) in _priors(parameters, series).items():
+    for name, (low, high) in series_priors(parameters, series).items():
         if high <= low:
             continue
         chains = _chains(series[name], n_chains)
@@ -1297,21 +1199,9 @@ def _marginals(
                 counts=tuple(_histogram(chain, low, high) for chain in chains),
             )
         )
-    return tuple(sorted(marginals, key=lambda one: _order(one.parameter)))
+    return tuple(sorted(marginals, key=lambda one: series_order(one.parameter)))
 
 
 def _histogram(values: np.ndarray, low: float, high: float) -> tuple[int, ...]:
     counts: np.ndarray = np.histogram(values, bins=BINS, range=(low, high))[0]
     return tuple(int(count) for count in counts)
-
-
-def _order(parameter: str) -> tuple[int, float]:
-    """Vs at depths from the top, the layers' Vs then thicknesses from the top, the number of
-    layers, the noise factor."""
-    if parameter.startswith("vs@"):
-        return 0, _depth_of(parameter)
-    if parameter.startswith("vs"):
-        return 1, float(parameter.removeprefix("vs") or 0)
-    if parameter.startswith("thick"):
-        return 2, float(parameter.removeprefix("thick") or 0)
-    return (3, 0.0) if parameter == "layers" else (4, 0.0)

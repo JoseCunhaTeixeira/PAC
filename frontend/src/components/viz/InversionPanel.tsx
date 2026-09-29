@@ -17,7 +17,18 @@ import { DEPTH_INFORMED_TIP, MODEL_LABELS, num, parameterLabel, xmidOf } from ".
 import { StageHead, UnitCard } from "./panel";
 import { CurveFitPlot, VsProfilePlot, type CurveAxis } from "./plots";
 import type { Chains, InversionCard, ModelName, Overview } from "./types";
-import { AttemptTable, Empty, ErrorBox, Fold, GateTables, PlotHead, Skeleton, SmoothingSwitch } from "./ui";
+import { runFigures, useRunFigures } from "./runFigures";
+import {
+  AttemptTable,
+  Empty,
+  ErrorBox,
+  Fold,
+  GateTables,
+  PlotHead,
+  SavedFigures,
+  Skeleton,
+  SmoothingSwitch,
+} from "./ui";
 import { nearestCell } from "./cells";
 import { useJson } from "./useJson";
 
@@ -325,6 +336,7 @@ export function InversionPanel({
       : undefined;
   const labels = useJson<Record<string, number>>(`${API}/dispersion_image_labels/${at(folder)}`);
   const modes = Object.keys(labels.data ?? {});
+  const saved = useRunFigures(folder);
   const modelLabel = MODEL_LABELS[model] ?? model;
   const inverted = (overview?.cells ?? []).some((cell) => cell.status !== "none");
   const pick = (position: number) => {
@@ -378,20 +390,12 @@ export function InversionPanel({
                       <Fold title="Chains and marginals" open={chainsOpen} onToggle={setChainsOpen}>
                         {chainsOpen && xmid !== null && <ChainsView folder={folder} xmid={xmid} />}
                       </Fold>
-                      {inversionCard.figures.length > 0 && (
-                        <Fold title="Saved figures">
-                          <div className="viz-figures">
-                            {inversionCard.figures.map((name) => {
-                              const url = `${API}/quality/inversion/figure/${at(folder)}/${xmid}/${name}`;
-                              return (
-                                <a key={name} href={url} target="_blank" rel="noreferrer" title={name.replaceAll("_", " ")}>
-                                  <img src={url} alt={name.replaceAll("_", " ")} loading="lazy" />
-                                </a>
-                              );
-                            })}
-                          </div>
-                        </Fold>
-                      )}
+                      <SavedFigures
+                        figures={inversionCard.figures.map((name) => ({
+                          name: name.replaceAll("_", " "),
+                          url: `${API}/quality/inversion/figure/${at(folder)}/${xmid}/${name}`,
+                        }))}
+                      />
                     </>
                   )
                 }
@@ -531,6 +535,7 @@ export function InversionPanel({
             ) : (
               <Skeleton height={640} />
             )}
+            <SavedFigures figures={runFigures(folder, saved, "SeismicInversion_VelocitySection")} />
           </Card>
           {modes.length > 0 && (
             <Card
@@ -565,6 +570,7 @@ export function InversionPanel({
                   />
                 ))}
               </div>
+              <SavedFigures figures={runFigures(folder, saved, "SeismicInversion_PseudoSectionComparison")} />
             </Card>
           )}
         </>

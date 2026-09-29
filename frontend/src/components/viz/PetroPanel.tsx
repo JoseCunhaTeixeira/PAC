@@ -12,7 +12,8 @@ import { xmidOf } from "./format";
 import { StageHead, UnitCard } from "./panel";
 import { CurveFitPlot, SoilColumnView, type CurveAxis } from "./plots";
 import type { Overview, PetroCard } from "./types";
-import { Details, Empty, ErrorBox, Skeleton, SmoothingSwitch } from "./ui";
+import { runFigures, useRunFigures } from "./runFigures";
+import { Details, Empty, ErrorBox, SavedFigures, Skeleton, SmoothingSwitch } from "./ui";
 import { nearestCell } from "./cells";
 import { useJson } from "./useJson";
 
@@ -62,6 +63,7 @@ export function PetroPanel({
   const inverted = columns > 0;
   // The line's views take two columns at least.
   const line = columns >= 2;
+  const saved = useRunFigures(folder);
   const section = useJson<PetroSectionData>(
     line ? `${API}/petro_inversion/section/${at(folder)}?lateral_smoothing=${soilSmoothing}` : null,
   );
@@ -148,6 +150,7 @@ export function PetroPanel({
             ) : (
               <Skeleton height={380} />
             )}
+            <SavedFigures figures={runFigures(folder, saved, "PetroInversion_Section")} />
           </Card>
           {(modulus.data || vs.data || failed(modulus) || failed(vs)) && (
             <Card
@@ -187,6 +190,7 @@ export function PetroPanel({
                   onPick={pick}
                 />
               )}
+              <SavedFigures figures={runFigures(folder, saved, "PetroInversion_RockPhysicsSection")} />
             </Card>
           )}
           {comparison.data && (
@@ -216,6 +220,7 @@ export function PetroPanel({
                 marker={xmid ?? undefined}
                 onPick={pick}
               />
+              <SavedFigures figures={runFigures(folder, saved, "PetroInversion_PseudoSectionComparison")} />
             </Card>
           )}
         </>

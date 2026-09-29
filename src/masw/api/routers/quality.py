@@ -7,7 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from masw.io.quality import dispersion, inversion, petro, records, runs, sources
+from masw.io.quality import dispersion, figures, inversion, petro, records, runs, sources
 from masw.io.quality.dispersion import DispersionCard
 from masw.io.quality.inversion import Chains, FigureName, InversionCard
 from masw.io.quality.petro import PetroCard
@@ -98,6 +98,31 @@ def get_inversion_figure(folder: str, xmid: float, name: FigureName) -> FileResp
     dispersion image with the model's modes."""
     path = _found(lambda: inversion.figure_path(folder, xmid, name))
     return FileResponse(path, media_type="image/png")
+
+
+@router.get("/quality/run_figures/{folder:path}")
+def get_run_figures(folder: str, xmid: float | None = None, record: str | None = None) -> list[str]:
+    """The figures the run saved at its root (its sections, its pseudo-section comparisons), in
+    its window at `xmid` or in its record `record`, by name."""
+    return _found(lambda: figures.run_figures(folder, xmid, record))
+
+
+@router.get("/quality/run_figure/{folder:path}/{name}")
+def get_run_figure(
+    folder: str, name: str, xmid: float | None = None, record: str | None = None
+) -> FileResponse:
+    """One of the figures the run saved (run_figures)."""
+    path = _found(lambda: figures.run_figure_path(folder, name, xmid, record))
+    return FileResponse(path, media_type="image/png")
+
+
+@router.get("/quality/dispersion/gather/{folder:path}/{xmid}")
+def get_window_gather(
+    folder: str, xmid: float, norm: Literal["trace", "global"] = "trace"
+) -> RecordGather:
+    """The stacked correlations a passive or passive-active window's image was made of, each
+    trace at its receiver along the line."""
+    return _found(lambda: dispersion.window_gather(folder, xmid, norm))
 
 
 @router.get("/quality/petro/overview/{folder:path}")

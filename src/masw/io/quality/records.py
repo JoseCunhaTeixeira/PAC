@@ -40,7 +40,9 @@ from masw.io.quality.view import (
     verdict_status,
     warnings,
 )
+from sigpipe.base.stream import Stream
 from sigpipe.dataio.stream.loading import load_stream
+from sigpipe.dataio.stream.plotting import signal_end
 from sigpipe.masw.pipelines.common import PREPROCESSED
 from sigpipe.masw.quality.signal import (
     Windows,
@@ -225,7 +227,30 @@ def record_gather(folder: str, name: str, norm: str = "trace") -> RecordGather:
     if not path.exists():
         raise ValueError(f"No preprocessed file for record {name} in folder={folder}")
     stream = load_stream([path])[0]
+    return gather_of(
+        stream,
+        name,
+        norm,
+        with_source=manifest.profile.kind != "passive",
+        excluded=manifest.exclusions.traces.get(name, ()),
+    )
+
+
+def gather_of(
+    stream: Stream,
+    name: str,
+    norm: str = "trace",
+    with_source: bool = True,
+    excluded: tuple[int, ...] = (),
+    up_to_signal: bool = False,
+) -> RecordGather:
+    """`stream` as the wiggle plot takes it: every trace at most GATHER_SAMPLES samples (kept one
+    in several: the display does not need the rest), up to where the traces carry signal when
+    `up_to_signal` (sigpipe's signal_end: a correlation's quiet lags left out), normalized by
+    trace or over the gather; its source's position when `with_source`."""
     xt = np.nan_to_num(np.asarray(stream.xt, dtype=float))
+    if up_to_signal:
+        xt = xt[:, : signal_end(xt)]
     stride = max(1, -(-xt.shape[1] // GATHER_SAMPLES))
     kept = xt[:, ::stride]
     scale = (
@@ -235,14 +260,14 @@ def record_gather(folder: str, name: str, norm: str = "trace") -> RecordGather:
     )
     kept = kept / np.where(scale > 0, scale, 1.0)
     source = stream.acquisition.source
+    ts = np.asarray(stream.ts, dtype=float)
     return RecordGather(
         name=name,
         positions=tuple(round(float(receiver.x), 3) for receiver in stream.acquisition.receivers),
-        source=round(float(source.x), 3) if manifest.profile.kind != "passive" else None,
-        dt=float(np.asarray(stream.ts, dtype=float)[1] - np.asarray(stream.ts, dtype=float)[0])
-        * stride,
+        source=round(float(source.x), 3) if with_source else None,
+        dt=float(ts[1] - ts[0]) * stride,
         traces=tuple(tuple(round(float(value), 2) for value in trace) for trace in kept),
-        excluded=manifest.exclusions.traces.get(name, ()),
+        excluded=excluded,
     )
 
 
