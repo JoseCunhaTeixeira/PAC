@@ -92,6 +92,11 @@ export function UnitCard({
     );
   }
   const { before, after } = neighbours(cells, card.key);
+  // Its neighbours holding a result, when it holds none: none when no unit of the stage does.
+  const nearest =
+    card.status === "none"
+      ? [before, after].filter((cell): cell is Cell => cell !== null && cell.status !== "none")
+      : [];
   const said = [...lead, ...card.sentences];
   // The verdict and the warnings at once, the rest folded; with neither, the first line shown.
   const loud = said.filter((one) => LOUD.has(one.mark));
@@ -149,19 +154,17 @@ export function UnitCard({
           </Fold>
         </div>
       )}
-      {card.status === "none" && (before || after) && (
+      {nearest.length > 0 && (
         <p className="viz-small viz-muted" style={{ margin: "10px 0 0" }}>
           Nearest with a result:{" "}
-          {[before, after]
-            .filter((cell): cell is Cell => cell !== null && cell.status !== "none")
-            .map((cell, i) => (
-              <span key={cell.key}>
-                {i > 0 && " · "}
-                <a href="#" onClick={(e) => (e.preventDefault(), onSelect(cell.key))}>
-                  {cell.hover[0]}
-                </a>
-              </span>
-            ))}
+          {nearest.map((cell, i) => (
+            <span key={cell.key}>
+              {i > 0 && " · "}
+              <a href="#" onClick={(e) => (e.preventDefault(), onSelect(cell.key))}>
+                {cell.hover[0]}
+              </a>
+            </span>
+          ))}
         </p>
       )}
       {children}
