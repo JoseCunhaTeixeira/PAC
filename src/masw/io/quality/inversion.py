@@ -18,6 +18,7 @@ from typing import Literal
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
+from masw.io.quality.done import inversion_settings_of
 from masw.io.quality.files import folder_path
 from masw.io.quality.log import (
     Attempt,
@@ -625,6 +626,7 @@ def inversion_card(folder: str, xmid: float, model: ModelName = DEFAULT_MODEL) -
     said += warnings(g5, g6)
     return InversionCard(
         key=unit,
+        settings=inversion_settings_of(parameters, log, unit),
         status=verdict_status(g5, g6) if g5 is not None else measured_status(metrics),
         # The layers given: their count; chosen by the data, the ensemble has none of its own.
         title=f"{title} · {_layers(len(measures.vs_layers))}"

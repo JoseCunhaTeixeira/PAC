@@ -12,6 +12,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from masw.io.quality.done import petro_settings
 from masw.io.quality.files import folder_path, fundamental
 from masw.io.quality.inversion import FitCurve, fit_curve
 from masw.io.quality.log import (
@@ -249,6 +250,7 @@ def petro_card(folder: str, xmid: float) -> PetroCard:
     gates = (gate_view("G7", g7, metrics),) + ((gate_view("G8", g8),) if g8 is not None else ())
     return PetroCard(
         key=unit,
+        settings=petro_settings(model, log) if measures is not None else (),
         status=(
             "none"
             if measures is None

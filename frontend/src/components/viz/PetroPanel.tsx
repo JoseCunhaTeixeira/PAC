@@ -64,6 +64,7 @@ export function PetroPanel({
   // The line's views take two columns at least.
   const line = columns >= 2;
   const saved = useRunFigures(folder);
+  const windowSaved = useRunFigures(folder, xmid !== null ? { xmid } : null);
   const section = useJson<PetroSectionData>(
     line ? `${API}/petro_inversion/section/${at(folder)}?lateral_smoothing=${soilSmoothing}` : null,
   );
@@ -102,7 +103,16 @@ export function PetroPanel({
                 error={card.error}
                 cells={overview?.cells ?? []}
                 onSelect={onSelect}
-                details={petroCard && <Details gates={petroCard.gates} attempts={petroCard.attempts} />}
+                details={
+                  petroCard && (
+                    <>
+                      <Details gates={petroCard.gates} attempts={petroCard.attempts} />
+                      <SavedFigures
+                        figures={runFigures(folder, windowSaved, "PetroInversion_", xmid !== null ? { xmid } : {})}
+                      />
+                    </>
+                  )
+                }
               >
                 {petroCard?.column && (
                   <div className="viz-plots-2">

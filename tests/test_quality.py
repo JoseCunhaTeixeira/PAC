@@ -349,6 +349,8 @@ def test_the_figures_a_run_saved_are_listed_and_served_as_they_are(run: str) -> 
         "SeismicInversion_PseudoSectionComparison_0000_M0_wavelength.png",
         "PetroInversion_Section_0000.png",
         "PetroInversion_Section_0000_lateralsmooth.png",
+        # The line at a glance.
+        "SeismicInversion_LineSummary_0000.png",
     } <= set(names)
     sections = names.index("SeismicInversion_VelocitySection_0000.png")
     assert sections < names.index("SeismicInversion_PseudoSectionComparison_0000_M0.png")
@@ -362,14 +364,42 @@ def test_a_windows_and_a_records_figures_are_listed_and_served(run: str) -> None
     manifest = json.loads((OUTPUT_DIR / run / "run.json").read_text())
     record = manifest["records"][0]["name"]
 
-    # A record's preprocessed traces; a window's processing figures, not its inversion's.
-    assert client.get(f"/quality/run_figures/{run}?record={record}").json() == ["Stream_0000.png"]
+    # A record's preprocessed traces and its spectrum; a window's processing figures, not its
+    # inversion's.
+    assert client.get(f"/quality/run_figures/{run}?record={record}").json() == [
+        "Spectrum_0000.png",
+        "Stream_0000.png",
+    ]
     served = client.get(f"/quality/run_figure/{run}/Stream_0000.png?record={record}")
     assert served.status_code == 200 and served.headers["content-type"] == "image/png"
-    assert client.get(f"/quality/run_figures/{run}?xmid=2.5").json() == ["DispersionImage_0000.png"]
+    assert client.get(f"/quality/run_figures/{run}?xmid=2.5").json() == [
+        "DispersionImage_0000.png",
+        "PetroInversion_Window_0000.png",
+    ]
     assert client.get(f"/quality/run_figures/{run}?record=nothing.dat").status_code == 404
     # An active window stacks images, not correlations: no gather of them.
     assert client.get(f"/quality/dispersion/gather/{run}/2.5").status_code == 404
+
+
+def test_every_card_says_what_was_done_and_why(run: str) -> None:
+    manifest = json.loads((OUTPUT_DIR / run / "run.json").read_text())
+    record = manifest["records"][0]["name"]
+
+    cards = {
+        "record": client.get(f"/quality/records/card/{run}/{record}").json(),
+        "window": client.get(f"/quality/dispersion/card/{run}/2.5").json(),
+        "inversion": client.get(f"/quality/inversion/card/{run}/2.5").json(),
+        "petro": client.get(f"/quality/petro/card/{run}/2.5").json(),
+    }
+
+    labels = {kind: [one["label"] for one in card["settings"]] for kind, card in cards.items()}
+    assert labels["record"][-2:] == ["Muting", "Filter"] and "Detrend" in labels["record"]
+    assert labels["window"][0] == "Window" and "Phase shift" in labels["window"]
+    assert labels["inversion"] == ["MCMC", "Layers", "Vs drop"]
+    assert labels["petro"] == ["Silex model"]
+    # PAC's own run, its form's settings or the preset's defaults: none a check changed.
+    origins = {one["origin"] for card in cards.values() for one in card["settings"]}
+    assert origins <= {"pac", "default"}
 
 
 def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> None:

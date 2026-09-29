@@ -10,6 +10,7 @@ import { runningJob } from "./jobs";
 import { boundsOf, tipOf, written } from "./numbers";
 import { dataEnd, distinct, sampleOf, shortestRecord } from "./records";
 import { useStoredState } from "./stored";
+import { FilterSpectrum } from "./FilterSpectrum";
 import { MuteGather } from "./MuteGather";
 import type { ArtKind } from "./PageArt";
 import type { Job } from "./RunPanel";
@@ -559,10 +560,13 @@ export function FilteringRow({
   filtering,
   setFiltering,
   nyquist,
+  acquisition,
 }: {
   filtering: FilteringState;
   setFiltering: (filtering: FilteringState) => void;
   nyquist: number;
+  /** The profile a record's spectrum is previewed from, the band kept shaded. */
+  acquisition?: Acquisition;
 }) {
   return (
     <Row
@@ -598,6 +602,7 @@ export function FilteringRow({
           <NumberField label="Order" value={filtering.order} onChange={(v) => setFiltering({ ...filtering, order: v })} min={4} step={1} whole />
         </Fields>
       )}
+      {acquisition && <FilterSpectrum acquisition={acquisition} filtering={filtering} />}
     </Row>
   );
 }

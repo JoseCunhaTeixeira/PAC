@@ -188,6 +188,8 @@ export interface Card {
   attempts: AttemptSummary[];
   /** Its checks said apart, as its cell's parts: for its badges. */
   parts?: { label: string; state: PartState }[];
+  /** What was done to it: each step with the settings it ran with, and why. */
+  settings?: Setting[];
 }
 
 export interface RecordCard extends Card {

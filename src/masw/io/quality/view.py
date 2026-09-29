@@ -141,6 +141,9 @@ class Card(BaseModel):
     sentences: tuple[Sentence, ...]
     gates: tuple[GateView, ...] = ()
     parts: tuple[Part, ...] = ()  # its checks said apart, as its cell's parts: for its badges
+    # What was done to it, as its "Settings, and why": each step with the settings it ran with,
+    # where they come from and their history (quality.done).
+    settings: tuple[Setting, ...] = ()
 
 
 def worst(*statuses: Status) -> Status:

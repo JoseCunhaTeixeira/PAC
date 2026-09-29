@@ -51,6 +51,17 @@ def test_a_profile_shows_its_records_and_receivers() -> None:
     assert client.get("/acquisitions/nope").status_code == 404
 
 
+def test_a_records_spectrum_is_previewed_for_its_filter() -> None:
+    shots = client.get("/acquisitions/shots").json()
+
+    spectrum = client.get(f"/spectrum/shots/{shots['files'][0]}").json()
+
+    freqs, power = spectrum["freqs"], spectrum["power_db"]
+    assert len(freqs) == len(power) <= 1_001 and freqs == sorted(freqs) and freqs[0] == 0.0
+    assert max(power) == 0.0 and min(power) >= -120.0  # in dB of its largest
+    assert client.get("/spectrum/shots/nope.dat").status_code == 404
+
+
 def test_a_form_starts_from_the_preset_fitted_to_its_profile() -> None:
     preset = client.get("/presets/passive-active", params={"profile": "shots"}).json()
 

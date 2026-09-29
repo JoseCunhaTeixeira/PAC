@@ -535,7 +535,9 @@ export function InversionPanel({
             ) : (
               <Skeleton height={640} />
             )}
-            <SavedFigures figures={runFigures(folder, saved, "SeismicInversion_VelocitySection")} />
+            <SavedFigures
+              figures={runFigures(folder, saved, ["SeismicInversion_VelocitySection", "SeismicInversion_LineSummary"])}
+            />
           </Card>
           {modes.length > 0 && (
             <Card
