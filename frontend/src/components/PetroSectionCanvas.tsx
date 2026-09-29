@@ -4,7 +4,7 @@ import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { nearestIndex, useCanvasHover } from "./useCanvasHover";
 import { useContainerWidth } from "./useContainerWidth";
 import { evenTicks, positionTicks, tickDecimals, useZoom, visibleCells, type PlotRect } from "./useZoom";
-import { ZoomReset, ZoomSelection } from "./ZoomOverlay";
+import { ZoomSelection } from "./ZoomOverlay";
 import { drawMarker, useClick } from "./sectionPick";
 
 export interface PetroSectionData {
@@ -39,6 +39,12 @@ const TAB20 = [
   "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7", "#bcbd22", "#dbdb8d",
   "#17becf", "#9edae5",
 ];
+
+/** An N value as said on hover: a blow count, or smoothed along the line, to a tenth. */
+function nText(n: number | null): string {
+  if (n === null) return "—";
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
 
 function nValueColors(values: number[]): Record<number, string> {
   const sorted = Array.from(new Set(values.map((v) => Math.round(v)))).sort((a, b) => a - b);
@@ -105,6 +111,7 @@ export function PetroSectionCanvas({
     plots: PANELS,
     width: TOTAL_W,
     height: TOTAL_H,
+    canvas: canvasRef,
   });
   // The positions and elevations on show, in both panels.
   const [x0, x1] = zoom.view.x;
@@ -145,7 +152,7 @@ export function PetroSectionCanvas({
     const line =
       panel === "soil"
         ? `Soil: ${soil_grid[posIdx]?.[zIdx] ?? "—"}`
-        : `N: ${n_grid[posIdx]?.[zIdx] ?? "—"}`;
+        : `N: ${nText(n_grid[posIdx]?.[zIdx] ?? null)}`;
 
     return {
       px: hoverPos.x * scale,
@@ -389,10 +396,8 @@ export function PetroSectionCanvas({
         onMouseLeave={onMouseLeave}
         onMouseDown={click.onMouseDown}
         onClick={click.onClick}
-        onDoubleClick={zoom.onDoubleClick}
       />
       <ZoomSelection box={zoom.selection} />
-      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: 0, right: MR * scale }} />
       {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
     </div>
   );

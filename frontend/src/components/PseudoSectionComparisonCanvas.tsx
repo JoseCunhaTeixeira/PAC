@@ -14,7 +14,7 @@ import {
   visibleColumns,
   type PlotRect,
 } from "./useZoom";
-import { ZoomReset, ZoomSelection } from "./ZoomOverlay";
+import { ZoomSelection } from "./ZoomOverlay";
 import { drawMarker, useClick } from "./sectionPick";
 
 export interface PseudoSectionComparisonData {
@@ -132,6 +132,7 @@ export function PseudoSectionComparisonCanvas({
     height: TOTAL_H,
     yDown: invertY,
     resetKey: mode,
+    canvas: canvasRef,
   });
   // The positions and frequencies (or wavelengths) on show, in all three panels.
   const [x0, x1] = zoom.view.x;
@@ -413,10 +414,8 @@ export function PseudoSectionComparisonCanvas({
         onMouseLeave={onMouseLeave}
         onMouseDown={click.onMouseDown}
         onClick={click.onClick}
-        onDoubleClick={zoom.onDoubleClick}
       />
       <ZoomSelection box={zoom.selection} />
-      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: 0, right: MR * scale }} />
       {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
     </div>
   );

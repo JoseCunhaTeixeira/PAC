@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../../theme";
 import { useContainerWidth } from "../useContainerWidth";
 import { tickDecimals, useZoom, type PlotRect, type Range } from "../useZoom";
-import { ZoomReset, ZoomSelection } from "../ZoomOverlay";
+import { ZoomSelection } from "../ZoomOverlay";
 import { TooltipLines } from "../HoverTooltip";
 import { num } from "./format";
 import { alongLine } from "./line";
@@ -92,7 +92,7 @@ export function LineGather({
   const [mouse, setMouse] = useState<{ x: number; y: number } | null>(null);
   const samples = data.traces[0]?.length ?? 0;
   const duration = Math.max(data.dt * Math.max(samples - 1, 1), 1e-6);
-  // The whole record first (the user); a drag zooms.
+  // The whole record first (the user); the wheel and the box's tools zoom.
   const [ownY, setOwnY] = useState<Range | null>(null);
   const full = useMemo(() => ({ x: extent, y: [0, duration] as Range }), [extent, duration]);
   const plots: PlotRect[] = [{ left: ML, top: MT, width: plotW, height: plotH, xAxis: MB, yAxis: ML }];
@@ -103,6 +103,7 @@ export function LineGather({
     height,
     yDown: true,
     link: alongLine(xZoom, onXZoom, ownY, setOwnY, full),
+    canvas: canvasRef,
   });
   const [x0, x1] = zoom.view.x;
   const [t0, t1] = zoom.view.y;
@@ -317,10 +318,8 @@ export function LineGather({
         }}
         onMouseLeave={() => setMouse(null)}
         onMouseDown={zoom.onMouseDown}
-        onDoubleClick={zoom.onDoubleClick}
       />
       <ZoomSelection box={zoom.selection} />
-      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: 2, right: MR }} />
       {hover && mouse && (
         <div
           className="viz-tooltip"

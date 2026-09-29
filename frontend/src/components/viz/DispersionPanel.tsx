@@ -2,12 +2,12 @@ import { useState } from "react";
 import { API } from "../../api";
 import { DispersionImageCanvas, type DispersionImage } from "../DispersionImageCanvas";
 import { StrataIcon } from "../icons";
-import { Card, Segmented } from "../kit";
+import { Card, PlotBox, Segmented } from "../kit";
 import { ModeHead, PseudoSectionCanvas, type PseudoSection } from "../PseudoSectionCanvas";
 import { xmidOf } from "./format";
 import { StageHead, UnitCard } from "./panel";
 import type { DispersionCard, Overview, WindowSources } from "./types";
-import { Details, Empty, Skeleton } from "./ui";
+import { Details, Empty, ErrorBox, PlotHead, Skeleton } from "./ui";
 import { nearestCell } from "./cells";
 import { useJson } from "./useJson";
 
@@ -58,20 +58,20 @@ export function DispersionPanel({
             onSelect={onSelect}
             details={card.data && <Details gates={card.data.gates} attempts={card.data.attempts} />}
           >
-            <div style={{ marginTop: 16 }}>
-              <div className="viz-row viz-plot-head">
-                <p className="viz-plot-title">
-                  Dispersion image{card.data?.picked_by === "auto" ? " · picked automatically" : card.data?.picked_by === "hand" ? " · picked by hand" : ""}
-                </p>
+            <PlotBox>
+              <div style={{ marginTop: 16 }}>
+                <PlotHead
+                  title={`Dispersion image${card.data?.picked_by === "auto" ? " · picked automatically" : card.data?.picked_by === "hand" ? " · picked by hand" : ""}`}
+                />
+                {image.data ? (
+                  <DispersionImageCanvas image={image.data} />
+                ) : image.error ? (
+                  <Empty>No dispersion image for this window.</Empty>
+                ) : (
+                  <Skeleton height={300} />
+                )}
               </div>
-              {image.data ? (
-                <DispersionImageCanvas image={image.data} />
-              ) : image.error ? (
-                <Empty>No dispersion image for this window.</Empty>
-              ) : (
-                <Skeleton height={300} />
-              )}
-            </div>
+            </PlotBox>
           </UnitCard>
         </div>
       )}
@@ -79,6 +79,7 @@ export function DispersionPanel({
         className="viz-section"
         icon={<StrataIcon size={17} />}
         title="Pseudo-sections"
+        plots
         aside={
           <Segmented
             size="sm"
@@ -145,8 +146,10 @@ function PickedSection({
         <p className="faint">Needs 2 picked windows.</p>
       ) : section.data ? (
         <PseudoSectionCanvas section={section.data} mode={axis} height={220} marker={marker} onPick={onPick} />
-      ) : section.error ? (
+      ) : section.missing ? (
         <Empty>No pseudo-section for {label}.</Empty>
+      ) : section.error ? (
+        <ErrorBox message={`Not loaded: ${section.error}`} />
       ) : (
         <Skeleton height={220} />
       )}

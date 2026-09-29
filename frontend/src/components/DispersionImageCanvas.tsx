@@ -4,7 +4,8 @@ import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { useCanvasHover } from "./useCanvasHover";
 import { useContainerWidth } from "./useContainerWidth";
 import { CLICK_PX, evenTicks, tickDecimals, useZoom, visibleCells, type PlotRect } from "./useZoom";
-import { ZoomReset, ZoomSelection } from "./ZoomOverlay";
+import type { DragTool } from "./plotBox";
+import { ZoomSelection } from "./ZoomOverlay";
 
 export interface DispersionCurve {
   label: string;
@@ -23,9 +24,6 @@ export interface DispersionImage {
   lambda_max: number | null;
 }
 
-/** What a drag on the image does: draw a picking lasso, or zoom. */
-export type DragMode = "lasso" | "zoom";
-
 const ML = 60, MR = 16, MT = 16, MB = 38;
 const BASE_W = 716; // the drawing's width until its card is measured
 const FONT = CANVAS_FONT;
@@ -36,13 +34,14 @@ export function DispersionImageCanvas({
   image,
   pendingPolygon = null,
   onLassoComplete,
-  dragMode = "zoom",
+  dragMode = "pan",
 }: {
   image: DispersionImage;
   pendingPolygon?: [number, number][] | null;
   // Without it the image has no lasso: a drag only zooms.
   onLassoComplete?: (polygon: [number, number][]) => void;
-  dragMode?: DragMode;
+  /** What a drag does, with a lasso: the picking's tools (a box's tool in Visualization). */
+  dragMode?: DragTool;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heatmapRef = useRef<HTMLCanvasElement | null>(null);
@@ -71,6 +70,9 @@ export function DispersionImageCanvas({
     plots: PLOTS,
     width: TOTAL_W,
     height: TOTAL_H,
+    // With a lasso, the picking's tools choose (lasso, zoom, hand); else its box's.
+    tool: onLassoComplete !== undefined ? (dragMode === "lasso" ? "pan" : dragMode) : undefined,
+    canvas: canvasRef,
   });
   // The frequencies and velocities on show: the whole image, or the zoom.
   const [f0, f1] = zoom.view.x;
@@ -345,11 +347,17 @@ export function DispersionImageCanvas({
   }
 
   function onMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
+    // Along an axis's tick labels, a zoom of that axis, as with every tool.
+    if (zoom.axisAt(hoverPos)) {
+      zoom.onMouseDown(e);
+      return;
+    }
     draggingRef.current = true;
     dragPointsRef.current = [clampedDataPoint(e.nativeEvent.offsetX, e.nativeEvent.offsetY)];
   }
 
   function onMouseMove(e: React.MouseEvent<HTMLCanvasElement>) {
+    onHoverMove(e);
     if (!draggingRef.current) return;
     dragPointsRef.current.push(clampedDataPoint(e.nativeEvent.offsetX, e.nativeEvent.offsetY));
     draw();
@@ -368,15 +376,24 @@ export function DispersionImageCanvas({
     <div ref={containerRef} style={{ width: "100%", position: "relative" }}>
       <canvas
         ref={canvasRef}
-        style={{ cursor: lasso ? "crosshair" : zoom.cursorAt(hoverPos), touchAction: "none", display: "block" }}
+        style={{
+          cursor: lasso && !zoom.axisAt(hoverPos) ? "crosshair" : zoom.cursorAt(hoverPos),
+          touchAction: "none",
+          display: "block",
+        }}
         onMouseDown={lasso ? onMouseDown : zoom.onMouseDown}
         onMouseMove={lasso ? onMouseMove : onHoverMove}
         onMouseUp={lasso ? onMouseUp : undefined}
-        onMouseLeave={lasso ? onMouseUp : onHoverLeave}
-        onDoubleClick={zoom.onDoubleClick}
+        onMouseLeave={
+          lasso
+            ? () => {
+                onMouseUp();
+                onHoverLeave();
+              }
+            : onHoverLeave
+        }
       />
       <ZoomSelection box={zoom.selection} />
-      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: 0, right: MR * scale }} />
     </div>
   );
 }

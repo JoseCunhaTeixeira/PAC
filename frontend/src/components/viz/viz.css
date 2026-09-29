@@ -549,7 +549,8 @@
 
 @media (min-width: 760px) {
   .viz-plots-2 {
-    grid-template-columns: 1fr 1fr;
+    /* Halves whatever their plots' least widths: the profile beside its correlation. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 
@@ -562,6 +563,41 @@
 
 .viz-plot-head .viz-plot-title {
   margin: 0;
+}
+
+/* A plot's switches and its tools, on its head's right (PlotHead). */
+.viz-plot-tools {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The Vs profile and, beside it, its correlation length: one depth axis. */
+.viz-profile-pair {
+  display: flex;
+  gap: 4px;
+}
+
+.viz-profile-pair > :first-child {
+  flex: 2.4;
+  min-width: 0;
+}
+
+.viz-profile-pair > :nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Room under the tools for the reset, over the plot's blank margin. */
+.viz-plot-head.boxed {
+  margin-bottom: 8px;
+}
+
+/* A plot's switches, then its tools on the right, at the switches' foot. */
+.viz-toolbar.boxed > .box-tools {
+  margin-left: auto;
 }
 
 .viz-plot-title {

@@ -1,7 +1,10 @@
 import { useCallback, useMemo, useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { DRAG_TOOLS } from "./dragTools";
 import { AlertCircleIcon, AlertIcon, CheckIcon, InfoIcon } from "./icons";
 import { boundsOf, tipOf, useNumberDraft, WrongNumbers } from "./numbers";
 import { PageArt, type ArtKind } from "./PageArt";
+import { usePageTitle } from "./pageTitle";
+import { PlotBoxContext, usePlotBox, usePlotBoxState, type DragTool } from "./plotBox";
 import "./kit.css";
 
 // PAC's page kit: a page and its header, cards, fields, a segmented control, callouts and stat
@@ -24,6 +27,7 @@ export function Page({
   art?: ArtKind;
   children?: ReactNode;
 }) {
+  usePageTitle(title);
   // The page's wrong number fields: its run bar waits until none is left.
   const [wrong, setWrong] = useState<ReadonlySet<string>>(new Set());
   const mark = useCallback(
@@ -67,6 +71,7 @@ export function Card({
   icon,
   hint,
   aside,
+  plots = false,
   step,
   className = "",
   children,
@@ -77,14 +82,16 @@ export function Card({
   hint?: ReactNode;
   /** On the head's right: a control, a count. */
   aside?: ReactNode;
+  /** It holds plots: their tools on its head's right, after `aside`, for all of them. */
+  plots?: boolean;
   /** The card's number in a workflow. */
   step?: number;
   className?: string;
   children?: ReactNode;
 }) {
-  return (
+  const card = (
     <section className={`card ${className}`.trim()}>
-      {(title || aside) && (
+      {(title || aside || plots) && (
         <div className="card-head">
           <div className="card-title" data-tip={typeof hint === "string" ? hint : undefined}>
             {step !== undefined ? <span className="card-step">{step}</span> : icon && <span className="card-icon">{icon}</span>}
@@ -93,11 +100,49 @@ export function Card({
               {hint && typeof hint !== "string" && <p className="card-hint">{hint}</p>}
             </div>
           </div>
-          {aside && <div className="card-aside">{aside}</div>}
+          {(aside || plots) && (
+            <div className="card-aside">
+              {aside}
+              {plots && <BoxTools />}
+            </div>
+          )}
         </div>
       )}
       {children}
     </section>
+  );
+  return plots ? <PlotBox>{card}</PlotBox> : card;
+}
+
+/** Plots sharing their tools (BoxTools, in the box): what a drag does, the hand at first, or
+ * the page's (`tool`, changed by `onTool`). */
+export function PlotBox({
+  tool,
+  onTool,
+  children,
+}: {
+  tool?: DragTool;
+  onTool?: (tool: DragTool) => void;
+  children?: ReactNode;
+}) {
+  const box = usePlotBoxState(tool, onTool);
+  return <PlotBoxContext.Provider value={box}>{children}</PlotBoxContext.Provider>;
+}
+
+/** The tools of the box it is in: what a drag does in all its plots and, under them while one
+ * is zoomed, the way back to their full views. */
+export function BoxTools({ options = DRAG_TOOLS }: { options?: SegmentOption<DragTool>[] }) {
+  const box = usePlotBox();
+  if (!box) return null;
+  return (
+    <div className="box-tools">
+      <Segmented size="sm" label="What a drag does" value={box.tool} onChange={box.setTool} options={options} />
+      {box.zoomed && (
+        <button type="button" className="box-reset" onClick={box.reset}>
+          Reset zoom
+        </button>
+      )}
+    </div>
   );
 }
 

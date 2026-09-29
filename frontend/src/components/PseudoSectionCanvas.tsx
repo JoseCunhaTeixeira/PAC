@@ -15,7 +15,7 @@ import {
   visibleCells,
   visibleColumns,
 } from "./useZoom";
-import { ZoomReset, ZoomSelection } from "./ZoomOverlay";
+import { ZoomSelection } from "./ZoomOverlay";
 
 export interface PseudoSection {
   positions: number[];
@@ -95,6 +95,7 @@ export function PseudoSectionCanvas({
     height: TOTAL_H,
     yDown: mode === "wavelength",
     resetKey: mode,
+    canvas: canvasRef,
   });
   // The positions and frequencies (or wavelengths) on show.
   const [x0, x1] = zoom.view.x;
@@ -362,10 +363,8 @@ export function PseudoSectionCanvas({
         onMouseLeave={onMouseLeave}
         onMouseDown={click.onMouseDown}
         onClick={click.onClick}
-        onDoubleClick={zoom.onDoubleClick}
       />
       <ZoomSelection box={zoom.selection} />
-      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: 0, right: MR * scale }} />
       {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
     </div>
   );

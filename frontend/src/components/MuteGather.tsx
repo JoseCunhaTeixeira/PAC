@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { API, type Acquisition, type Muting } from "../api";
+import { BoxTools, PlotBox } from "./kit";
 import type { Range } from "./useZoom";
 import { LineGather, type GatherData, type MuteOverlay } from "./viz/LineGather";
 
 // The muting's preview on a computing page: a record drawn as Visualization draws one (each
 // trace at its receiver along the line, the shot a star above it), what the muting and the
-// trigger's shift remove veiled. A drag zooms, a double-click shows all of it.
+// trigger's shift remove veiled. The wheel zooms; a drag does what the preview's tools say.
 
 interface RawGather {
   dt: number;
@@ -109,25 +110,26 @@ export function MuteGather({
   }, [data]);
 
   return (
-    <div>
-      {fileProp === undefined && (
-        <label className="inline-field">
-          Preview on
-          <select value={file} onChange={(e) => setInternalFile(e.target.value)}>
-            {acquisition.files.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+    <PlotBox>
+      <div className="box-head">
+        {fileProp === undefined && (
+          <label className="inline-field">
+            Preview on
+            <select value={file} onChange={(e) => setInternalFile(e.target.value)}>
+              {acquisition.files.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {data && <BoxTools />}
+      </div>
       {error && <p style={{ color: "var(--accent)" }}>Error: {error}</p>}
       {data && (
-        <div style={{ marginTop: 8 }}>
-          <LineGather key={file} data={data} extent={extent} xZoom={xZoom} onXZoom={setXZoom} height={420} mute={mute} />
-        </div>
+        <LineGather key={file} data={data} extent={extent} xZoom={xZoom} onXZoom={setXZoom} height={420} mute={mute} />
       )}
-    </div>
+    </PlotBox>
   );
 }
