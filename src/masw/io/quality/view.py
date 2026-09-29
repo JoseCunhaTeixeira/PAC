@@ -36,6 +36,9 @@ class Setting(BaseModel):
     detail: str = ""  # what goes with it: "5 receivers"
     why: str
     origin: Origin
+    # A unit's, how the line's other units differ in it: their values and on which, or its range
+    # over them all; "" when they all ran with the same (quality.done's with_spreads).
+    spread: str = ""
 
 
 # A check said apart from the others of its unit (the dispersion's: its image's, its curve's):
@@ -101,7 +104,6 @@ class Overview(BaseModel):
     cells: tuple[Cell, ...]
     parts: tuple[PartLegend, ...] = ()  # the cells' parts, when they say their checks apart
     track: Track | None = None
-    settings: tuple[Setting, ...] = ()  # what the stage ran with, and why
 
 
 class Sentence(BaseModel):

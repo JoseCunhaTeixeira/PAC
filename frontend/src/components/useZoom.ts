@@ -478,6 +478,18 @@ export function valueRange(
 }
 
 /** `n` + 1 evenly spaced ticks from `lo` to `hi`, both ends included. */
+/** Round ticks over [lo, hi], about `count` of them, each step 1, 2 or 5 times a power of ten. */
+export function niceTicks(lo: number, hi: number, count: number): number[] {
+  const raw = (hi - lo) / count;
+  if (!(raw > 0)) return [lo];
+  const power = 10 ** Math.floor(Math.log10(raw));
+  const m = raw / power;
+  const step = (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * power;
+  const ticks: number[] = [];
+  for (let t = Math.ceil(lo / step) * step; t <= hi + step * 1e-9; t += step) ticks.push(+t.toFixed(9));
+  return ticks;
+}
+
 export function evenTicks(lo: number, hi: number, n: number): number[] {
   return Array.from({ length: n + 1 }, (_, i) => lo + (i / n) * (hi - lo));
 }

@@ -12,7 +12,6 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from masw.io.quality.done import petro_settings
 from masw.io.quality.files import folder_path, fundamental
 from masw.io.quality.inversion import FitCurve, fit_curve
 from masw.io.quality.log import (
@@ -206,7 +205,6 @@ def petro_overview(folder: str) -> Overview:
         },
         cells=tuple(cells),
         track=Track(label="Water table (m)", short="Water table", kind="depth"),
-        settings=_settings(card, model, found, paco),
     )
 
 
@@ -250,7 +248,7 @@ def petro_card(folder: str, xmid: float) -> PetroCard:
     gates = (gate_view("G7", g7, metrics),) + ((gate_view("G8", g8),) if g8 is not None else ())
     return PetroCard(
         key=unit,
-        settings=petro_settings(model, log) if measures is not None else (),
+        settings=_model_setting(run_folder, log, model, card) if measures is not None else (),
         status=(
             "none"
             if measures is None
@@ -342,6 +340,20 @@ def _card(model: str | None) -> SilexCard | None:
     if model is None or model not in list_bundled_silex_models():
         return None
     return load_silex_card(bundled_silex_model_dir(model))
+
+
+def _model_setting(
+    run_folder: Path, log: QCLog | None, model: str | None, card: SilexCard | None
+) -> tuple[Setting, ...]:
+    """The Silex model the run's windows were inverted with, the same for them all: what it was
+    trained on, who chose it, and how many of the line's picked curves it covers."""
+    found = [
+        range_gaps(card, curve) if card is not None else ()
+        for unit in window_folders(run_folder)
+        if (curve := fundamental(run_folder / unit)) is not None
+    ]
+    paco = log is not None and any(attempt.stage == STAGE for attempt in log.attempts)
+    return _settings(card, model, found, paco)
 
 
 def _settings(

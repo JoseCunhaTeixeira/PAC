@@ -13,7 +13,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from masw.io.paths import workspace
-from masw.io.quality.done import record_settings
+from masw.io.quality.done import record_ranges, record_settings, with_spreads
 from masw.io.quality.files import folder_path, line_geometry, read_manifest
 from masw.io.quality.log import (
     AttemptSummary,
@@ -44,6 +44,7 @@ from masw.io.quality.view import (
     warnings,
 )
 from sigpipe.base.stream import Stream
+from sigpipe.dataio.signal_plotting import load_spectra
 from sigpipe.dataio.stream.loading import load_stream
 from sigpipe.masw.pipelines import shot_time_s, unmuted_record
 from sigpipe.masw.pipelines.common import PREPROCESSED
@@ -214,11 +215,13 @@ def records_overview(folder: str) -> Overview:
                 value=snr,
             )
         )
-    used = len(manifest.records) - len(
-        excluded | {record.name for record in manifest.records if record.status == "failed"}
-    )
+    failed = {record.name for record in manifest.records if record.status == "failed"}
+    preprocessed = len(manifest.records) - len(failed)
+    used = len(manifest.records) - len(excluded | failed)
     traces = sum(len(one) for one in manifest.exclusions.traces.values())
-    summary = f"{used} of {plural(len(manifest.records), 'record')} used"
+    summary = f"{preprocessed} of {plural(len(manifest.records), 'record')} preprocessed" + (
+        " and used" if used == preprocessed else f", {used} used"
+    )
     if excluded:
         summary += f" · {len(excluded)} left out by the signal check"
     if traces:
@@ -309,6 +312,42 @@ def gather_of(
     )
 
 
+class SavedSpectra(BaseModel):
+    """A stream's spectra as its job saved them beside it (sigpipe's save_spectra), for the
+    spectrum view: each trace's amplitude spectrum at its receiver along the line."""
+
+    model_config = ConfigDict(frozen=True)
+
+    positions: tuple[float, ...]  # m
+    freqs: tuple[float, ...]  # Hz, 0 to Nyquist
+    amplitude: tuple[tuple[float, ...], ...]  # traces x freqs, 0 to 1 of each trace's largest
+    band_hz: tuple[float, float] | None  # the band drawn over them: the record's usable band
+
+
+def saved_spectra(folder: Path, what: str) -> SavedSpectra:
+    """The spectra saved in `folder` (a record's, a window's stacked correlations'), as they
+    were saved; a ValueError when none were (a run from before they were)."""
+    found = load_spectra(folder)
+    if found is None:
+        raise ValueError(f"No spectra saved for {what}")
+    return SavedSpectra(
+        positions=tuple(round(float(x), 3) for x in found.positions),
+        freqs=tuple(round(float(f), 3) for f in found.freqs),
+        amplitude=tuple(tuple(round(float(v), 3) for v in trace) for trace in found.amplitude),
+        band_hz=found.band,
+    )
+
+
+def record_spectra(folder: str, name: str) -> SavedSpectra:
+    """Record `name`'s spectra, preprocessed, as its job saved them."""
+    run_folder = folder_path(folder)
+    manifest = _manifest(run_folder, folder)
+    record = next((one for one in manifest.records if one.name == name), None)
+    if record is None or record.status != "succeeded":
+        raise ValueError(f"No preprocessed record {name} in folder={folder}")
+    return saved_spectra(run_folder / record.folder, f"record {name} in folder={folder}")
+
+
 def record_card(folder: str, name: str) -> RecordCard:
     run_folder = folder_path(folder)
     manifest = _manifest(run_folder, folder)
@@ -368,7 +407,12 @@ def record_card(folder: str, name: str) -> RecordCard:
         x=x,
         windows=windows,
         excluded_traces=excluded_traces,
-        settings=record_settings(manifest, log, name),
+        settings=with_spreads(
+            name,
+            {one.name: record_settings(manifest, log, one.name) for one in manifest.records},
+            "record",
+            ranges=record_ranges(manifest, log),
+        ),
     )
 
 

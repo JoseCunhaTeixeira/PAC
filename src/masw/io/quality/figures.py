@@ -13,7 +13,7 @@ from masw.io.quality.files import folder_path, read_manifest
 RUN_FIGURE_PREFIXES = ("DispersionPicking_", "SeismicInversion_", "PetroInversion_")
 # A window's figures Visualization lists (the inversion's are its card's), in the order its steps
 # made them: its processing's, then its petrophysical inversion's.
-WINDOW_FIGURES = ("Selection_", "Stream_", "DispersionImage_", "PetroInversion_")
+WINDOW_FIGURES = ("Selection_", "Stream_", "Spectrum_", "DispersionImage_", "PetroInversion_")
 
 
 def unit_folder(folder: str, xmid: float | None = None, record: str | None = None) -> Path:

@@ -1,19 +1,21 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { boneR } from "./colormaps";
 import { HoverTooltip } from "./HoverTooltip";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { nearestIndex, useCanvasHover } from "./useCanvasHover";
 import { useContainerWidth } from "./useContainerWidth";
-import { evenTicks, tickDecimals, useZoom, visibleCells, type PlotRect } from "./useZoom";
+import { niceTicks, tickDecimals, useZoom, type PlotRect, type Range } from "./useZoom";
 import { ZoomSelection } from "./ZoomOverlay";
 import type { Tip } from "./tips";
 import { num } from "./viz/format";
+import { alongLine } from "./viz/line";
 import { vizPalette } from "./viz/palette";
 
 // A record's spectra as its saved figure draws them (sigpipe's plot_trace_spectra): each trace's
 // amplitude spectrum at its receiver along the line, frequency up, bone reversed (white:
 // nothing, black: the trace's largest), the whole of it, 0 to Nyquist; a band's bounds dashed.
-// The wheel zooms; a drag does what its box's tools say.
+// The wheel zooms; a drag does what its box's tools say. Given a zoom along the line, it follows
+// the plots above it (a gather's), its margins theirs: its colour bar above it.
 
 export interface TraceSpectra {
   freqs: number[];
@@ -21,21 +23,118 @@ export interface TraceSpectra {
   amplitude: number[][];
 }
 
-const ML = 60, MR = 76, MT = 16, MB = 38;
+// A gather's margins (LineGather), the colour bar in the top one.
+const ML = 84, MR = 16, MT = 30, MB = 46;
 const BASE_W = 716; // the drawing's width until its card is measured
 const FONT = CANVAS_FONT;
-const LEGEND_W = 14;
+const LEGEND_W = 120, LEGEND_H = 8;
+
+interface Column {
+  trace: number;
+  x: number;
+  left: number;
+  right: number;
+}
+
+/** The first index of ascending `values` at or above `value`. */
+function lowerBound(values: number[], value: number): number {
+  let lo = 0;
+  let hi = values.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (values[mid] < value) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** The spectra on show, put device pixel by device pixel in the plot (its top left at ML, MT):
+ * each pixel column its trace's, each row the largest of the frequencies it covers (a narrow
+ * peak kept, as the saved figure's groups keep it). No seams between the traces, no frequency
+ * skipped: drawn scaled, a column a trace, they showed as a grid. */
+function putSpectra(
+  ctx: CanvasRenderingContext2D,
+  spectra: TraceSpectra,
+  columns: Column[],
+  [x0, x1]: Range,
+  [f0, f1]: Range,
+  dpr: number,
+  plotW: number,
+  plotH: number,
+) {
+  const W = Math.max(1, Math.round(plotW * dpr));
+  const H = Math.max(1, Math.round(plotH * dpr));
+  const { freqs } = spectra;
+  // Each device row's frequencies, as indices [from, to] into freqs; none past the spectra.
+  const rows: [number, number][] = [];
+  for (let py = 0; py < H; py++) {
+    const top = f1 - (py / H) * (f1 - f0);
+    const bottom = f1 - ((py + 1) / H) * (f1 - f0);
+    let from = lowerBound(freqs, bottom);
+    let to = lowerBound(freqs, top) - 1;
+    if (to < from) {
+      const middle = (top + bottom) / 2;
+      from = to = middle < freqs[0] || middle > freqs[freqs.length - 1] ? -1 : nearestIndex(freqs, middle);
+    }
+    rows.push([from, to]);
+  }
+  // Each trace on show, its colours down the rows, once.
+  const colours = new Map<number, Uint8ClampedArray>();
+  const colourOf = (trace: number) => {
+    const found = colours.get(trace);
+    if (found) return found;
+    const amplitude = spectra.amplitude[trace] ?? [];
+    const rgb = new Uint8ClampedArray(H * 4);
+    rows.forEach(([from, to], py) => {
+      if (from < 0) return;
+      let most = 0;
+      for (let j = from; j <= to; j++) most = Math.max(most, amplitude[j] ?? 0);
+      const [r, g, b] = boneR(most);
+      rgb.set([r, g, b, 255], py * 4);
+    });
+    colours.set(trace, rgb);
+    return rgb;
+  };
+  const image = ctx.createImageData(W, H);
+  const data = image.data;
+  let c = 0;
+  for (let px = 0; px < W; px++) {
+    const x = x0 + ((px + 0.5) / W) * (x1 - x0);
+    while (c < columns.length - 1 && columns[c].right < x) c++;
+    const column = columns[c];
+    if (!column || x < column.left || x > column.right) continue;
+    const rgb = colourOf(column.trace);
+    for (let py = 0, from = 0, to = px * 4; py < H; py++, from += 4, to += W * 4) {
+      data[to] = rgb[from];
+      data[to + 1] = rgb[from + 1];
+      data[to + 2] = rgb[from + 2];
+      data[to + 3] = rgb[from + 3];
+    }
+  }
+  ctx.putImageData(image, Math.round(ML * dpr), Math.round(MT * dpr));
+}
 
 export function SpectrumCanvas({
   spectra,
   positions,
   band = null,
+  outside = "cut by the filter",
+  extent,
+  xZoom = null,
+  onXZoom,
 }: {
   spectra: TraceSpectra;
   /** Each trace's receiver along the line, m, in the record's order. */
   positions: number[];
-  /** The band a filter keeps, Hz: its bounds dashed; none, no filter. */
+  /** The band dashed, Hz (a filter's cuts, a record's usable band); none, none drawn. */
   band?: [number, number] | null;
+  /** What the hover says outside the band. */
+  outside?: string;
+  /** The line's extent along x, as the plots it follows have it; else its traces'. */
+  extent?: Range;
+  /** The zoom along the line it shares with them; null for the whole line. */
+  xZoom?: Range | null;
+  onXZoom?: (x: Range | null) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
@@ -50,7 +149,7 @@ export function SpectrumCanvas({
   const { pos: hoverPos, onMouseMove, onMouseLeave } = useCanvasHover(1);
 
   // The traces along the line, each a column reaching halfway to its neighbours.
-  const columns = useMemo(() => {
+  const columns = useMemo((): Column[] => {
     const at = spectra.amplitude.map((_, i) => positions[i] ?? i);
     const order = at.map((_, i) => i).sort((a, b) => at[a] - at[b]);
     return order.map((trace, k) => {
@@ -67,53 +166,35 @@ export function SpectrumCanvas({
   const fMax = spectra.freqs[spectra.freqs.length - 1] ?? 1;
   const xMin = columns[0]?.left ?? 0;
   const xMax = columns[columns.length - 1]?.right ?? 1;
+  const full = useMemo(
+    () => ({ x: extent ?? ([xMin, xMax] as Range), y: [fMin, fMax] as Range }),
+    [extent, xMin, xMax, fMin, fMax],
+  );
+  // The frequencies, its own zoom; along the line, the plots' it follows when given.
+  const [ownF, setOwnF] = useState<Range | null>(null);
 
   const zoom = useZoom({
-    extent: { x: [xMin, xMax], y: [fMin, fMax] },
+    extent: full,
     plots: PLOTS,
     width: TOTAL_W,
     height: TOTAL_H,
+    link: onXZoom ? alongLine(xZoom, onXZoom, ownF, setOwnF, full) : undefined,
     canvas: canvasRef,
   });
   const [x0, x1] = zoom.view.x;
   const [f0, f1] = zoom.view.y;
 
-  // The image once per record: a column a trace, in their order along the line, the highest
-  // frequency on top.
-  const image = useMemo(() => {
-    const nf = spectra.freqs.length;
-    const off = document.createElement("canvas");
-    off.width = Math.max(1, columns.length);
-    off.height = Math.max(1, nf);
-    const octx = off.getContext("2d");
-    if (!octx || nf === 0 || columns.length === 0) return off;
-    const data = octx.createImageData(columns.length, nf);
-    columns.forEach(({ trace }, c) => {
-      const row = spectra.amplitude[trace] ?? [];
-      for (let j = 0; j < nf; j++) {
-        const [r, g, b] = boneR(row[j] ?? 0);
-        const idx = ((nf - 1 - j) * columns.length + c) * 4;
-        data.data[idx] = r;
-        data.data[idx + 1] = g;
-        data.data[idx + 2] = b;
-        data.data[idx + 3] = 255;
-      }
-    });
-    octx.putImageData(data, 0, 0);
-    return off;
-  }, [spectra, columns]);
-
-  // The colour bar's image, 0 at the bottom: drawn whole, no seams between rows.
+  // The colour bar's image, 0 on the left: drawn whole, no seams between columns.
   const legend = useMemo(() => {
     const off = document.createElement("canvas");
-    off.width = 1;
-    off.height = 256;
+    off.width = 256;
+    off.height = 1;
     const octx = off.getContext("2d");
     if (!octx) return off;
-    const data = octx.createImageData(1, 256);
-    for (let py = 0; py < 256; py++) {
-      const [r, g, b] = boneR(1 - py / 255);
-      data.data.set([r, g, b, 255], py * 4);
+    const data = octx.createImageData(256, 1);
+    for (let px = 0; px < 256; px++) {
+      const [r, g, b] = boneR(px / 255);
+      data.data.set([r, g, b, 255], px * 4);
     }
     octx.putImageData(data, 0, 0);
     return off;
@@ -133,24 +214,12 @@ export function SpectrumCanvas({
     ctx.clearRect(0, 0, TOTAL_W, TOTAL_H);
     const X = (x: number) => ML + ((x - x0) / (x1 - x0)) * PLOT_W;
     const Y = (f: number) => MT + PLOT_H - ((f - f0) / (f1 - f0)) * PLOT_H;
+    putSpectra(ctx, spectra, columns, [x0, x1], [f0, f1], dpr, PLOT_W, PLOT_H);
 
     ctx.save();
     ctx.beginPath();
     ctx.rect(ML, MT, PLOT_W, PLOT_H);
     ctx.clip();
-    ctx.imageSmoothingEnabled = false;
-    // The frequencies on show, then each trace's column on show.
-    const nf = image.height;
-    const [r0, r1] = visibleCells(nf, fMax, fMin, f0, f1);
-    const fEdge = (r: number) => fMax - (r / nf) * (fMax - fMin);
-    if (r1 > r0) {
-      columns.forEach(({ left, right }, c) => {
-        if (right < x0 || left > x1) return;
-        const xa = X(left), xb = X(right);
-        const ya = Y(fEdge(r0)), yb = Y(fEdge(r1));
-        ctx.drawImage(image, c, r0, 1, r1 - r0, xa, ya, xb - xa, yb - ya);
-      });
-    }
     if (band) {
       ctx.strokeStyle = pass;
       ctx.lineWidth = 1.5;
@@ -165,17 +234,23 @@ export function SpectrumCanvas({
     }
     ctx.restore();
 
-    // The colour bar: 0 to each trace's largest.
-    const legendX = ML + PLOT_W + 12;
-    ctx.drawImage(legend, 0, 0, 1, legend.height, legendX, MT, LEGEND_W, PLOT_H);
+    // The colour bar above the plot, on its right: 0 to each trace's largest.
+    const legendX = ML + PLOT_W - LEGEND_W - 12;
+    const legendY = (MT - LEGEND_H) / 2 - 2;
+    ctx.drawImage(legend, 0, 0, legend.width, 1, legendX, legendY, LEGEND_W, LEGEND_H);
     ctx.strokeStyle = palette.axis;
     ctx.lineWidth = 1;
-    ctx.strokeRect(legendX, MT, LEGEND_W, PLOT_H);
+    ctx.strokeRect(legendX, legendY, LEGEND_W, LEGEND_H);
     ctx.font = FONT;
-    ctx.fillStyle = palette.tick;
-    ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    for (const t of [0, 0.5, 1]) ctx.fillText(String(t), legendX + LEGEND_W + 5, MT + PLOT_H - t * PLOT_H);
+    ctx.fillStyle = palette.tick;
+    ctx.textAlign = "right";
+    ctx.fillText("0", legendX - 5, legendY + LEGEND_H / 2);
+    ctx.textAlign = "left";
+    ctx.fillText("1", legendX + LEGEND_W + 5, legendY + LEGEND_H / 2);
+    ctx.fillStyle = palette.title;
+    ctx.textAlign = "right";
+    ctx.fillText("Amplitude (normalized per trace)", legendX - 18, legendY + LEGEND_H / 2);
 
     // Axes.
     ctx.strokeStyle = palette.axis;
@@ -187,8 +262,9 @@ export function SpectrumCanvas({
     ctx.fillStyle = palette.tick;
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    const fDecimals = tickDecimals((f1 - f0) / 6);
-    for (const f of evenTicks(f0, f1, 6)) {
+    const fTicks = niceTicks(f0, f1, Math.max(3, Math.floor(PLOT_H / 55)));
+    const fDecimals = tickDecimals(fTicks.length > 1 ? fTicks[1] - fTicks[0] : f1 - f0);
+    for (const f of fTicks) {
       ctx.beginPath();
       ctx.moveTo(ML - 4, Y(f));
       ctx.lineTo(ML, Y(f));
@@ -197,8 +273,9 @@ export function SpectrumCanvas({
     }
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    const xDecimals = tickDecimals((x1 - x0) / 6);
-    for (const x of evenTicks(x0, x1, 6)) {
+    const xTicks = niceTicks(x0, x1, Math.max(3, Math.floor(PLOT_W / 90)));
+    const xDecimals = tickDecimals(xTicks.length > 1 ? xTicks[1] - xTicks[0] : x1 - x0);
+    for (const x of xTicks) {
       ctx.beginPath();
       ctx.moveTo(X(x), MT + PLOT_H);
       ctx.lineTo(X(x), MT + PLOT_H + 4);
@@ -213,15 +290,10 @@ export function SpectrumCanvas({
     ctx.rotate(-Math.PI / 2);
     ctx.fillText("Frequency (Hz)", 0, 0);
     ctx.restore();
-    ctx.save();
-    ctx.translate(TOTAL_W - 12, MT + PLOT_H / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillText("Amplitude (of its largest)", 0, 0);
-    ctx.restore();
-  }, [image, legend, columns, band, pass, palette, fMin, fMax, x0, x1, f0, f1, TOTAL_W, TOTAL_H, PLOT_W, PLOT_H]);
+  }, [spectra, legend, columns, band, pass, palette, x0, x1, f0, f1, TOTAL_W, TOTAL_H, PLOT_W, PLOT_H]);
 
   // Over the plot: the receiver under the pointer, the frequency, its amplitude there; whether
-  // the filter cuts it.
+  // it lies outside the band.
   const tip = ((): Tip | null => {
     if (!hoverPos) return null;
     const { x, y } = hoverPos;
@@ -235,7 +307,7 @@ export function SpectrumCanvas({
     return {
       title: `Receiver ${column.trace + 1}`,
       values: `${num(column.x, 4)} m; ${f.toFixed(1)} Hz${value !== undefined ? `; ${value.toFixed(2)}` : ""}`,
-      notes: cut ? ["cut by the filter"] : [],
+      notes: cut ? [outside] : [],
     };
   })();
 
