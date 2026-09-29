@@ -650,6 +650,13 @@
   border-top-style: dashed;
 }
 
+.viz-legend-inline i.dot {
+  width: 7px;
+  height: 7px;
+  border-top: 0;
+  border-radius: 50%;
+}
+
 .viz-legend-inline i.area {
   height: 9px;
   border: none;
@@ -687,6 +694,37 @@
 
 .viz table.viz-table tr.failed td {
   color: var(--bad);
+}
+
+/* Every table of measures with the same columns: its values under the others'. */
+.viz table.viz-table.viz-measures {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 560px;
+}
+
+.viz-col-measure {
+  width: 30%;
+}
+
+.viz-col-num {
+  width: 12%;
+}
+
+/* The object a table's measures describe (a record's signal, its spectrum). */
+.viz table.viz-table caption {
+  caption-side: top;
+  text-align: left;
+  font-weight: 600;
+  padding: 0 0 4px;
+}
+
+/* What a measure covers, one cell for the rows it covers alike; a failed row's own colour
+ * left to its value. */
+.viz table.viz-table tr td.viz-over {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  vertical-align: middle;
 }
 
 .viz-gates {

@@ -156,6 +156,10 @@ export interface Metric {
   bound: "min" | "max" | null;
   passed: boolean;
   unit: string;
+  /** The object it describes: signal, spectrum, selection, image; none from older logs. */
+  of?: string;
+  /** What it covers: its traces, window, band. */
+  over?: string;
 }
 
 export interface GateView {

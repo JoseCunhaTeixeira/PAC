@@ -335,7 +335,8 @@ def model_metrics(
             value=band.misfit,
             threshold=thresholds.max_misfit,
             bound="max",
-            passed=band.misfit is not None and band.misfit <= thresholds.max_misfit,
+            # A band with no point to weigh is not measured, as G5's and G7's.
+            passed=band.misfit is None or band.misfit <= thresholds.max_misfit,
         )
         for name, band in zip(names, monitored.bands, strict=True)
     ]
@@ -395,13 +396,17 @@ def model_metrics(
         ),
     ]
     if informed_depth(measures) is not None:
+        # Judged as G5 judges it: not when the data chose the layers, the deepest allowed then
+        # the curve's reach whatever the data inform.
         metrics.append(
             Metric(
-                name="useful_depth",
+                name="depth_informed",
                 value=useful,
                 threshold=round(thresholds.min_useful_share * depth, 2),
                 bound="min",
-                passed=useful is None or useful >= thresholds.min_useful_share * depth,
+                passed=useful is None
+                or useful >= thresholds.min_useful_share * depth
+                or parameters.layering == "free",
                 unit="m",
             )
         )

@@ -7,6 +7,8 @@ import { ModeHead, PseudoSectionCanvas, type PseudoSection } from "../PseudoSect
 import type { Range } from "../useZoom";
 import { xmidOf } from "./format";
 import { LineGather, type GatherData } from "./LineGather";
+import { LinePlot } from "./LinePlot";
+import { vizPalette } from "./palette";
 import { StageHead, UnitCard } from "./panel";
 import { Normalization, SavedSpectrum } from "./RecordsPanel";
 import { runFigures, useRunFigures } from "./runFigures";
@@ -14,6 +16,7 @@ import type { DispersionCard, Overview, WindowSources } from "./types";
 import { Details, Empty, ErrorBox, PlotHead, SavedFigures, Skeleton } from "./ui";
 import { nearestCell } from "./cells";
 import { useJson } from "./useJson";
+import { useTheme } from "../../theme";
 
 // The dispersion stage: the selected window's card (the shots its image stacks, its image and
 // picks, the checks), its image with the picks on it, and along the line, the pseudo-section
@@ -51,6 +54,91 @@ function WindowGather({ folder, xmid }: { folder: string; xmid: number }) {
           xZoom={xZoom}
           onXZoom={setXZoom}
         />
+      </div>
+    </PlotBox>
+  );
+}
+
+interface SelectionScores {
+  threshold: number;
+  flip: boolean;
+  ratios: number[];
+  kept: boolean[];
+  segments: number;
+  kept_count: number;
+  flipped_count: number;
+}
+
+/** A passive window's fk segment selection, as its job saved it: each segment's f-k ratio (in
+ * the order the window met them, record after record), kept, kept and flipped, or left out,
+ * around ±its threshold; nothing without one. */
+function WindowSelection({ folder, xmid }: { folder: string; xmid: number }) {
+  const palette = vizPalette(useTheme());
+  const selection = useJson<SelectionScores>(`${API}/quality/dispersion/selection/${at(folder)}/${xmid}`);
+  const data = selection.data;
+  if (!data) return null;
+  const points = (take: (ratio: number, kept: boolean) => boolean) =>
+    data.ratios.flatMap((ratio, i): [number, number][] => (take(ratio, data.kept[i]) ? [[i + 1, ratio]] : []));
+  const flipped = (ratio: number) => data.flip && ratio > 0;
+  const { threshold, segments } = data;
+  return (
+    <PlotBox>
+      <div style={{ marginTop: 16 }}>
+        <PlotHead title={`FK selection · ${data.kept_count} of ${segments} segments kept`} />
+        <LinePlot
+          key={xmid}
+          series={[
+            { label: "left out", color: palette.use.inside, points: points((_, kept) => !kept), line: false, dots: true },
+            { label: "kept", color: palette.series, points: points((ratio, kept) => kept && !flipped(ratio)), line: false, dots: true },
+            {
+              label: "kept, flipped",
+              color: palette.chains[1],
+              points: points((ratio, kept) => kept && flipped(ratio)),
+              line: false,
+              dots: true,
+            },
+          ]}
+          areas={[
+            {
+              color: palette.selected,
+              polygon: [
+                [0, -threshold],
+                [segments + 1, -threshold],
+                [segments + 1, threshold],
+                [0, threshold],
+              ],
+            },
+          ]}
+          refs={[
+            { axis: "y", at: threshold, label: "", color: palette.limit, dash: [4, 3] },
+            { axis: "y", at: -threshold, label: "", color: palette.limit, dash: [4, 3] },
+          ]}
+          xLabel="Segment"
+          yLabel="F-k ratio"
+          xRange={[0, segments + 1]}
+          yRange={[-1.05, 1.05]}
+          height={260}
+        />
+        <div className="viz-legend-inline">
+          <span style={{ color: palette.series }}>
+            <i className="dot" style={{ background: palette.series }} />
+            kept
+          </span>
+          {data.flipped_count > 0 && (
+            <span style={{ color: palette.chains[1] }}>
+              <i className="dot" style={{ background: palette.chains[1] }} />
+              kept, flipped
+            </span>
+          )}
+          <span>
+            <i className="dot" style={{ background: palette.use.inside }} />
+            left out
+          </span>
+          <span>
+            <i className="dashed" style={{ borderTopWidth: 1 }} />
+            ±{threshold}, the threshold
+          </span>
+        </div>
       </div>
     </PlotBox>
   );
@@ -129,6 +217,7 @@ export function DispersionPanel({
               </div>
             </PlotBox>
             {xmid !== null && <WindowGather folder={folder} xmid={xmid} />}
+            {xmid !== null && <WindowSelection folder={folder} xmid={xmid} />}
           </UnitCard>
         </div>
       )}

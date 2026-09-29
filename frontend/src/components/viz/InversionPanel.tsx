@@ -369,11 +369,9 @@ export function InversionPanel({
                 details={
                   inversionCard?.inverted && (
                     <>
-                      <Fold title="Model, checks and attempts">
+                      <GateTables gates={inversionCard.gates} />
+                      <Fold title="Model and attempts">
                         <ModelTable card={inversionCard} />
-                        <div className="viz-section">
-                          <GateTables gates={inversionCard.gates} />
-                        </div>
                         {inversionCard.attempts.length > 0 && (
                           <div className="viz-section">
                             <h3 className="viz-h3">Attempts</h3>

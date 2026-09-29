@@ -6,8 +6,9 @@ line), with the attempts of the phase shift and of the picking, and who picked e
 assistant automatically, or a person by hand in PAC. Shown along the line at each window's
 middle: the dispersion strip of Visualization, and the selected window's card."""
 
+import logging
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from itertools import pairwise
 from pathlib import Path
 from typing import Any, cast
@@ -15,6 +16,7 @@ from typing import Any, cast
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
+from masw.io.paths import workspace
 from masw.io.pick_origin import Origin, assistant_picked, pick_origin
 from masw.io.quality.done import (
     most_common,
@@ -34,7 +36,19 @@ from masw.io.quality.log import (
     config_section,
     read_log,
 )
-from masw.io.quality.records import RecordGather, SavedSpectra, gather_of, saved_spectra
+from masw.io.quality.records import (
+    MEASURES_FILE,
+    RecordGather,
+    SavedSpectra,
+    SignalMeasures,
+    before_muting,
+    gather_of,
+    image_band,
+    saved_measures,
+    saved_spectra,
+    single_precision,
+)
+from masw.io.quality.records import thresholds_of as thresholds_of_signal
 from masw.io.quality.view import (
     Card,
     Cell,
@@ -64,12 +78,19 @@ from sigpipe.algorithms.picking.dispersion.curve import (
 )
 from sigpipe.base.dispersion_curve import DispersionCurve
 from sigpipe.base.dispersion_image import DispersionImage
+from sigpipe.base.stream import Stream
+from sigpipe.dataio.selection_plotting import SelectionScores, load_selection
 from sigpipe.dataio.stream.loading import load_stream
 from sigpipe.masw.picks import load_curves
+from sigpipe.masw.pipelines import window_correlations
+from sigpipe.masw.profiles import Profile, ProfileError, load_profile
 from sigpipe.masw.quality.image import aliased, coherent_columns, competing_ridges, edge_peaks
+from sigpipe.masw.quality.measures import SignalLimits, measure_signal, selection_measures
 from sigpipe.masw.runs import RunManifest, load_image, window_folders, xmid_of
 from sigpipe.masw.runs.finding import IMAGE_FILE
 from sigpipe.masw.windows import MASWWindow
+
+logger = logging.getLogger(__name__)
 
 # The stacked correlations a passive or passive-active window's image is made of (the pipelines'
 # saved stream).
@@ -113,7 +134,6 @@ class CurveThresholds(BaseModel):
     metrics: PickThresholds = Field(default_factory=PickThresholds)
     max_jump: float = 0.3
     min_points: int = 4
-    max_uncertainty: float = 0.5  # median uncertainty over the velocity
 
 
 class DispersionThresholds(BaseModel):
@@ -347,13 +367,12 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
     lambda_min = min_resolvable_wavelength(image.acquisition) if image is not None else None
     lambda_max = longest_reached_wavelength(image.acquisition) if image is not None else None
     measured_image = image_metrics(image, thresholds.image) if image is not None else ()
-    image_measures = g2.metrics if g2 is not None else measured_image
-    band, share = (
-        (g2.kept.band_hz, _metric(g2.metrics, "coherent_columns"))
+    band = (
+        g2.kept.band_hz
         if g2 is not None
-        else coherent_band(image, thresholds.image)
+        else coherent_band(image, thresholds.image)[0]
         if image is not None
-        else (None, None)
+        else None
     )
     curve_measures = (
         g3.metrics
@@ -379,14 +398,9 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
     elif band is None:
         said.append(Sentence(mark="warn", text="No coherent band in the image."))
     else:
-        coherent = next((one for one in image_measures if one.name == "coherent_columns"), None)
-        said.append(
-            Sentence(
-                mark="pass" if coherent is None or coherent.passed else "warn",
-                text=f"Its image is coherent from {span(*band, 'Hz')}"
-                + (f", over {share:.0%} of its columns." if share is not None else "."),
-            )
-        )
+        # Its measures (the share of its columns coherent) in its table.
+        said.append(Sentence(mark="info", text=f"Its image is coherent from {span(*band, 'Hz')}."))
+    selection = load_selection(window)
     stats = [curve_stats(curve) for curve in curves]
     if not by_hand:
         said += _picks(
@@ -403,7 +417,17 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         if judged:
             said += _again(log.of(unit, "picking"), "Picked again")
     said += warnings(g2, g3, g4)
-    gates = [gate_view("G2", g2, measured_image)]
+    # The image's measures; a passive or passive-active window's, its stacked correlations' and
+    # its fk selection's too: G2's own when it judged the window, else as PAC's job saved them.
+    gates = [
+        gate_view(
+            "G2",
+            g2,
+            measured_image
+            + _correlation_metrics(window)
+            + _selection_metrics(selection, thresholds_of_signal(run_folder)),
+        )
+    ]
     if by_hand:
         # The user's curve: passed as it is, and not checked along the line.
         gates += [
@@ -655,12 +679,14 @@ def coherent_band(
 
 
 def image_metrics(image: DispersionImage, thresholds: ImageThresholds) -> tuple[Metric, ...]:
-    """sigpipe's measures of the image against G2's limits, as G2 names them."""
+    """sigpipe's measures of the image against G2's limits, as G2 names them and says what
+    they describe."""
     coherent = coherent_columns(image, thresholds.coherent_level)
     n_coherent = int(coherent.sum())
     share = n_coherent / max(coherent.size, 1)
     metrics = [
         Metric(
+            of="image",
             name="coherent_columns",
             value=round(share, 3),
             threshold=thresholds.min_coherent_columns,
@@ -674,6 +700,7 @@ def image_metrics(image: DispersionImage, thresholds: ImageThresholds) -> tuple[
     for name, count in (("ridge_at_vmin", low), ("ridge_at_vmax", high)):
         metrics.append(
             Metric(
+                of="image",
                 name=name,
                 value=round(count / n_coherent, 3),
                 threshold=thresholds.max_edge_columns,
@@ -687,7 +714,14 @@ def image_metrics(image: DispersionImage, thresholds: ImageThresholds) -> tuple[
         ("band_at_fmax", rows[-1] == coherent.size - 1),
     ):
         metrics.append(
-            Metric(name=name, value=float(touches), threshold=0, bound="max", passed=not touches)
+            Metric(
+                of="image",
+                name=name,
+                value=float(touches),
+                threshold=0,
+                bound="max",
+                passed=not touches,
+            )
         )
     competing = competing_ridges(
         image,
@@ -699,6 +733,7 @@ def image_metrics(image: DispersionImage, thresholds: ImageThresholds) -> tuple[
     competing_share = int(competing.sum()) / n_coherent
     metrics.append(
         Metric(
+            of="image",
             name="competing_ridges",
             value=round(competing_share, 3),
             threshold=thresholds.max_competing_columns,
@@ -710,6 +745,7 @@ def image_metrics(image: DispersionImage, thresholds: ImageThresholds) -> tuple[
     alias = aliased(image, competing, thresholds.vmin_floor)
     metrics.append(
         Metric(
+            of="image",
             name="aliased_ridges",
             value=round(int(alias.sum()) / max(int(competing.sum()), 1), 3),
             passed=True,
@@ -787,15 +823,9 @@ def curve_metrics(
         )
     uncertainty = _uncertainty(curve, vs)
     if uncertainty is not None:
-        metrics.append(
-            Metric(
-                name="uncertainty",
-                value=uncertainty,
-                threshold=thresholds.max_uncertainty,
-                bound="max",
-                passed=uncertainty <= thresholds.max_uncertainty,
-            )
-        )
+        # Reported, as G3 does (the user, 2026-09-29): the picker caps each point's at 0.4 of its
+        # velocity, and G5's depth informed judges what a loose curve does to the model.
+        metrics.append(Metric(name="uncertainty", value=uncertainty, passed=True))
     return tuple(metrics)
 
 
@@ -807,8 +837,106 @@ def _uncertainty(curve: DispersionCurve, vs: np.ndarray) -> float | None:
     return round(float(np.median(errors[known] / vs[known])), 3) if known.any() else None
 
 
-def _metric(metrics: tuple[Metric, ...], name: str) -> float | None:
-    return next((metric.value for metric in metrics if metric.name == name), None)
+def _selection_metrics(
+    selection: SelectionScores | None, limits: SignalLimits
+) -> tuple[Metric, ...]:
+    """A passive window's fk selection among its image's measures, as G2 judges it (sigpipe's
+    selection_measures: the share of segments kept against its limit)."""
+    if selection is None:
+        return ()
+    return tuple(Metric(**one.model_dump()) for one in selection_measures(selection, limits))
+
+
+def _correlation_metrics(window: Path) -> tuple[Metric, ...]:
+    """A passive or passive-active window's stacked correlations measured as a record is, as
+    PAC's job saved them (measure_windows); none saved as new as the correlations: none."""
+    metrics, _ = saved_measures(window / WINDOW_STREAM)
+    return metrics
+
+
+def measure_windows(run_folder: Path) -> None:
+    """Save the measures of every passive or passive-active window's stacked correlations beside
+    them (a run PAC made: the assistant's own are G2's, in its QC log): measured as a record is
+    (sigpipe's measure_signal, from the virtual source), with the run's limits. A muted line's
+    SNR and band on its correlations made again from its records before their muting (a
+    muting zeroes their noise, and the correlations' after the slowest arrival), as G2's; not
+    measured without them."""
+    manifest = read_manifest(run_folder)
+    if manifest is None or str(manifest.preset.mode) not in ("passive", "passive-active"):
+        return
+    limits = thresholds_of_signal(run_folder)
+    values: dict[str, Any] = manifest.preset.model_dump()
+    muting: dict[str, Any] = values.get("muting") or {}
+    muted = muting.get("method", "none") != "none"
+    profile: Profile | None = None
+    if muted:
+        try:
+            profile = load_profile(manifest.profile.name, workspace())
+        except ProfileError:
+            profile = None
+    unmuted: dict[str, Stream | None] = {}
+
+    def record(name: str) -> Stream | None:
+        if name not in unmuted:
+            found = before_muting(manifest.preset, profile, name)
+            unmuted[name] = None if found is None else single_precision(found)[0]
+        return unmuted[name]
+
+    for window in manifest.windows:
+        path = run_folder / window.folder / WINDOW_STREAM
+        if window.status != "succeeded" or not path.exists():
+            continue
+        before = (
+            _correlations_before_muting(path.parent, manifest, record)
+            if profile is not None
+            else None
+        )
+        report = measure_signal(
+            load_stream([path])[0],
+            limits,
+            source="virtual",
+            spectra=True,
+            records_muted=muted,
+            before_muting=None if before is None else (before, 0.0),
+            image_band=image_band(manifest.preset),
+        )
+        band = report.band
+        measures = SignalMeasures(
+            metrics=tuple(Metric(**one.model_dump()) for one in report.measures),
+            band_hz=None if band is None else (round(band[0], 2), round(band[1], 2)),
+        )
+        (path.parent / MEASURES_FILE).write_text(measures.model_dump_json(indent=2))
+
+
+def _correlations_before_muting(
+    folder: Path, manifest: RunManifest, record: Callable[[str], Stream | None]
+) -> Stream | None:
+    """A passive-active window's stacked correlations made again from its records before their
+    muting (`record`, by name), as its pipeline made them; None without them all."""
+    preset = manifest.preset
+    if str(preset.mode) != "passive-active":
+        return None
+    window = MASWWindow.model_validate_json((folder / "window.json").read_text())
+    streams: dict[str, Stream] = {}
+    for path in window.selected_files:
+        found = record(path.name)
+        if found is None:
+            return None
+        streams[path.name] = found
+    try:
+        return window_correlations(preset, window, streams)
+    except Exception:
+        logger.exception("Could not correlate the records of %s before their muting", folder)
+        return None
+
+
+def window_selection(folder: str, xmid: float) -> SelectionScores:
+    """Window `xmid`'s fk segment selection as its job saved it (a passive window with the fk
+    selection on); a ValueError else."""
+    found = load_selection(folder_path(folder) / f"xmid_{xmid:.2f}")
+    if found is None:
+        raise ValueError(f"No fk selection saved for folder={folder}, xmid={xmid}")
+    return found
 
 
 def window_spectra(folder: str, xmid: float) -> SavedSpectra:

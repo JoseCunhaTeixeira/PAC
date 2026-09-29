@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { boneR } from "./colormaps";
+import { bone, boneR } from "./colormaps";
 import { HoverTooltip } from "./HoverTooltip";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { nearestIndex, useCanvasHover } from "./useCanvasHover";
@@ -12,8 +12,9 @@ import { alongLine } from "./viz/line";
 import { vizPalette } from "./viz/palette";
 
 // A record's spectra as its saved figure draws them (sigpipe's plot_trace_spectra): each trace's
-// amplitude spectrum at its receiver along the line, frequency up, bone reversed (white:
-// nothing, black: the trace's largest), the whole of it, 0 to Nyquist; a band's bounds dashed.
+// amplitude spectrum at its receiver along the line, frequency up, in bone (reversed on a light
+// page, white nothing and black the trace's largest, as the figure; on a dark one, black
+// nothing), the whole of it, 0 to Nyquist; a band's bounds dashed.
 // The wheel zooms; a drag does what its box's tools say. Given a zoom along the line, it follows
 // the plots above it (a gather's), its margins theirs: its colour bar above it.
 
@@ -61,6 +62,7 @@ function putSpectra(
   dpr: number,
   plotW: number,
   plotH: number,
+  colour: (t: number) => [number, number, number],
 ) {
   const W = Math.max(1, Math.round(plotW * dpr));
   const H = Math.max(1, Math.round(plotH * dpr));
@@ -89,7 +91,7 @@ function putSpectra(
       if (from < 0) return;
       let most = 0;
       for (let j = from; j <= to; j++) most = Math.max(most, amplitude[j] ?? 0);
-      const [r, g, b] = boneR(most);
+      const [r, g, b] = colour(most);
       rgb.set([r, g, b, 255], py * 4);
     });
     colours.set(trace, rgb);
@@ -140,6 +142,7 @@ export function SpectrumCanvas({
   const theme = useTheme();
   const palette = canvasPalette(theme);
   const pass = vizPalette(theme).status.pass;
+  const colour = theme === "dark" ? bone : boneR;
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
   const TOTAL_W = Math.max(420, Math.round(containerWidth || BASE_W));
   const PLOT_W = TOTAL_W - ML - MR;
@@ -193,12 +196,12 @@ export function SpectrumCanvas({
     if (!octx) return off;
     const data = octx.createImageData(256, 1);
     for (let px = 0; px < 256; px++) {
-      const [r, g, b] = boneR(px / 255);
+      const [r, g, b] = colour(px / 255);
       data.data.set([r, g, b, 255], px * 4);
     }
     octx.putImageData(data, 0, 0);
     return off;
-  }, []);
+  }, [colour]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -214,7 +217,7 @@ export function SpectrumCanvas({
     ctx.clearRect(0, 0, TOTAL_W, TOTAL_H);
     const X = (x: number) => ML + ((x - x0) / (x1 - x0)) * PLOT_W;
     const Y = (f: number) => MT + PLOT_H - ((f - f0) / (f1 - f0)) * PLOT_H;
-    putSpectra(ctx, spectra, columns, [x0, x1], [f0, f1], dpr, PLOT_W, PLOT_H);
+    putSpectra(ctx, spectra, columns, [x0, x1], [f0, f1], dpr, PLOT_W, PLOT_H, colour);
 
     ctx.save();
     ctx.beginPath();
@@ -290,7 +293,7 @@ export function SpectrumCanvas({
     ctx.rotate(-Math.PI / 2);
     ctx.fillText("Frequency (Hz)", 0, 0);
     ctx.restore();
-  }, [spectra, legend, columns, band, pass, palette, x0, x1, f0, f1, TOTAL_W, TOTAL_H, PLOT_W, PLOT_H]);
+  }, [spectra, legend, colour, columns, band, pass, palette, x0, x1, f0, f1, TOTAL_W, TOTAL_H, PLOT_W, PLOT_H]);
 
   // Over the plot: the receiver under the pointer, the frequency, its amplitude there; whether
   // it lies outside the band.

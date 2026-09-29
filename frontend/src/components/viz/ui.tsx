@@ -6,6 +6,7 @@ import {
   metricLabel,
   metricLimit,
   metricValue,
+  objectTitle,
   ORIGIN_LABELS,
   STATUS_LABELS,
   triggerLabel,
@@ -225,6 +226,8 @@ interface MetricRow {
   limit: string;
   judged: boolean;
   passed: boolean;
+  /** What it covers; empty when its log does not say. */
+  over: string;
 }
 
 /** A gate's metrics as rows, a measure held between a floor and a ceiling (the acceptance
@@ -254,6 +257,7 @@ function metricRows(metrics: Metric[]): MetricRow[] {
         limit: band(low, high),
         judged: true,
         passed: low.passed && high.passed,
+        over: metric.over ?? "",
       });
       return;
     }
@@ -264,6 +268,7 @@ function metricRows(metrics: Metric[]): MetricRow[] {
       limit: metricLimit(metric) || "reported",
       judged,
       passed: metric.passed,
+      over: metric.over ?? "",
     });
   });
   return rows;
@@ -277,7 +282,75 @@ function band(low: Metric, high: Metric): string {
   return `≥ ${unit && from.endsWith(` ${unit}`) ? from.slice(0, -unit.length - 1) : from}, ≤ ${to}`;
 }
 
-/** Each gate's metrics against their limits. */
+/** A gate's metrics by the object they describe (its signal, its spectrum), in the order
+ * measured; a log's older ones, one table without a title. */
+function byObject(metrics: Metric[]): [string, Metric[]][] {
+  const objects = new Map<string, Metric[]>();
+  for (const metric of metrics) {
+    const of = metric.of ?? "";
+    objects.set(of, [...(objects.get(of) ?? []), metric]);
+  }
+  return [...objects];
+}
+
+/** How many rows each row's coverage spans: the rows below it saying the same, 0 for them. */
+function overSpans(rows: MetricRow[]): number[] {
+  return rows.map((row, i) => {
+    if (i > 0 && rows[i - 1].over === row.over) return 0;
+    let span = 1;
+    while (i + span < rows.length && rows[i + span].over === row.over) span++;
+    return span;
+  });
+}
+
+/** One object's measures: each against its limit, what it covers said once for the rows it
+ * covers alike. */
+function MetricTable({ title, metrics }: { title: string; metrics: Metric[] }) {
+  const rows = metricRows(metrics);
+  const covers = rows.some((row) => row.over);
+  const spans = overSpans(rows);
+  // The same columns in every table, their values aligned from one to the next; a measure
+  // over the coverage's column when none says it.
+  return (
+    <div className="viz-table-wrap">
+      <table className="viz-table viz-measures">
+        {title && <caption>{title}</caption>}
+        <colgroup>
+          <col className="viz-col-measure" />
+          <col />
+          <col className="viz-col-num" />
+          <col className="viz-col-num" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th colSpan={covers ? 1 : 2}>Measure</th>
+            {covers && <th>Over</th>}
+            <th className="num">Value</th>
+            <th className="num">Limit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} className={row.judged && !row.passed ? "failed" : undefined}>
+              <td colSpan={covers ? 1 : 2}>{row.label}</td>
+              {covers && spans[i] > 0 && (
+                <td rowSpan={spans[i]} className="viz-over">
+                  {row.over}
+                </td>
+              )}
+              <td className="num">
+                {row.value} {row.judged ? (row.passed ? "✓" : "✕") : ""}
+              </td>
+              <td className="num">{row.limit}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Each gate's metrics against their limits, a table per object they describe. */
 export function GateTables({ gates }: { gates: GateView[] }) {
   // A curve picked by hand has nothing measured: its badges say so.
   const measured = gates.filter((gate) => !gate.by_hand);
@@ -295,28 +368,9 @@ export function GateTables({ gates }: { gates: GateView[] }) {
           {gate.metrics.length === 0 ? (
             <p className="viz-muted viz-small">Nothing measured.</p>
           ) : (
-            <div className="viz-table-wrap">
-              <table className="viz-table">
-                <thead>
-                  <tr>
-                    <th>Measure</th>
-                    <th className="num">Value</th>
-                    <th className="num">Limit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {metricRows(gate.metrics).map((row, i) => (
-                    <tr key={i} className={row.judged && !row.passed ? "failed" : undefined}>
-                      <td>{row.label}</td>
-                      <td className="num">
-                        {row.value} {row.judged ? (row.passed ? "✓" : "✕") : ""}
-                      </td>
-                      <td className="num">{row.limit}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            byObject(gate.metrics).map(([of, metrics]) => (
+              <MetricTable key={of} title={objectTitle(gate.gate, of)} metrics={metrics} />
+            ))
           )}
         </div>
       ))}
@@ -380,24 +434,24 @@ function changedText(parameters: Record<string, unknown>): string {
   return said.join(", ") || "—";
 }
 
-/** A card's details: each gate's metrics, then the attempts. */
+/** A card's details: each gate's measures, then its attempts, folded. */
 export function Details({ gates, attempts, children }: {
   gates: GateView[];
   attempts: AttemptSummary[];
   children?: ReactNode;
 }) {
   if (gates.length === 0 && attempts.length === 0 && !children) return null;
+  // The measures at once, the attempts folded.
   return (
-    <Fold title="Measures and attempts">
+    <>
       <GateTables gates={gates} />
-      {attempts.length > 0 && (
-        <div className="viz-section">
-          <h3 className="viz-h3">Attempts</h3>
+      {(attempts.length > 0 || children) && (
+        <Fold title="Attempts">
           <AttemptTable attempts={attempts} />
-        </div>
+          {children}
+        </Fold>
       )}
-      {children}
-    </Fold>
+    </>
   );
 }
 

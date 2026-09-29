@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from masw.io.paths import OUTPUT_DIR, PACKAGES, workspace
+from masw.io.quality.dispersion import measure_windows
 from masw.io.quality.records import measure_records
 from masw.models.processing import ProcessingRequest
 from sigpipe.masw.runs import RunManifest, Stopped, WindowOutcome, run_processing
@@ -72,12 +73,14 @@ def run_compute(
 
 
 def _measure(manifest: RunManifest) -> None:
-    """The measures of the run's preprocessed records, saved beside them: Visualization reads
-    them and never measures."""
+    """The measures of the run's preprocessed records and of its windows' stacked correlations,
+    saved beside them: Visualization reads them and never measures."""
+    run_folder = OUTPUT_DIR / manifest.profile.name / manifest.run_id
     try:
-        measure_records(OUTPUT_DIR / manifest.profile.name / manifest.run_id)
+        measure_records(run_folder)
+        measure_windows(run_folder)
     except OSError, ValueError:
-        logger.warning("The records of run %s were not measured", manifest.run_id, exc_info=True)
+        logger.warning("The run %s was not measured", manifest.run_id, exc_info=True)
 
 
 def window_error(run_folder: Path, outcome: WindowOutcome) -> WindowError:

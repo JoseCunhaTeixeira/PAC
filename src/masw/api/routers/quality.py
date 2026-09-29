@@ -15,6 +15,7 @@ from masw.io.quality.records import RecordCard, RecordGather, SavedSpectra
 from masw.io.quality.runs import ProfileRuns, RunCard
 from masw.io.quality.sources import WindowSources
 from masw.io.quality.view import Overview
+from sigpipe.dataio.selection_plotting import SelectionScores
 from sigpipe.masw.inversion.section import DEFAULT_MODEL, ModelName
 
 router = APIRouter(tags=["quality"])
@@ -129,6 +130,13 @@ def get_window_gather(
     """The stacked correlations a passive or passive-active window's image was made of, each
     trace at its receiver along the line."""
     return _found(lambda: dispersion.window_gather(folder, xmid, norm))
+
+
+@router.get("/quality/dispersion/selection/{folder:path}/{xmid}")
+def get_window_selection(folder: str, xmid: float) -> SelectionScores:
+    """A passive window's fk segment selection, as its job saved it: each segment's f-k ratio,
+    kept or not, around the threshold."""
+    return _found(lambda: dispersion.window_selection(folder, xmid))
 
 
 @router.get("/quality/dispersion/spectrum/{folder:path}/{xmid}")

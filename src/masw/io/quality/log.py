@@ -47,6 +47,8 @@ class Metric(BaseModel):
     bound: Literal["min", "max"] | None = None
     passed: bool
     unit: str = ""
+    of: str = ""  # the object it describes: signal, spectrum, image, ... ("": said by its name)
+    over: str = ""  # what it covers: "52 of 96 traces, within 63.35 m of the source"
 
 
 class Flag(BaseModel):

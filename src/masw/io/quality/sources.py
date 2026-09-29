@@ -22,7 +22,7 @@ from masw.io.quality.files import (
     shot_distances,
 )
 from masw.io.quality.log import LINE, QCLog, line_receivers, read_log
-from masw.io.quality.view import Sentence, flag_text, number, plural, span
+from masw.io.quality.view import REFUSALS, Sentence, flag_text, number, plural, span
 from sigpipe.masw.runs import RunManifest, window_folders
 from sigpipe.masw.windows import MASWWindow
 
@@ -309,7 +309,7 @@ def _record_reasons(log: QCLog | None, name: str) -> str:
     result = log.result(name, "preprocessing", "G1") if log is not None else None
     if result is None:
         return ""
-    names = dict.fromkeys(flag.name for flag in result.flags if flag.name != "budget_spent")
+    names = dict.fromkeys(flag.name for flag in result.flags if flag.name not in REFUSALS)
     return ", ".join(flag_text(name) for name in names)
 
 
