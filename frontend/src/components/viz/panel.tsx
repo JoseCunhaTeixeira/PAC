@@ -8,8 +8,8 @@ import {
   PulseIcon,
 } from "../icons";
 import { neighbours } from "./cells";
-import { STATE_MEANINGS } from "./format";
-import type { Card, Cell, Overview, Sentence, StageKey } from "./types";
+import { metricLabel, STATE_MEANINGS } from "./format";
+import type { Card, Cell, GateView, Overview, Sentence, StageKey } from "./types";
 import { Empty, ErrorBox, Fold, GateBadge, PartBadge, Sentences, SettingsList, Skeleton, StatusBadge } from "./ui";
 
 // What every stage's panel is made of: its summary, and the selected unit's card, with its
@@ -19,6 +19,18 @@ import { Empty, ErrorBox, Fold, GateBadge, PartBadge, Sentences, SettingsList, S
 
 // The marks said at once: what went wrong or needs a look.
 const LOUD = new Set<Sentence["mark"]>(["warn", "fail"]);
+
+/** A unit no gate judged (a run made by hand), its measures beyond the assistant's limits
+ * named in one warning, as a verdict would say them; none beyond, none said. */
+function beyondLimits(gates: GateView[]): Sentence | null {
+  const beyond = gates
+    .filter((gate) => gate.verdict === null && !gate.by_hand)
+    .flatMap((gate) => gate.metrics)
+    .filter((metric) => metric.threshold != null && metric.bound != null && !metric.passed);
+  if (beyond.length === 0) return null;
+  const names = [...new Set(beyond.map((metric) => metricLabel(metric.name)))];
+  return { mark: "warn", text: `Beyond the assistant's limits: ${names.join(", ")}.` };
+}
 
 export function StageHead({
   overview,
@@ -68,6 +80,7 @@ export function UnitCard({
   children,
   details,
   stage,
+  bare = false,
 }: {
   card: Card | null;
   error: string | null;
@@ -79,6 +92,9 @@ export function UnitCard({
   details?: ReactNode;
   /** The stage the card is of: what its state means there. */
   stage?: StageKey;
+  /** Its name and its neighbours alone above its displays, nothing else (a passive record's
+   * signal and spectrum). */
+  bare?: boolean;
 }) {
   if (error) return <ErrorBox message={error} />;
   if (!card) {
@@ -92,17 +108,14 @@ export function UnitCard({
     );
   }
   const { before, after } = neighbours(cells, card.key);
-  // Its neighbours holding a result, when it holds none: none when no unit of the stage does.
-  const nearest =
-    card.status === "none"
-      ? [before, after].filter((cell): cell is Cell => cell !== null && cell.status !== "none")
-      : [];
   const said = [...lead, ...card.sentences];
   // The verdict and the warnings at once, the rest folded; with neither, the first line shown.
+  // The measures in their tables, the sentences say what they do not.
+  const verdict = card.verdict ?? beyondLimits(card.gates);
   const loud = said.filter((one) => LOUD.has(one.mark));
   const quiet = said.filter((one) => !LOUD.has(one.mark));
-  const opener = card.verdict || loud.length ? [] : quiet.slice(0, 1);
-  const shown = [...(card.verdict ? [card.verdict] : []), ...opener, ...loud];
+  const opener = verdict || loud.length ? [] : quiet.slice(0, 1);
+  const shown = [...(verdict ? [verdict] : []), ...opener, ...loud];
   const folded = quiet.slice(opener.length);
   const gates = card.gates.filter((gate) => gate.verdict !== null || gate.by_hand);
   return (
@@ -110,13 +123,15 @@ export function UnitCard({
       <div className="viz-unit-head">
         {stage && <span className="card-icon">{STAGE_ICONS[stage]}</span>}
         <strong>{card.title}</strong>
-        {card.parts?.length
+        {bare
+          ? null
+          : card.parts?.length
           ? // Its checks said apart (a window's image, its curve): a badge each.
             card.parts.map((part) => <PartBadge key={part.label} part={part} />)
           : card.status !== "none" && (
               <StatusBadge status={card.status} meaning={stage ? STATE_MEANINGS[stage][card.status].full : undefined} />
             )}
-        {gates.length > 0 && (
+        {!bare && gates.length > 0 && (
           <span className="viz-gate-list">
             {gates.map((gate) => (
               <GateBadge key={gate.gate} gate={gate} />
@@ -146,34 +161,21 @@ export function UnitCard({
           </button>
         </span>
       </div>
-      <Sentences sentences={shown} />
-      {folded.length > 0 && (
+      {!bare && <Sentences sentences={shown} />}
+      {!bare && folded.length > 0 && (
         <div className="viz-more">
           <Fold title="More details">
             <Sentences sentences={folded} />
           </Fold>
         </div>
       )}
-      {nearest.length > 0 && (
-        <p className="viz-small viz-muted" style={{ margin: "10px 0 0" }}>
-          Nearest with a result:{" "}
-          {nearest.map((cell, i) => (
-            <span key={cell.key}>
-              {i > 0 && " · "}
-              <a href="#" onClick={(e) => (e.preventDefault(), onSelect(cell.key))}>
-                {cell.hover[0]}
-              </a>
-            </span>
-          ))}
-        </p>
-      )}
       {children}
-      {card.settings && card.settings.length > 0 && (
+      {!bare && card.settings && card.settings.length > 0 && (
         <Fold title="Settings, and why">
           <SettingsList settings={card.settings} />
         </Fold>
       )}
-      {details}
+      {!bare && details}
     </section>
   );
 }

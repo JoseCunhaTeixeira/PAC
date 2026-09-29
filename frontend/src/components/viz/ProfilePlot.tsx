@@ -83,7 +83,6 @@ export function ProfilePlot({
   const plotW = width - ML - MR;
   const bottom = WINDOW_Y + WINDOW_H;
   const axisTop = bottom + LANE.axisGap;
-  const height = axisTop + AXIS_H;
   const [mouse, setMouse] = useState<{ x: number; y: number } | null>(null);
   const down = useRef<{ x: number; y: number } | null>(null);
 
@@ -91,6 +90,10 @@ export function ProfilePlot({
     () => Object.entries(card.sources).map(([name, x]) => ({ name, x })).sort((a, b) => a.x - b.x),
     [card.sources],
   );
+  // A line without shots (passive): no shots' lane, everything drawn that much higher (its
+  // heights `lift` above the canvas's), as the computing pages' geometry.
+  const lift = shots.length > 0 ? 0 : LANE.receiverY - SHOT_Y;
+  const height = axisTop + AXIS_H - lift;
   const full = useMemo(() => lineExtent(card), [card]);
   // The gathers' zoom, within the line; the whole line without one.
   const x0 = xZoom ? Math.max(xZoom[0], full[0]) : full[0];
@@ -150,7 +153,7 @@ export function ProfilePlot({
     return null;
   }
 
-  const hit = mouse ? hitAt(mouse.x, mouse.y) : null;
+  const hit = mouse ? hitAt(mouse.x, mouse.y + lift) : null;
 
   const tooltip = useMemo((): Tip | null => {
     if (!hit) return null;
@@ -202,13 +205,14 @@ export function ProfilePlot({
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
+    ctx.translate(0, -lift);
     const X = (x: number) => ML + ((x - x0) / (x1 - x0)) * plotW;
 
     drawLaneLabels(ctx, axes.tick, shots.length > 0);
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(ML, 0, plotW, height);
+    ctx.rect(ML, lift, plotW, height);
     ctx.clip();
 
     // The selected window: a band down every row over its receivers, and the reach its shots
@@ -359,7 +363,7 @@ export function ProfilePlot({
 
     drawLineAxis(ctx, [x0, x1], plotW, axes, axisTop);
   }, [
-    width, height, plotW, bottom, axisTop, x0, x1, axes, palette, theme, shots, card, mode, selected, sources,
+    width, height, lift, plotW, bottom, axisTop, x0, x1, axes, palette, theme, shots, card, mode, selected, sources,
     shotUse, recordCells, windowCells, selectedWindow, stacked, cellW, hit,
   ]);
 
@@ -373,7 +377,7 @@ export function ProfilePlot({
     down.current = null;
     if (!at || Math.hypot(e.clientX - at.x, e.clientY - at.y) >= CLICK_PX) return;
     const { x, y } = logical(e);
-    const found = hitAt(x, y);
+    const found = hitAt(x, y + lift);
     if (!found) return;
     if (found.row === "shot") {
       const name = shots[found.index].name;

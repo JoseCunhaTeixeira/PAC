@@ -179,8 +179,15 @@ def gate_view(gate: str, result: GateResult | None, measured: Iterable[Metric] =
 FLAG_WORDS = {
     "rms_outliers": "amplitude off the offset decay",
     "low_snr": "low SNR",
+    "no_usable_band": "no usable band",
     "budget_spent": "retries spent",
+    "nothing_to_try": "nothing left to try",
+    "redone_once": "redone once, still short",
+    "uneven_depth_informed": "uneven depth informed",
 }
+# Why a gate refused a unit the retry it asked (PACo's budgets.budget_spent): said with the flags
+# that asked it, never as the unit's reason.
+REFUSALS = frozenset({"budget_spent", "nothing_to_try", "redone_once"})
 
 
 def flag_text(name: str) -> str:
@@ -250,7 +257,7 @@ def verdict_sentence(unit: str, *results: GateResult | None) -> Sentence | None:
     if status == "fail":
         rejected = [result for result in judged if result.verdict == "reject"]
         flags = [flag for result in rejected for flag in result.flags]
-        reason = next((flag for flag in flags if flag.name != "budget_spent"), None)
+        reason = next((flag for flag in flags if flag.name not in REFUSALS), None)
         why = f": {finding(reason.message)}" if reason is not None else "."
         return Sentence(
             mark="fail",

@@ -16,11 +16,13 @@ from typing import Any
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+from paco.qc.g1_signal import SignalThresholds, judge_signal
 
 from masw.api.main import app
 from masw.io.paths import OUTPUT_DIR, workspace
 from masw.io.quality.dispersion import CurveThresholds, curve_metrics
 from masw.io.quality.records import before_muting, signal_metrics, thresholds_of
+from masw.io.quality.view import DASH
 from sigpipe.base import (
     Coordinate,
     DispersionCurve,
@@ -36,6 +38,7 @@ from sigpipe.masw.inversion.window import (
 )
 from sigpipe.masw.presets import make_preset, resolve_preset
 from sigpipe.masw.profiles import load_profile
+from sigpipe.masw.quality.measures import SignalLimits, line_reach
 from sigpipe.masw.quality.signal import signal_windows
 
 client = TestClient(app)
@@ -192,7 +195,10 @@ def test_a_passive_window_stacks_every_record() -> None:
             json={
                 "profile": "noise",
                 "mode": "passive",
-                "overrides": {"masw": {"length": 6, "step": 6}},
+                "overrides": {
+                    "masw": {"length": 6, "step": 6},
+                    "selection": {"method": "fk", "threshold": 0.0},
+                },
                 "workers": 1,
             },
         ).json()
@@ -212,6 +218,23 @@ def test_a_passive_window_stacks_every_record() -> None:
     assert len(spectra["amplitude"]) == len(spectra["positions"]) > 1
     assert {len(one) for one in spectra["amplitude"]} == {len(spectra["freqs"])}
     assert max(max(one) for one in spectra["amplitude"]) == 1.0 and spectra["band_hz"] is None
+    # Its fk selection, as the job saved it: every segment's ratio, kept or not; measured on its
+    # card, in its table, not said again in a sentence.
+    selection = client.get(f"/quality/dispersion/selection/{job['run']}/{xmid}").json()
+    assert selection["threshold"] == 0.0 and selection["segments"] == len(selection["ratios"]) > 0
+    assert selection["kept_count"] == sum(selection["kept"])
+    window = client.get(f"/quality/dispersion/card/{job['run']}/{xmid}").json()
+    assert not any("fk selection" in text for text in _texts(window))
+    metrics = {one["name"]: one for gate in window["gates"] for one in gate["metrics"]}
+    assert metrics["fk_segments"]["value"] == selection["segments"]
+    assert metrics["fk_kept"]["value"] == round(selection["kept_share"], 4)
+    # Judged as G2 judges them: the share kept against its limit; the stacked correlations
+    # measured as a record is, from the virtual source, as the job saved them.
+    assert metrics["fk_kept"]["threshold"] == 0.2 and metrics["fk_kept"]["of"] == "selection"
+    snr = metrics["snr_db"]
+    assert snr["of"] == "signal" and snr["threshold"] == 6.0
+    assert "the virtual source's own aside" in snr["over"]
+    assert {"lateral_coherence", "usable_band_hz", "dead_traces"} <= set(metrics)
 
 
 def test_a_pac_run_shows_its_records_measures_without_verdicts(run: str) -> None:
@@ -232,16 +255,62 @@ def test_a_pac_run_shows_its_records_measures_without_verdicts(run: str) -> None
     ((gate),) = card["gates"]
     assert gate["gate"] == "G1" and gate["verdict"] is None
     names = [metric["name"] for metric in gate["metrics"]]
-    assert names[:4] == ["dead_traces", "clipped_traces", "nan_traces", "snr_db"]
+    assert names[:5] == ["dead_traces", "clipped_traces", "nan_traces", "rms_outliers", "snr_db"]
     assert card["attempts"] == [] and card["windows"] == ["xmid_2.50", "xmid_5.50", "xmid_8.50"]
-    assert _texts(card)[0].startswith("Median SNR")
+    # Its measures in their tables, by object; its sentences, what they do not say.
+    assert {metric["of"] for metric in gate["metrics"]} == {"signal", "spectrum"}
+    assert _texts(card) == [f"Stacked by 3 windows, xmid 2.5{DASH}8.5 m."]
     assert client.get(f"/quality/records/card/{run}/nope.mseed").status_code == 404
     # Its spectra, preprocessed, as the job saved them: each trace's, its usable band drawn.
     spectra = client.get(f"/quality/records/spectrum/{run}/1.mseed").json()
     assert len(spectra["positions"]) == len(spectra["amplitude"]) == 12
     assert spectra["freqs"][0] == 0.0 and spectra["band_hz"] is not None
     assert client.get(f"/quality/records/spectrum/{run}/nope.mseed").status_code == 404
+    # A run from before the spectra were saved: computed from the saved record, alike.
+    saved = OUTPUT_DIR / run / "records" / "2" / "Spectrum_0000.npz"
+    kept = saved.read_bytes()
+    stored = client.get(f"/quality/records/spectrum/{run}/2.mseed").json()
+    saved.unlink()
+    try:
+        computed = client.get(f"/quality/records/spectrum/{run}/2.mseed").json()
+    finally:
+        saved.write_bytes(kept)
+    assert computed["freqs"] == stored["freqs"] and computed["band_hz"] == stored["band_hz"]
+    assert all(
+        abs(a - b) <= 0.005
+        for one, other in zip(computed["amplitude"], stored["amplitude"], strict=True)
+        for a, b in zip(one, other, strict=True)
+    )
     assert client.get(f"/quality/dispersion/spectrum/{run}/2.5").status_code == 404  # active
+
+
+def test_pac_measures_a_record_as_the_assistants_g1_does(run: str) -> None:
+    # One definition (sigpipe's measure_signal): the job's saved measures are G1's, value for
+    # value, each saying what it covers, within the line's reach as G1's (line_reach); G1
+    # alone judges.
+    folder = OUTPUT_DIR / run / "records" / "1"
+    saved = json.loads((folder / "SignalMeasures_0000.json").read_text())["metrics"]
+    streams = [
+        load_stream([path])[0]
+        for path in sorted((OUTPUT_DIR / run).glob("records/*/Stream_0000.hdf5"))
+    ]
+    positions = [receiver.x for receiver in load_profile("shots", workspace()).receivers]
+    reach = line_reach(
+        ((one, 0.0) for one in streams), SignalLimits(), max(positions) - min(positions)
+    )
+    dispersion = json.loads((OUTPUT_DIR / run / "run.json").read_text())["preset"]["dispersion"]
+    g1 = judge_signal(
+        "1.mseed",
+        load_stream([folder / "Stream_0000.hdf5"])[0],
+        SignalThresholds(),
+        reach_m=reach,
+        image_band=(dispersion["fmin"], dispersion["fmax"]),
+    )
+
+    measured = [(one["name"], one["value"], one["passed"], one["of"], one["over"]) for one in saved]
+    assert measured == [(m.name, m.value, m.passed, m.of, m.over) for m in g1.metrics]
+    snr = next(one for one in saved if one["name"] == "snr_db")
+    assert snr["of"] == "signal" and "; in its usable band within the images', " in snr["over"]
 
 
 def test_a_muted_records_noise_is_measured_before_its_muting(run: str) -> None:
@@ -257,11 +326,13 @@ def test_a_muted_records_noise_is_measured_before_its_muting(run: str) -> None:
     muted = replace(stream, xt=np.where(windows.noise, 0.0, stream.xt))
 
     def snr(unmuted: tuple[Stream, float] | None = None) -> float | None:
-        metrics, _ = signal_metrics(muted, thresholds, True, unmuted)
+        metrics, _ = signal_metrics(muted, thresholds, active=True, unmuted=unmuted)
         return next(one.value for one in metrics if one.name == "snr_db")
 
-    own, _ = signal_metrics(stream, thresholds, True)
-    assert (snr() or 0.0) > 100  # a noise zeroed
+    own, _ = signal_metrics(stream, thresholds, active=True)
+    # Its noise zeroed, the SNR reads far over the record's own.
+    own_snr = next(one.value for one in own if one.name == "snr_db") or 0.0
+    assert (snr() or 0.0) > own_snr + 20
     assert snr((stream, 0.0)) == next(one.value for one in own if one.name == "snr_db")
     # The record before its muting, from its input, for a muted preset only.
     profile = load_profile("shots", workspace())

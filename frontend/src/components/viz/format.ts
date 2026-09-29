@@ -12,7 +12,8 @@ const METRIC_LABELS: Record<string, string> = {
   snr_db: "Median SNR",
   usable_band_hz: "Usable band width",
   lateral_coherence: "Neighbouring traces' coherence",
-  trigger_shift_s: "Trigger shift",
+  trigger_error_s: "Trigger error",
+  trigger_shift_s: "Trigger error", // its name before 2026-09-29
   trigger_scatter_s: "First breaks' scatter",
   energy_removed: "Energy the mute removed",
   pulse_s: "Shot pulse",
@@ -28,6 +29,10 @@ const METRIC_LABELS: Record<string, string> = {
   competing_ridges: "Columns with a second ridge",
   aliased_ridges: "Second ridges below the aliasing limit",
   band_share_of_usable: "Coherent band / usable band",
+  // a passive window's segments, by its fk selection
+  fk_segments: "Segments the fk selection judged",
+  fk_kept: "Segments it kept",
+  fk_flipped: "Segments it flipped",
   // G3, a pick
   sharpness: "Sharpness",
   prominence: "Prominence",
@@ -43,7 +48,8 @@ const METRIC_LABELS: Record<string, string> = {
   uncertainty: "Median uncertainty / velocity",
   near_offset: "Nearest shot's offset",
   // G4, the line's curves
-  misfit: "Misfit to the neighbours",
+  neighbour_misfit: "Misfit to the neighbours",
+  misfit: "Misfit to the neighbours", // its name before 2026-09-29
   sides_compared: "Sides compared",
   curves: "Curves",
   without_curve: "Windows without a curve",
@@ -63,7 +69,11 @@ const METRIC_LABELS: Record<string, string> = {
   autocorrelation: "Max lag-1 autocorrelation",
   samples_per_chain: "Samples a chain",
   at_bound: "Share at a prior's bound",
-  useful_depth: "Useful depth",
+  depth_informed: "Depth informed",
+  useful_depth: "Depth informed", // its name before 2026-09-29
+  depth_informed_spread: "Spread of the depths informed",
+  // Before 2026-09-29, G6 compared the models down to half their curve's longest wavelength.
+  useful_depth_spread: "Spread of the depths of investigation",
   contrast: "Least contrast between layers",
   // G7 and G8, a petrophysical model
   water_table: "Water table",
@@ -90,6 +100,27 @@ export const MODEL_LABELS: Record<string, string> = {
   smooth_best: "best, smooth",
 };
 
+// The objects a gate's measures describe, a table each; a window's signal, its stacked
+// correlations (the virtual shot's).
+const OBJECT_TITLES: Record<string, string> = {
+  signal: "Signal",
+  spectrum: "Spectrum",
+  selection: "fk selection",
+  image: "Image",
+  curve: "Curve",
+  model: "Model",
+};
+const WINDOW_OBJECTS: Record<string, string> = {
+  signal: "Stacked correlations",
+  spectrum: "Their spectrum",
+};
+
+/** The title of a gate's table of one object's measures; none for a log's older ones. */
+export function objectTitle(gate: string, of: string): string {
+  if (!of) return "";
+  return (gate === "G2" ? WINDOW_OBJECTS[of] : undefined) ?? OBJECT_TITLES[of] ?? capitalized(of);
+}
+
 export function metricLabel(name: string): string {
   return METRIC_LABELS[name] ?? name.replaceAll("_", " ");
 }
@@ -102,6 +133,7 @@ const SHARES = new Set([
   "competing_ridges",
   "aliased_ridges",
   "band_share_of_usable",
+  "fk_kept",
   "on_data",
   "constant_wavelength",
   "aliased_points",
@@ -111,6 +143,9 @@ const SHARES = new Set([
   "at_bound",
   "depth_spread",
   "misfit",
+  "neighbour_misfit",
+  "depth_informed_spread",
+  "useful_depth_spread",
   "energy_removed",
 ]);
 const BOOLEANS = new Set(["band_at_fmin", "band_at_fmax"]);

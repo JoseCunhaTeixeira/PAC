@@ -186,12 +186,16 @@ export function RecordsPanel({
 }) {
   const place = card ? { record: card.key } : null;
   const figures = useRunFigures(folder, place);
+  // A passive record (no shot): its signal and its spectrum, nothing else (the user,
+  // 2026-09-29).
+  const passive = card !== null && card.x === null;
   return (
     <>
       <StageHead overview={overview} error={overviewError} />
       <div className="viz-section">
         <UnitCard
           stage="records"
+          bare={passive}
           card={card}
           error={cardError}
           cells={overview?.cells ?? []}

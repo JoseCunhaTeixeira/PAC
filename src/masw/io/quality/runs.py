@@ -33,7 +33,7 @@ from masw.io.quality.log import (
     read_log,
 )
 from masw.io.quality.sources import near_field
-from masw.io.quality.view import Origin, Setting, flag_text, number, plural, span
+from masw.io.quality.view import REFUSALS, Origin, Setting, flag_text, number, plural, span
 from sigpipe.masw.inversion.section import is_inverted
 from sigpipe.masw.petro.window import MODEL_FILE
 from sigpipe.masw.picks import CURVES_FILE
@@ -398,7 +398,7 @@ def _records(manifest: RunManifest, log: QCLog | None) -> Setting:
 def _excluded(log: QCLog | None, name: str) -> str:
     """Record `name`, with the flags G1 left it out for (its latest, but the spent budget)."""
     result = log.result(name, "preprocessing", "G1") if log is not None else None
-    flags = [flag.name for flag in result.flags if flag.name != "budget_spent"] if result else []
+    flags = [flag.name for flag in result.flags if flag.name not in REFUSALS] if result else []
     return (
         f"{name} ({', '.join(flag_text(flag) for flag in dict.fromkeys(flags))})" if flags else name
     )

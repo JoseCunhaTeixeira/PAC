@@ -123,7 +123,8 @@ def fit_metrics(fit: ModelFit, thresholds: PetroThresholds) -> tuple[Metric, ...
             value=band.misfit,
             threshold=thresholds.max_misfit,
             bound="max",
-            passed=band.misfit is not None and band.misfit <= thresholds.max_misfit,
+            # A band with no point to weigh is not measured, as G7's.
+            passed=band.misfit is None or band.misfit <= thresholds.max_misfit,
         )
         for name, band in zip(names, fit.bands, strict=True)
     )
