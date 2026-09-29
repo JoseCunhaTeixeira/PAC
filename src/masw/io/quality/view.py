@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from masw.io.quality.log import Flag, GateResult, Metric, Verdict
+from masw.io.quality.log import LINE, Flag, GateResult, Metric, QCLog, Verdict
 
 # A unit's state on the strip: passed, warned or retried, failed or rejected, not there.
 type Status = Literal["pass", "warn", "fail", "none"]
@@ -93,19 +93,6 @@ class Track(BaseModel):
     bound: Literal["min", "max"] | None = None
 
 
-class Overview(BaseModel):
-    """A stage's units along the line."""
-
-    model_config = ConfigDict(frozen=True)
-
-    paco: bool  # a run the assistant judged: the cells are its gates' verdicts
-    summary: str
-    legend: dict[Status, str]  # what each color says here
-    cells: tuple[Cell, ...]
-    parts: tuple[PartLegend, ...] = ()  # the cells' parts, when they say their checks apart
-    track: Track | None = None
-
-
 class Sentence(BaseModel):
     """One line of a card."""
 
@@ -128,6 +115,22 @@ class GateView(BaseModel):
     verdict: Verdict | None
     metrics: tuple[Metric, ...]
     by_hand: bool = False
+
+
+class Overview(BaseModel):
+    """A stage's units along the line."""
+
+    model_config = ConfigDict(frozen=True)
+
+    paco: bool  # a run the assistant judged: the cells are its gates' verdicts
+    summary: str
+    legend: dict[Status, str]  # what each color says here
+    cells: tuple[Cell, ...]
+    parts: tuple[PartLegend, ...] = ()  # the cells' parts, when they say their checks apart
+    track: Track | None = None
+    # The line check's measures of the whole line (G1's of its receivers, G4's of its curves,
+    # G6's of its models, G8's of its soil columns), for a run the assistant judged.
+    gates: tuple[GateView, ...] = ()
 
 
 class Card(BaseModel):
@@ -169,10 +172,169 @@ def measured_status(metrics: Iterable[Metric]) -> Status:
 
 
 def gate_view(gate: str, result: GateResult | None, measured: Iterable[Metric] = ()) -> GateView:
-    """The gate's verdict and metrics; without a result, the unit's own measures."""
-    if result is not None:
-        return GateView(gate=gate, verdict=result.verdict, metrics=result.metrics)
-    return GateView(gate=gate, verdict=None, metrics=tuple(measured))
+    """The gate's verdict and metrics; without a result, the unit's own measures; each saying
+    what it describes and what it covers (said generally for a log from before they did)."""
+    metrics = result.metrics if result is not None else tuple(measured)
+    return GateView(
+        gate=gate,
+        verdict=result.verdict if result is not None else None,
+        metrics=tuple(covered(gate, metric) for metric in metrics),
+    )
+
+
+def line_gate(log: QCLog | None, stage: str, gate: str) -> tuple[GateView, ...]:
+    """What `gate` said of the whole line at `stage`, its latest check; none when the assistant
+    did not check the line."""
+    result = log.result(LINE, stage, gate) if log is not None else None
+    return (gate_view(gate, result),) if result is not None else ()
+
+
+# A line check's measures of the line, not of one unit against its neighbours.
+_LINE = frozenset(
+    {
+        "curves",
+        "without_curve",
+        "depth_spread",
+        "inverse_curves",
+        "models",
+        "without_model",
+        "depth_informed_spread",
+        "useful_depth_spread",
+        "water_table_min",
+        "water_table_max",
+        "off_decay_receivers",
+        "spectral_receivers",
+    }
+)
+_CHAINS = frozenset(
+    {"rhat", "ess", "autocorrelation", "acceptance", "samples_per_chain", "at_bound"}
+)
+_SPECTRUM = frozenset({"usable_band_hz", "spectral_outliers"})
+_CORRELATIONS = frozenset(
+    {"snr_db", "lateral_coherence", "dead_traces", "clipped_traces", "nan_traces",
+     "virtual_shot_snr_db"}
+)  # fmt: skip
+# What each measure covers, said generally: a log from before the measures said it (2026-09-29).
+_COVERS = {
+    "dead_traces": "the record's traces",
+    "clipped_traces": "the record's traces",
+    "nan_traces": "the record's traces",
+    "rms_outliers": "its live traces: the amplitude's decay with offset",
+    "snr_db": "its traces within the line's reach: the surface-wave window against the noise's",
+    "usable_band_hz": "its traces within the line's reach: 6 dB over the noise",
+    "lateral_coherence": "neighbouring pairs of traces, in the surface-wave window",
+    "pulse_s": "the traces nearest the shot",
+    "trigger_shift_s": "the first breaks",
+    "trigger_error_s": "the first breaks nearest the shot",
+    "trigger_scatter_s": "the first breaks",
+    "energy_removed": "the record, before and after its mute",
+    "spectral_outliers": "each trace against its neighbours' spectra",
+    "coherent_columns": "the image's columns",
+    "ridge_at_vmin": "the coherent columns: a peak at the grid's lowest velocity",
+    "ridge_at_vmax": "the coherent columns: a peak at the grid's highest velocity",
+    "band_at_fmin": "the coherent band against the image's lowest frequency",
+    "band_at_fmax": "the coherent band against the image's highest frequency",
+    "competing_ridges": "the coherent columns: a second ridge",
+    "aliased_ridges": "the columns with a second ridge: under 2 dx f",
+    "band_share_of_usable": "the coherent band over the records' usable band",
+    "virtual_shot_snr_db": "the stacked correlations",
+    "fk_segments": "the window's segments",
+    "fk_kept": "the window's segments",
+    "fk_flipped": "the window's segments",
+    "sharpness": "the pick's points on its image",
+    "prominence": "the pick's points on its image",
+    "on_data": "the pick's points on its image",
+    "constant_wavelength": "the pick's points on its image",
+    "n_points": "the pick's points kept on its ridge",
+    "aliased_points": "the curve's points: under twice the receiver spacing",
+    "beyond_reach_points": "the curve's points: over three window lengths",
+    "curve_points": "the pick resampled by wavelength",
+    "wavelength_ratio": "the curve's wavelengths",
+    "max_jump": "the curve's points: each step to the next by wavelength",
+    "air_wave_share": "the curve's points: at the air wave's speed",
+    "trend": "the curve's points: velocity against wavelength",
+    "uncertainty": "the curve's points with one",
+    "near_offset": "the window's nearest shot",
+    "misfit": "its neighbours on each side",
+    "neighbour_misfit": "its neighbours on each side",
+    "sides_compared": "its sides",
+    "water_table_jump": "its neighbours' water tables",
+    "misfit_layered": "every picked point, against the layered median's curve",
+    "rhat": "the models' Vs at the depths watched, over the chains",
+    "ess": "the models' Vs at the depths watched, over the chains",
+    "autocorrelation": "the models' Vs at the depths watched, over the chains",
+    "acceptance": "the chains' moves",
+    "samples_per_chain": "each chain, after its burn-in",
+    "at_bound": "each parameter's samples at a prior's bound",
+    "depth_informed": "the models' Vs spread, from the surface down",
+    "useful_depth": "the models' Vs spread, from the surface down",
+    "contrast": "the layered median's adjacent layers",
+    "water_table": "the soil column",
+    # The line checks'.
+    "off_decay_receivers": "the line's receivers: off the amplitude decay in most of the "
+    "records reaching them",
+    "spectral_receivers": "the line's receivers: off their neighbours' spectra in most of the "
+    "records reaching them",
+    "curves": "the line's windows: a curve G3 passed",
+    "without_curve": "the line's windows",
+    "depth_spread": "the curves' longest wavelengths: MAD over median",
+    "inverse_curves": "the curves: velocity falling with wavelength",
+    "models": "the line's windows: a model G5 passed",
+    "without_model": "the line's windows",
+    "depth_informed_spread": "the models' depths informed: MAD over median",
+    "useful_depth_spread": "the models' depths of investigation: MAD over median",
+    "water_table_min": "the soil columns",
+    "water_table_max": "the soil columns",
+}
+# ...where a measure's name is another gate's too.
+_GATE_COVERS = {("G8", "models"): "the line's windows: a soil column G7 passed"}
+
+
+def covered(gate: str, metric: Metric) -> Metric:
+    """`metric` saying what it describes and what it covers: as measured, or, from a log older
+    than that, the thing each gate measures and what the measure covers in general."""
+    if metric.of and metric.over:
+        return metric
+    name = metric.name
+    if name in _LINE:
+        of = "line"
+    elif gate in ("G4", "G6", "G8"):
+        of = "neighbours"
+    elif gate == "G5":
+        of = (
+            "chains"
+            if name in _CHAINS
+            else "fit"
+            if name.startswith(("misfit", "residual"))
+            else "model"
+        )
+    elif gate == "G7":
+        of = "soil" if name == "water_table" else "fit"
+    elif gate == "G3":
+        of = "curve"
+    elif gate == "G2":
+        of = (
+            "selection"
+            if name.startswith("fk_")
+            else "spectrum"
+            if name in _SPECTRUM
+            else "signal"
+            if name in _CORRELATIONS
+            else "image"
+        )
+    else:
+        of = "spectrum" if name in _SPECTRUM else "signal"
+    fit = (gate == "G7" and "soil column's") or "model's"
+    over = (
+        _GATE_COVERS.get((gate, name))
+        or _COVERS.get(name)
+        or (
+            f"the band's picked points, against the {fit} curve"
+            if name.startswith(("misfit_", "residual_"))
+            else ""
+        )
+    )
+    return metric.model_copy(update={"of": metric.of or of, "over": metric.over or over})
 
 
 # The flags whose names do not say what they found.

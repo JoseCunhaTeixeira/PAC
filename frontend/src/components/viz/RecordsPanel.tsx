@@ -7,7 +7,7 @@ import { LineGather, type GatherData } from "./LineGather";
 import { StageHead, UnitCard } from "./panel";
 import type { Overview, RecordCard } from "./types";
 import { runFigures, useRunFigures } from "./runFigures";
-import { Details, Empty, PlotHead, SavedFigures, Skeleton } from "./ui";
+import { Details, Empty, GateTables, PlotHead, SavedFigures, Skeleton } from "./ui";
 import { useJson } from "./useJson";
 
 // The records: the selected record's card (its signal, what the checks said and redid, the
@@ -187,7 +187,8 @@ export function RecordsPanel({
   const place = card ? { record: card.key } : null;
   const figures = useRunFigures(folder, place);
   // A passive record (no shot): its signal and its spectrum, nothing else (the user,
-  // 2026-09-29).
+  // 2026-09-29), and its measures folded in their menu ("all measures inside a menu ... for
+  // every view", the user, later that day).
   const passive = card !== null && card.x === null;
   return (
     <>
@@ -201,12 +202,15 @@ export function RecordsPanel({
           cells={overview?.cells ?? []}
           onSelect={onSelect}
           details={
-            card && (
+            card &&
+            (passive ? (
+              <GateTables gates={card.gates} />
+            ) : (
               <>
                 <Details gates={card.gates} attempts={card.attempts} />
                 <SavedFigures figures={runFigures(folder, figures, "", place ?? {})} />
               </>
-            )
+            ))
           }
         >
           {card && (

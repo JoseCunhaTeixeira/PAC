@@ -41,6 +41,7 @@ from masw.io.quality.view import (
     Track,
     flag_text,
     gate_view,
+    line_gate,
     measured_status,
     number,
     plural,
@@ -88,6 +89,7 @@ from sigpipe.masw.inversion.window import (
     series_order,
     series_priors,
 )
+from sigpipe.masw.quality.model import ModelLimits, measure_model, model_depth
 from sigpipe.masw.runs import window_folders, xmid_of
 
 logger = logging.getLogger(__name__)
@@ -132,30 +134,6 @@ FIGURES: dict[FigureName, str] = {
     "dispersion_image": IMAGE_FIGURE,
     "chains": CHAINS_FIGURE,
 }
-
-
-class InversionThresholds(BaseModel):
-    """G5's limits: the assistant's defaults, or those the run's checks used."""
-
-    model_config = ConfigDict(frozen=True, extra="ignore")
-
-    max_misfit: float = 2.0  # in any band of wavelength
-    n_bands: int = 3
-    max_rhat: float = 1.1
-    min_ess: float = 200.0  # of the models' Vs at any depth watched
-    min_samples_per_chain: int = 100
-    # %: when the data choose the layers, the chains' median acceptance outside it is a warning
-    # (the user, 2026-09-29); the layers given (DREAM, near 5 % by design) report it only.
-    acceptance_band: tuple[float, float] = (20.0, 30.0)
-    bound_edge: float = 0.02  # of a prior's range, at each bound
-    max_at_bound: float = 0.1  # share of a parameter's samples within that edge
-    # The depth informed ends where the kept models' relative uncertainty of Vs, U(z) =
-    # (P90 - P10) / (2 P50), gets above this (sigpipe's useful_depth).
-    useful_uncertainty: float = 0.25
-    min_useful_share: float = 0.8  # of the model's depth
-    max_vs_drop: float = 0.5
-    plausible_vs: tuple[float, float] = (50.0, 2_500.0)
-    min_contrast: float = 0.05
 
 
 class VsProfile(BaseModel):
@@ -284,8 +262,10 @@ class Chains(BaseModel):
     marginals: tuple[Marginal, ...]
 
 
-def thresholds_of(run_folder: Path) -> InversionThresholds:
-    return InversionThresholds.model_validate(config_section(run_folder, "model"))
+def thresholds_of(run_folder: Path) -> ModelLimits:
+    """G5's limits (sigpipe's ModelLimits): the assistant's defaults, or those the run's checks
+    used."""
+    return ModelLimits.model_validate(config_section(run_folder, "model"))
 
 
 def window_measures(folder: Path) -> tuple[WindowParameters, InversionMeasures | None] | None:
@@ -297,14 +277,6 @@ def window_measures(folder: Path) -> tuple[WindowParameters, InversionMeasures |
     if not (folder / PARAMETERS_FILE).exists() or not (folder / SAMPLES_FILE).exists():
         return None
     return load_parameters(folder / PARAMETERS_FILE), saved_measures(folder)
-
-
-def model_depth(parameters: InversionParameters) -> float:
-    """The deepest the half-space's top may be: every layer above it at its thickest; the
-    deepest interface allowed when the data chose the layers (resolved)."""
-    if parameters.layering == "free":
-        return round(parameters.free.depth_max or 0.0, 2)
-    return round(sum(layer.bounds[1] for layer in parameters.thickness_layers), 2)
 
 
 def step_factor(tuning: tuple[tuple[float, float], ...]) -> float | None:
@@ -321,96 +293,15 @@ def step_factor(tuning: tuple[tuple[float, float], ...]) -> float | None:
 
 
 def model_metrics(
-    parameters: InversionParameters, measures: InversionMeasures, thresholds: InversionThresholds
+    parameters: InversionParameters, measures: InversionMeasures, thresholds: ModelLimits
 ) -> tuple[Metric, ...]:
-    """G5's measures of a window's model against G5's limits, as G5 names them: its fit by band,
-    how its chains converged, the samples piled at a bound, the depth it is informed down to."""
-    monitored = measures.fits[0]
-    names = BAND_NAMES.get(
-        len(monitored.bands), tuple(f"band{i + 1}" for i in range(len(monitored.bands)))
+    """A window's model measured as G5 measures it (sigpipe's measure_model: one definition),
+    each saying what it covers: its fit by band, its chains, how deep the data inform it, its
+    layers' contrast."""
+    report = measure_model(
+        measures, thresholds, model_depth(parameters), parameters.layering == "free"
     )
-    metrics = [
-        Metric(
-            name=f"misfit_{name}",
-            value=band.misfit,
-            threshold=thresholds.max_misfit,
-            bound="max",
-            # A band with no point to weigh is not measured, as G5's and G7's.
-            passed=band.misfit is None or band.misfit <= thresholds.max_misfit,
-        )
-        for name, band in zip(names, monitored.bands, strict=True)
-    ]
-    rhat, ess, acceptance = _convergence(measures)
-    correlations = [
-        value
-        for name, value in measures.autocorrelation.items()
-        if value is not None and name in _judged(measures)
-    ]
-    piled = measures.at_bounds[0] if measures.at_bounds else None
-    depth = model_depth(parameters)
-    useful = measures.useful_depth_m
-    metrics += [
-        Metric(
-            name="rhat",
-            value=rhat,
-            threshold=thresholds.max_rhat,
-            bound="max",
-            passed=rhat is not None and rhat <= thresholds.max_rhat,
-        ),
-        Metric(
-            name="ess",
-            value=ess,
-            threshold=thresholds.min_ess,
-            bound="min",
-            passed=ess is None or ess >= thresholds.min_ess,
-        ),
-        Metric(
-            name="autocorrelation",
-            value=max(correlations) if correlations else None,
-            passed=True,
-        ),
-        # A warning outside its band when the data chose the layers (the user, 2026-09-29): one
-        # row of two; reported for the layers given.
-        *(
-            (
-                Metric(
-                    name="acceptance",
-                    value=acceptance,
-                    threshold=limit,
-                    bound=bound,
-                    passed=acceptance is None
-                    or (acceptance >= limit if bound == "min" else acceptance <= limit),
-                    unit="%",
-                )
-                for limit, bound in zip(thresholds.acceptance_band, ("min", "max"), strict=True)
-            )
-            if parameters.layering == "free"
-            else (Metric(name="acceptance", value=acceptance, passed=True, unit="%"),)
-        ),
-        Metric(
-            name="at_bound",
-            value=piled.share if piled else None,
-            threshold=thresholds.max_at_bound,
-            bound="max",
-            passed=piled is None or piled.share <= thresholds.max_at_bound,
-        ),
-    ]
-    if informed_depth(measures) is not None:
-        # Judged as G5 judges it: not when the data chose the layers, the deepest allowed then
-        # the curve's reach whatever the data inform.
-        metrics.append(
-            Metric(
-                name="depth_informed",
-                value=useful,
-                threshold=round(thresholds.min_useful_share * depth, 2),
-                bound="min",
-                passed=useful is None
-                or useful >= thresholds.min_useful_share * depth
-                or parameters.layering == "free",
-                unit="m",
-            )
-        )
-    return tuple(metrics)
+    return tuple(Metric(**one.model_dump()) for one in report.measures)
 
 
 def inversion_overview(folder: str) -> Overview:
@@ -511,6 +402,7 @@ def inversion_overview(folder: str) -> Overview:
         },
         cells=tuple(cells),
         track=Track(label="Depth informed, of the depth modelled (m)", short="Depth", kind="depth"),
+        gates=line_gate(log, "inversion", "G6"),
     )
 
 
@@ -816,7 +708,7 @@ def _not_inverted(
 
 
 def _depth_sentences(
-    parameters: InversionParameters, measures: InversionMeasures, thresholds: InversionThresholds
+    parameters: InversionParameters, measures: InversionMeasures, thresholds: ModelLimits
 ) -> list[Sentence]:
     """How deep the model goes, and how much of it the data inform: where the kept models'
     relative uncertainty of Vs, U(z) = (P90 - P10) / (2 P50), gets above a limit, but at an
@@ -853,7 +745,7 @@ def _depth_sentences(
 
 
 def _fit_sentences(
-    measures: InversionMeasures, thresholds: InversionThresholds, model: ModelName
+    measures: InversionMeasures, thresholds: ModelLimits, model: ModelName
 ) -> list[Sentence]:
     """How `model` fits its curve when measured, else the monitored model, named."""
     fit = next((one for one in measures.fits if one.model == model), measures.fits[0])
@@ -889,7 +781,7 @@ def _fit_sentences(
     return said
 
 
-def _convergence_sentence(measures: InversionMeasures, thresholds: InversionThresholds) -> Sentence:
+def _convergence_sentence(measures: InversionMeasures, thresholds: ModelLimits) -> Sentence:
     rhat, ess, acceptance = _convergence(measures)
     agree = rhat is not None and rhat <= thresholds.max_rhat
     enough = ess is None or ess >= thresholds.min_ess

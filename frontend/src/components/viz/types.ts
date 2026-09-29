@@ -147,6 +147,9 @@ export interface Overview {
   track: Track | null;
   /** The cells' parts, when they say their checks apart. */
   parts?: PartLegend[];
+  /** The line check's measures of the whole line: G1's of its receivers, G4's of its curves,
+   * G6's of its models, G8's of its soil columns. */
+  gates?: GateView[];
 }
 
 export interface Metric {

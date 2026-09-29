@@ -9,12 +9,13 @@ middle: the dispersion strip of Visualization, and the selected window's card.""
 import logging
 from collections import Counter
 from collections.abc import Callable, Mapping
+from functools import partial
 from itertools import pairwise
 from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from masw.io.paths import workspace
 from masw.io.pick_origin import Origin, assistant_picked, pick_origin
@@ -61,8 +62,10 @@ from masw.io.quality.view import (
     Setting,
     Status,
     Track,
+    covered,
     flag_text,
     gate_view,
+    line_gate,
     measured_status,
     number,
     plural,
@@ -82,13 +85,14 @@ from sigpipe.base.stream import Stream
 from sigpipe.dataio.selection_plotting import SelectionScores, load_selection
 from sigpipe.dataio.stream.loading import load_stream
 from sigpipe.masw.picks import load_curves
-from sigpipe.masw.pipelines import window_correlations
+from sigpipe.masw.pipelines import PREPROCESSED, window_correlations
 from sigpipe.masw.profiles import Profile, ProfileError, load_profile
-from sigpipe.masw.quality.image import aliased, coherent_columns, competing_ridges, edge_peaks
+from sigpipe.masw.quality.curve import CurveLimits, measure_curve, pick_of
+from sigpipe.masw.quality.image import ImageLimits, coherent_columns, measure_image
 from sigpipe.masw.quality.measures import SignalLimits, measure_signal, selection_measures
 from sigpipe.masw.runs import RunManifest, load_image, window_folders, xmid_of
 from sigpipe.masw.runs.finding import IMAGE_FILE
-from sigpipe.masw.windows import MASWWindow
+from sigpipe.masw.windows import MASWWindow, nearest_offset
 
 logger = logging.getLogger(__name__)
 
@@ -100,47 +104,11 @@ WINDOW_STREAM = "Stream_0000.hdf5"
 UNITS = {"fmin": "Hz", "fmax": "Hz", "vmin": "m/s", "vmax": "m/s", "wavelength_step": "m"}
 
 
-class ImageThresholds(BaseModel):
-    """G2's limits: the assistant's defaults, or those the run's checks used."""
-
-    model_config = ConfigDict(frozen=True, extra="ignore")
-
-    coherent_level: float = 0.3  # of the way from the noise floor to 1
-    min_coherent_columns: float = 0.5
-    edge_share: float = 0.02
-    max_edge_columns: float = 0.2
-    competing_ratio: float = 0.7
-    competing_separation: float = 0.15
-    max_competing_columns: float = 0.7
-    vmin_floor: float = 30.0
-
-
-class PickThresholds(BaseModel):
-    """The limits of G3's measures of the pick itself."""
-
-    model_config = ConfigDict(frozen=True, extra="ignore")
-
-    min_sharpness: float = 0.8
-    min_prominence: float = 0.5
-    min_on_data: float = 0.6
-    max_constant_wavelength: float = 0.4
-
-
-class CurveThresholds(BaseModel):
-    """G3's limits: the assistant's defaults, or those the run's checks used."""
-
-    model_config = ConfigDict(frozen=True, extra="ignore")
-
-    metrics: PickThresholds = Field(default_factory=PickThresholds)
-    max_jump: float = 0.3
-    min_points: int = 4
-
-
 class DispersionThresholds(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    image: ImageThresholds
-    curve: CurveThresholds
+    image: ImageLimits  # G2's, sigpipe's: an image measured as G2 measures it
+    curve: CurveLimits  # G3's, sigpipe's
 
 
 class CurveStats(BaseModel):
@@ -168,8 +136,8 @@ class DispersionCard(Card):
 
 def thresholds_of(run_folder: Path) -> DispersionThresholds:
     return DispersionThresholds(
-        image=ImageThresholds.model_validate(config_section(run_folder, "image")),
-        curve=CurveThresholds.model_validate(config_section(run_folder, "curve")),
+        image=ImageLimits.model_validate(config_section(run_folder, "image")),
+        curve=CurveLimits.model_validate(config_section(run_folder, "curve")),
     )
 
 
@@ -200,7 +168,14 @@ def dispersion_overview(folder: str) -> Overview:
             origins[picked_by] += 1
         g2, g3, g4 = _results(log, unit, picked_by)
         stats = curve_stats(curve) if curve is not None else None
-        image, picks = _states(g2, g3, g4, curve, picked_by, thresholds, (None, None))
+        image, picks = _states(
+            g2,
+            g3,
+            g4,
+            curve,
+            picked_by,
+            partial(_saved_curve_measures, window, curve, thresholds),
+        )
         # The image's state only when the assistant checked the images.
         parts = (image, picks) if log is not None else (picks,)
         present.update(enumerate(parts))
@@ -261,6 +236,7 @@ def dispersion_overview(folder: str) -> Overview:
         cells=tuple(cells),
         parts=_legends(paco, present),
         track=Track(label="Longest wavelength picked (m)", short="Longest λ", kind="value"),
+        gates=line_gate(log, "picking", "G4"),
     )
 
 
@@ -293,12 +269,11 @@ def _states(
     g4: GateResult | None,
     curve: DispersionCurve | None,
     picked_by: Origin | None,
-    thresholds: DispersionThresholds,
-    limits: tuple[float | None, float | None],
+    measured: Callable[[], tuple[Metric, ...]],
 ) -> tuple[PartState, PartState]:
     """A window's image and curve apart: its image by G2's verdict (none: not checked); its curve
     by hand, none (no curve), by G3's and G4's verdicts, or by its measures against their
-    limits, the wavelengths' among them."""
+    limits (`measured`, when no check judged it)."""
     image: PartState = verdict_status(g2) if g2 is not None else "none"
     if curve is None:
         return image, "none"
@@ -306,7 +281,26 @@ def _states(
         return image, "hand"
     if g3 is not None or g4 is not None:
         return image, verdict_status(g3, g4)
-    return image, measured_status(curve_metrics(curve, thresholds.curve, *limits))
+    return image, measured_status(measured())
+
+
+def _saved_curve_measures(
+    window: Path, curve: DispersionCurve | None, thresholds: DispersionThresholds
+) -> tuple[Metric, ...]:
+    """The measures of a window's saved curve against G3's limits, on its image; none without
+    the image."""
+    if curve is None or not (window / IMAGE_FILE).exists():
+        return ()
+    return curve_metrics(load_image(window), curve, thresholds.curve, _nearest(window))
+
+
+def _nearest(window: Path) -> float | None:
+    """The distance from the window's nearest shot to its receivers (sigpipe's nearest_offset,
+    G3's)."""
+    path = window / "window.json"
+    if not path.exists():
+        return None
+    return nearest_offset(MASWWindow.model_validate_json(path.read_text()))
 
 
 def _part_line(
@@ -366,7 +360,11 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
     g2, g3, g4 = _results(log, unit, picked_by)
     lambda_min = min_resolvable_wavelength(image.acquisition) if image is not None else None
     lambda_max = longest_reached_wavelength(image.acquisition) if image is not None else None
-    measured_image = image_metrics(image, thresholds.image) if image is not None else ()
+    measured_image = (
+        image_metrics(image, thresholds.image, records_band(run_folder, manifest, window))
+        if image is not None
+        else ()
+    )
     band = (
         g2.kept.band_hz
         if g2 is not None
@@ -377,8 +375,8 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
     curve_measures = (
         g3.metrics
         if g3 is not None
-        else curve_metrics(m0, thresholds.curve, lambda_min, lambda_max)
-        if m0 is not None
+        else curve_metrics(image, m0, thresholds.curve, _nearest(window))
+        if m0 is not None and image is not None
         else ()
     )
     said: list[Sentence] = []
@@ -429,9 +427,15 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         )
     ]
     if by_hand:
-        # The user's curve: passed as it is, and not checked along the line.
+        # The user's curve: passed as it is, and not checked along the line; measured as G3
+        # measures a pick.
         gates += [
-            GateView(gate="G3", verdict="pass", metrics=(), by_hand=True),
+            GateView(
+                gate="G3",
+                verdict="pass",
+                metrics=tuple(covered("G3", metric) for metric in curve_measures),
+                by_hand=True,
+            ),
             GateView(gate="G4", verdict=None, metrics=(), by_hand=True),
         ]
     else:
@@ -440,8 +444,7 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
             gates.append(gate_view("G4", g4))
     # Its image and its curve apart, as its cell's parts: the image's only when the assistant
     # checked the images.
-    limits = (lambda_min, lambda_max)
-    image_state, curve_state = _states(g2, g3, g4, m0, picked_by, thresholds, limits)
+    image_state, curve_state = _states(g2, g3, g4, m0, picked_by, lambda: curve_measures)
     parts = (Part(label="image", state=image_state),) if log is not None else ()
     return DispersionCard(
         key=unit,
@@ -468,7 +471,7 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         if manifest is not None
         else (),
         band_hz=band,
-        wavelength_limits_m=limits,
+        wavelength_limits_m=(lambda_min, lambda_max),
     )
 
 
@@ -667,7 +670,7 @@ def _line_settings(
 
 
 def coherent_band(
-    image: DispersionImage, thresholds: ImageThresholds
+    image: DispersionImage, thresholds: ImageLimits
 ) -> tuple[tuple[float, float] | None, float]:
     """The band of the image's coherent columns, and their share of its columns."""
     coherent = coherent_columns(image, thresholds.coherent_level)
@@ -678,80 +681,36 @@ def coherent_band(
     return (round(float(fs.min()), 2), round(float(fs.max()), 2)), share
 
 
-def image_metrics(image: DispersionImage, thresholds: ImageThresholds) -> tuple[Metric, ...]:
-    """sigpipe's measures of the image against G2's limits, as G2 names them and says what
-    they describe."""
-    coherent = coherent_columns(image, thresholds.coherent_level)
-    n_coherent = int(coherent.sum())
-    share = n_coherent / max(coherent.size, 1)
-    metrics = [
-        Metric(
-            of="image",
-            name="coherent_columns",
-            value=round(share, 3),
-            threshold=thresholds.min_coherent_columns,
-            bound="min",
-            passed=share >= thresholds.min_coherent_columns,
-        )
+def image_metrics(
+    image: DispersionImage, limits: ImageLimits, usable_band: tuple[float, float] | None = None
+) -> tuple[Metric, ...]:
+    """The image's measures as G2 measures it (sigpipe's measure_image: one definition), each
+    saying what it covers; with the records' `usable_band`, the coherent band's share of it."""
+    return tuple(
+        Metric(**one.model_dump()) for one in measure_image(image, limits, usable_band).measures
+    )
+
+
+def records_band(
+    run_folder: Path, manifest: RunManifest | None, window: Path
+) -> tuple[float, float] | None:
+    """The band every record of `window` keeps usable, as PAC's job measured them (G2's
+    shared_band): the highest low edge, the lowest high edge; None when none says one."""
+    path = window / "window.json"
+    if manifest is None or not path.exists():
+        return None
+    selected = MASWWindow.model_validate_json(path.read_text()).selected_files
+    folders = {record.name: record.folder for record in manifest.records}
+    bands = [
+        band
+        for one in selected
+        if one.name in folders
+        and (band := saved_measures(run_folder / folders[one.name] / PREPROCESSED)[1]) is not None
     ]
-    if n_coherent == 0:
-        return tuple(metrics)
-    low, high = edge_peaks(image, coherent, thresholds.edge_share, thresholds.vmin_floor)
-    for name, count in (("ridge_at_vmin", low), ("ridge_at_vmax", high)):
-        metrics.append(
-            Metric(
-                of="image",
-                name=name,
-                value=round(count / n_coherent, 3),
-                threshold=thresholds.max_edge_columns,
-                bound="max",
-                passed=count / n_coherent <= thresholds.max_edge_columns,
-            )
-        )
-    rows = np.flatnonzero(coherent)
-    for name, touches in (
-        ("band_at_fmin", rows[0] == 0),
-        ("band_at_fmax", rows[-1] == coherent.size - 1),
-    ):
-        metrics.append(
-            Metric(
-                of="image",
-                name=name,
-                value=float(touches),
-                threshold=0,
-                bound="max",
-                passed=not touches,
-            )
-        )
-    competing = competing_ridges(
-        image,
-        coherent,
-        thresholds.competing_ratio,
-        thresholds.competing_separation,
-        thresholds.vmin_floor,
-    )
-    competing_share = int(competing.sum()) / n_coherent
-    metrics.append(
-        Metric(
-            of="image",
-            name="competing_ridges",
-            value=round(competing_share, 3),
-            threshold=thresholds.max_competing_columns,
-            bound="max",
-            passed=competing_share <= thresholds.max_competing_columns,
-        )
-    )
-    # Reported only: which of the second ridges lie below the aliasing limit.
-    alias = aliased(image, competing, thresholds.vmin_floor)
-    metrics.append(
-        Metric(
-            of="image",
-            name="aliased_ridges",
-            value=round(int(alias.sum()) / max(int(competing.sum()), 1), 3),
-            passed=True,
-        )
-    )
-    return tuple(metrics)
+    if not bands:
+        return None
+    low, high = max(band[0] for band in bands), min(band[1] for band in bands)
+    return (low, high) if low < high else None
 
 
 def curve_stats(curve: DispersionCurve) -> CurveStats:
@@ -767,66 +726,15 @@ def curve_stats(curve: DispersionCurve) -> CurveStats:
 
 
 def curve_metrics(
+    image: DispersionImage,
     curve: DispersionCurve,
-    thresholds: CurveThresholds,
-    lambda_min: float | None,
-    lambda_max: float | None = None,
+    limits: CurveLimits,
+    nearest_offset: float | None = None,
 ) -> tuple[Metric, ...]:
-    """What the curve's file gives against G3's limits, as G3 names them: its points, the
-    points under `lambda_min` (the aliasing zone) and over `lambda_max` (beyond the window's
-    reach), the largest step between neighbours by wavelength (a jump onto another mode), its
-    median uncertainty."""
-    vs = np.asarray(curve.vs, dtype=float)
-    lengths = wavelengths(curve)
-    order = np.argsort(lengths)
-    by_length = vs[order]
-    jump = float(np.max(np.abs(np.diff(by_length)) / by_length[:-1])) if vs.size > 1 else 0.0
-    metrics = [
-        Metric(
-            name="curve_points",
-            value=int(vs.size),
-            threshold=thresholds.min_points,
-            bound="min",
-            passed=vs.size >= thresholds.min_points,
-        ),
-        Metric(
-            name="max_jump",
-            value=round(jump, 3),
-            threshold=thresholds.max_jump,
-            bound="max",
-            passed=jump <= thresholds.max_jump,
-        ),
-    ]
-    # A point on a limit is within it (a curve resampled every metre can hold one at exactly
-    # twice a 1.5 m spacing, which its float32 values put a hair under).
-    if lambda_min is not None:
-        below = float(np.mean((lengths < lambda_min) & ~np.isclose(lengths, lambda_min)))
-        metrics.append(
-            Metric(
-                name="aliased_points",
-                value=round(below, 3),
-                threshold=0,
-                bound="max",
-                passed=below == 0,
-            )
-        )
-    if lambda_max is not None:
-        beyond = float(np.mean((lengths > lambda_max) & ~np.isclose(lengths, lambda_max)))
-        metrics.append(
-            Metric(
-                name="beyond_reach_points",
-                value=round(beyond, 3),
-                threshold=0,
-                bound="max",
-                passed=beyond == 0,
-            )
-        )
-    uncertainty = _uncertainty(curve, vs)
-    if uncertainty is not None:
-        # Reported, as G3 does (the user, 2026-09-29): the picker caps each point's at 0.4 of its
-        # velocity, and G5's depth informed judges what a loose curve does to the model.
-        metrics.append(Metric(name="uncertainty", value=uncertainty, passed=True))
-    return tuple(metrics)
+    """A saved curve's measures as G3 measures a pick (sigpipe's measure_curve: one definition),
+    sampled as a pick is on its image (pick_of), each saying what it covers."""
+    report = measure_curve(image, pick_of(curve, image), limits, nearest_offset)
+    return tuple(Metric(**one.model_dump()) for one in report.measures)
 
 
 def _uncertainty(curve: DispersionCurve, vs: np.ndarray) -> float | None:

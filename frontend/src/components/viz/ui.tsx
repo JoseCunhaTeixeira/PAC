@@ -305,7 +305,7 @@ function overSpans(rows: MetricRow[]): number[] {
 
 /** One object's measures: each against its limit, what it covers said once for the rows it
  * covers alike. */
-function MetricTable({ title, metrics }: { title: string; metrics: Metric[] }) {
+function MetricTable({ metrics }: { metrics: Metric[] }) {
   const rows = metricRows(metrics);
   const covers = rows.some((row) => row.over);
   const spans = overSpans(rows);
@@ -314,7 +314,6 @@ function MetricTable({ title, metrics }: { title: string; metrics: Metric[] }) {
   return (
     <div className="viz-table-wrap">
       <table className="viz-table viz-measures">
-        {title && <caption>{title}</caption>}
         <colgroup>
           <col className="viz-col-measure" />
           <col />
@@ -350,31 +349,39 @@ function MetricTable({ title, metrics }: { title: string; metrics: Metric[] }) {
   );
 }
 
-/** Each gate's metrics against their limits, a table per object they describe. */
+/** A card's measures in one menu, like its settings: a submenu for each thing they measure (a
+ * record's signal, its spectrum; a window's image, its curve), its gate's verdict beside it. */
 export function GateTables({ gates }: { gates: GateView[] }) {
-  // A curve picked by hand has nothing measured: its badges say so.
-  const measured = gates.filter((gate) => !gate.by_hand);
+  // A curve picked by hand is measured, not judged (its badge says so); nothing of it is compared
+  // along the line.
+  const measured = gates.filter((gate) => !gate.by_hand || gate.metrics.length > 0);
   if (measured.length === 0) return null;
   return (
-    <div className="viz-gates">
-      {measured.map((gate) => (
-        <div key={gate.gate}>
-          <div className="viz-gate-head">
-            <GateBadge gate={gate} />
-            {gate.verdict === null && (
-              <span className="viz-muted viz-small">against the assistant's limits</span>
-            )}
-          </div>
-          {gate.metrics.length === 0 ? (
-            <p className="viz-muted viz-small">Nothing measured.</p>
-          ) : (
-            byObject(gate.metrics).map(([of, metrics]) => (
-              <MetricTable key={of} title={objectTitle(gate.gate, of)} metrics={metrics} />
-            ))
-          )}
-        </div>
-      ))}
-    </div>
+    <Fold title="Measures, and limits">
+      <div className="viz-measure-menus">
+        {measured.flatMap((gate) =>
+          (gate.metrics.length ? byObject(gate.metrics) : [["", []] as [string, Metric[]]]).map(
+            ([of, metrics]) => (
+              <Fold
+                key={`${gate.gate}-${of}`}
+                title={
+                  <span className="viz-measure-head">
+                    {objectTitle(gate.gate, of)}
+                    <GateBadge gate={gate} />
+                  </span>
+                }
+              >
+                {metrics.length ? (
+                  <MetricTable metrics={metrics} />
+                ) : (
+                  <p className="viz-muted viz-small">Nothing measured.</p>
+                )}
+              </Fold>
+            ),
+          ),
+        )}
+      </div>
+    </Fold>
   );
 }
 
@@ -441,7 +448,7 @@ export function Details({ gates, attempts, children }: {
   children?: ReactNode;
 }) {
   if (gates.length === 0 && attempts.length === 0 && !children) return null;
-  // The measures at once, the attempts folded.
+  // The measures in their menu, the attempts in theirs.
   return (
     <>
       <GateTables gates={gates} />
