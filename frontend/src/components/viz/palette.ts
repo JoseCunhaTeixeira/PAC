@@ -1,4 +1,5 @@
 import type { Theme } from "../../theme";
+import { afmhotR, purples } from "../colormaps";
 import type { PartState, Status, Use } from "./types";
 
 // Visualization's canvas colours, which cannot take CSS variables: the states (pass green,
@@ -48,6 +49,9 @@ export function vizPalette(theme: Theme) {
     selected: dark ? "rgba(255, 255, 255, 0.08)" : "rgba(15, 15, 20, 0.05)",
     selectedEdge: dark ? "#f2f2f4" : "#1a1a1a",
     hover: dark ? "rgba(255, 255, 255, 0.28)" : "rgba(11, 11, 11, 0.22)",
+    // The profile's U and interfaces, each in its section's colours (afmhot, purples).
+    uncertainty: `rgb(${afmhotR(dark ? 0.6 : 0.65).join(", ")})`,
+    interfaces: `rgb(${purples(dark ? 0.55 : 0.8).join(", ")})`,
     chains: dark
       ? ["#4f9cf5", "#e06a3a", "#22b07d", "#d4a017", "#e0689a", "#3fa33f", "#9a8cf0", "#ef7a7a"]
       : ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"],

@@ -1,39 +1,35 @@
-export function HoverTooltip({
-  x,
-  y,
-  lines,
-}: {
-  x: number;
-  y: number;
-  lines: string[];
-}) {
+import type { Tip } from "./tips";
+
+export function HoverTooltip({ x, y, tip }: { x: number; y: number; tip: Tip }) {
   return (
     <div className="viz-tooltip" style={{ left: x + 10, top: y + 10 }}>
-      <TooltipLines lines={lines} />
+      <TipLines tip={tip} />
     </div>
   );
 }
 
-/** A tooltip's lines, as every plot says them: what is under the pointer first, in bold, then
- * one bullet a line; a field's bound ("≥ 0 s", "< 1,000 Hz") in yellow, without one. */
+// A field's bound ("≥ 0 s", "< 1,000 Hz"): in yellow, without a bullet.
 const BOUND = /^[<>≤≥] /;
 
-export function TooltipLines({ lines }: { lines: readonly string[] }) {
+export function TipLines({ tip }: { tip: Tip }) {
   return (
     <>
-      {lines.map((line, i) =>
-        BOUND.test(line) ? (
+      {tip.title && <b style={{ display: "block" }}>{tip.title}</b>}
+      {tip.values && <div>{tip.values}</div>}
+      {tip.notes?.map((note, i) =>
+        BOUND.test(note) ? (
           <div key={i} className="tip-bound">
-            {line}
+            {note}
           </div>
-        ) : i === 0 ? (
-          <b key={i} style={{ display: "block" }}>
-            {line}
-          </b>
         ) : (
-          <div key={i}>• {line}</div>
+          <div key={i}>• {note}</div>
         ),
       )}
     </>
   );
+}
+
+/** A hint's lines (an element's `data-tip`, a cell's hover): its name, then a bullet a line. */
+export function TooltipLines({ lines }: { lines: readonly string[] }) {
+  return <TipLines tip={{ title: lines[0], notes: lines.slice(1) }} />;
 }

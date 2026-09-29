@@ -112,7 +112,6 @@ export function PseudoSectionCanvas({
 
     const yGrid = mode === "frequency" ? section.fs_grid : section.lambdas_grid;
     const velocities = mode === "frequency" ? section.velocities_by_frequency : section.velocities_by_wavelength;
-    const yLabel = mode === "frequency" ? "Frequency" : "Wavelength";
     const yUnit = mode === "frequency" ? "Hz" : "m";
     const invertY = mode === "wavelength";
     const positions = section.positions;
@@ -129,11 +128,10 @@ export function PseudoSectionCanvas({
     return {
       px: hoverPos.x * scale,
       py: hoverPos.y * scale,
-      lines: [
-        `xmid ${positions[posIdx].toFixed(2)} m`,
-        `${yLabel.toLowerCase()} ${yGrid[yIdx].toFixed(2)} ${yUnit}`,
-        `phase velocity ${value === null ? "—" : value.toFixed(1)} m/s`,
-      ],
+      tip: {
+        title: `xmid ${positions[posIdx].toFixed(2)} m`,
+        values: `${yGrid[yIdx].toFixed(2)} ${yUnit}; ${value === null ? "—" : value.toFixed(1)} m/s`,
+      },
     };
   }, [hoverPos, section, mode, scale, PLOT_H, PLOT_W, x0, x1, y0, y1]);
 
@@ -365,7 +363,7 @@ export function PseudoSectionCanvas({
         onClick={click.onClick}
       />
       <ZoomSelection box={zoom.selection} />
-      {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
+      {hover && <HoverTooltip x={hover.px} y={hover.py} tip={hover.tip} />}
     </div>
   );
 }

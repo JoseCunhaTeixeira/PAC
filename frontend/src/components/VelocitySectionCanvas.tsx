@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { cividis } from "./colormaps";
 import { HoverTooltip } from "./HoverTooltip";
+import { withUnit } from "./tips";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { nearestIndex, useCanvasHover } from "./useCanvasHover";
 import { useContainerWidth } from "./useContainerWidth";
@@ -197,12 +198,11 @@ export function VelocitySectionCanvas({
     return {
       px: hoverPos.x * scale,
       py: hoverPos.y * scale,
-      lines: [
-        `xmid ${positions[posIdx].toFixed(2)} m`,
-        `elevation ${elevations[zIdx].toFixed(2)} m`,
-        `${colorLabel}: ${value === null ? "—" : formatValue(value)}`,
-        ...(said ? [said] : []),
-      ],
+      tip: {
+        title: `xmid ${positions[posIdx].toFixed(2)} m`,
+        values: `${elevations[zIdx].toFixed(2)} m; ${value === null ? "—" : withUnit(colorLabel, formatValue(value))}`,
+        notes: said ? [said] : [],
+      },
     };
   }, [hoverPos, positions, elevations, values, colorLabel, scale, PLOT_H, PLOT_W, formatValue, x0, x1, z0, z1, informed]);
 
@@ -405,7 +405,7 @@ export function VelocitySectionCanvas({
         onClick={click.onClick}
       />
       <ZoomSelection box={zoom.selection} />
-      {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
+      {hover && <HoverTooltip x={hover.px} y={hover.py} tip={hover.tip} />}
     </div>
   );
 }

@@ -235,9 +235,6 @@ def test_an_inversion_gives_a_section(run: str) -> None:
     # where they put interfaces (the job counted them).
     uncertain = [one for row in section["vs_uncertainty_grid"] for one in row if one is not None]
     assert uncertain and all(0 <= one < 500 for one in uncertain)
-    # How far below each depth the models' Vs stays correlated, m.
-    lengths = [one for row in section["correlation_grid"] for one in row if one is not None]
-    assert lengths and all(one > 0 for one in lengths)
     shares = [one for row in section["interface_grid"] for one in row if one is not None]
     assert shares and all(0 <= one <= 100 for one in shares)
     smoothed = client.get(f"/inversion/velocity_section/{run}", params={"lateral_smoothing": True})

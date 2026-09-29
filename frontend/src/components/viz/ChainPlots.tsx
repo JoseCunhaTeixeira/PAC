@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../../theme";
 import { useContainerWidth } from "../useContainerWidth";
-import { TooltipLines } from "../HoverTooltip";
+import { TipLines } from "../HoverTooltip";
+import type { Tip } from "../tips";
 import { evenTicks, tickDecimals, useZoom, type PlotRect } from "../useZoom";
 import { ZoomSelection } from "../ZoomOverlay";
 import { num, parameterLabel } from "./format";
@@ -89,12 +90,11 @@ export function ChainTracesCanvas({
     if (!mouse || mouse.x < ML || mouse.x > ML + plotW || mouse.y < MT || mouse.y > MT + plotH) return null;
     const sample = x0 + ((mouse.x - ML) / plotW) * (x1 - x0);
     const k = Math.max(0, Math.min(n - 1, Math.round(sample / traces.step)));
-    return {
-      lines: [
-        `Sample ${k * traces.step}`,
-        ...traces.chains.map((chain, i) => `Chain ${i + 1}: ${num(chain[k])}`),
-      ],
+    const tip: Tip = {
+      values: `sample ${k * traces.step}`,
+      notes: traces.chains.map((chain, i) => `chain ${i + 1}: ${num(chain[k])}`),
     };
+    return tip;
   }, [mouse, plotW, plotH, x0, x1, n, traces]);
 
   useEffect(() => {
@@ -179,7 +179,7 @@ export function ChainTracesCanvas({
           className="viz-tooltip"
           style={mouse.x > width / 2 ? { right: width - mouse.x + 12, top: mouse.y + 12 } : { left: mouse.x + 12, top: mouse.y + 12 }}
         >
-          <TooltipLines lines={hover.lines} />
+          <TipLines tip={hover} />
         </div>
       )}
     </div>
@@ -238,11 +238,15 @@ function MarginalCanvas({ marginal, width }: { marginal: Marginal; width: number
     const x = x0 + ((mouse.x - SM_ML) / plotW) * (x1 - x0);
     const b = Math.max(0, Math.min(bins - 1, Math.floor((x - marginal.low) / binW)));
     const lo = marginal.low + b * binW;
-    return [
-      `${parameterLabel(marginal.parameter, false)} ${num(lo)}–${num(lo + binW)}`,
-      `${pooled[b]} of ${total} samples (${total ? ((100 * pooled[b]) / total).toFixed(1) : 0} %)`,
-      marginal.counts.map((chain, i) => `c${i + 1} ${chain[b]}`).join(" · "),
-    ];
+    const tip: Tip = {
+      title: parameterLabel(marginal.parameter, false),
+      values: `${num(lo)}–${num(lo + binW)}; ${total ? ((100 * pooled[b]) / total).toFixed(1) : 0} %`,
+      notes: [
+        `${pooled[b]} of ${total} samples`,
+        marginal.counts.map((chain, i) => `c${i + 1} ${chain[b]}`).join(" · "),
+      ],
+    };
+    return tip;
   }, [mouse, plotW, plotH, x0, x1, bins, binW, marginal, pooled, total]);
 
   useEffect(() => {
@@ -327,7 +331,7 @@ function MarginalCanvas({ marginal, width }: { marginal: Marginal; width: number
           className="viz-tooltip"
           style={mouse.x > width / 2 ? { right: width - mouse.x + 12, top: mouse.y + 12 } : { left: mouse.x + 12, top: mouse.y + 12 }}
         >
-          <TooltipLines lines={hover} />
+          <TipLines tip={hover} />
         </div>
       )}
     </div>

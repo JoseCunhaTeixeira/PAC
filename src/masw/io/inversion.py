@@ -31,7 +31,6 @@ from sigpipe.masw.inversion.section import (
     ModelName,
     VelocityGrid,
     comparison_grids,
-    correlation_grid,
     informed_levels,
     interface_grid,
     is_inverted,
@@ -106,8 +105,6 @@ class VelocitySection:
     # On the grid, the kept models' relative uncertainty of Vs, U(z) = (P90 - P10) / (2 P50)
     # (NaN: not known): what the depth informed is read from.
     uncertainty: np.ndarray
-    # On the grid, how far below each depth (m) their Vs stays correlated (NaN: not known).
-    correlation: np.ndarray
 
 
 def get_velocity_section(
@@ -147,7 +144,6 @@ def get_velocity_section(
         levels=levels,
         interfaces=interface_grid(grid, shares, lateral_smoothing, window_m),
         uncertainty=uncertainty_grid(grid, spreads, lateral_smoothing, window_m),
-        correlation=correlation_grid(grid, spreads, lateral_smoothing, window_m),
     )
 
 

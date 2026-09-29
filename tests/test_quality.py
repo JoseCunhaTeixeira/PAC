@@ -21,7 +21,12 @@ from masw.io.paths import OUTPUT_DIR
 from masw.io.quality.dispersion import CurveThresholds, curve_metrics
 from sigpipe.base import Coordinate, DispersionCurve, LinearAcquisition, Mode, VelocityType
 from sigpipe.masw.inversion.measuring import USEFUL_REFERENCE, InversionMeasures, useful_depth
-from sigpipe.masw.inversion.window import VS_SPREAD_FILE, load_vs_spread
+from sigpipe.masw.inversion.window import (
+    SAMPLES_FILE,
+    VS_SPREAD_FILE,
+    load_profiles,
+    load_vs_spread,
+)
 
 client = TestClient(app)
 
@@ -323,7 +328,8 @@ def test_a_depth_measured_by_an_older_rule_is_read_again_from_the_models_band(ru
     # Read again from the kept models' band, made from them once and kept beside them.
     spread = load_vs_spread(window)
     assert spread is not None
-    expected = useful_depth(spread, 0.25)  # None: the whole model
+    # None: the whole model.
+    expected = useful_depth(spread, load_profiles(window / SAMPLES_FILE), 0.25)
     assert card["profile"]["informed"] == expected != 0.123
     assert any("inform" in text for text in _texts(card))
     column = next(one for one in section["windows"] if one["x"] == 5.5)
@@ -363,9 +369,12 @@ def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> N
     assert all(
         low <= high for low, high in zip(profile["spread_low"], profile["spread_high"], strict=True)
     )
-    # How far around each depth the models' Vs moves together, at the same depths.
-    assert len(profile["correlation"]) == len(depths)
-    assert all(one is None or one >= 0.25 for one in profile["correlation"])
+    # Their relative uncertainty U at the same depths, %.
+    assert len(profile["uncertainty"]) == len(depths)
+    assert all(one >= 0 for one in profile["uncertainty"])
+    # Where they place interfaces, % of them per 0.5 m from the surface down.
+    assert profile["interface_dz"] == 0.5 and profile["interfaces"]
+    assert all(0 <= one <= 100 for one in profile["interfaces"])
     assert profile["deepest_top"] == 5.0 and profile["bottom"] > 0
     curve = card["curve"]
     assert curve["label"] == "M0" and len(curve["observed_fs"]) == len(curve["observed_vs"]) > 0

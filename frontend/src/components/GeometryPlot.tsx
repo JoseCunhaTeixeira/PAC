@@ -23,7 +23,8 @@ import {
 } from "./lineDraw";
 import { useZoom, type PlotRect, type Range } from "./useZoom";
 import { ZoomSelection } from "./ZoomOverlay";
-import { TooltipLines } from "./HoverTooltip";
+import { TipLines } from "./HoverTooltip";
+import type { Tip } from "./tips";
 import { vizPalette } from "./viz/palette";
 
 // The line a computing page will process, from above: its shots (stars), its receivers
@@ -196,39 +197,39 @@ export function GeometryPlot({
   const hit = mouse ? hitAt(mouse.x, mouse.y + lift) : null;
   const picked = hit?.row === "window" ? windows[hit.index] : undefined;
 
-  const tooltip = useMemo((): string[] | null => {
+  const tooltip = useMemo((): Tip | null => {
     if (!hit) return null;
     if (hit.row === "shot") {
       const shot = shots[hit.index];
       const stacking = windows.filter((w) => (w.sources ?? []).some((x) => same(x, shot.x))).length;
-      return [
-        `Shot ${shot.name}`,
-        `at ${shot.x.toFixed(2)} m`,
-        ...(sloped ? [`elevation ${shot.z.toFixed(2)} m`] : []),
-        ...(windows.some((w) => w.sources) ? [`stacked by ${stacking} of the ${windows.length} windows`] : []),
-      ];
+      return {
+        title: `Shot ${shot.name}`,
+        values: `${shot.x.toFixed(2)} m${sloped ? `; elevation ${shot.z.toFixed(2)} m` : ""}`,
+        notes: windows.some((w) => w.sources) ? [`stacked by ${stacking} of the ${windows.length} windows`] : [],
+      };
     }
     if (hit.row === "receiver") {
       const using = windows.filter((w) => hit.index >= w.start_index && hit.index <= w.end_index).length;
-      return [
-        `Receiver ${hit.index + 1}`,
-        `at ${receivers[hit.index].toFixed(2)} m`,
-        ...(sloped ? [`elevation ${receiverPoints[hit.index][1].toFixed(2)} m`] : []),
-        `in ${using} of the ${windows.length} windows`,
-      ];
+      return {
+        title: `Receiver ${hit.index + 1}`,
+        values: `${receivers[hit.index].toFixed(2)} m${sloped ? `; elevation ${receiverPoints[hit.index][1].toFixed(2)} m` : ""}`,
+        notes: [`in ${using} of the ${windows.length} windows`],
+      };
     }
     const w = windows[hit.index];
     const spacing = receivers.length > 1 ? Math.abs(receivers[1] - receivers[0]) : 0;
     // The ground at the window's middle, and its slope under the window: the line best through
     // its receivers.
     const slope = sloped ? slopeDegrees(receiverPoints.slice(w.start_index, w.end_index + 1)) : null;
-    return [
-      `xmid ${w.xmid.toFixed(2)} m`,
-      `receivers ${w.start_index + 1}–${w.end_index + 1}, ${((w.end_index - w.start_index) * spacing).toFixed(2)} m`,
-      `${w.n_shots} ${unit} stacked`,
-      ...(relief && sloped ? [`elevation ${groundAt(relief, w.xmid).toFixed(2)} m`] : []),
-      ...(slope !== null ? [`slope ${slope < 10 ? slope.toFixed(1) : Math.round(slope)}°`] : []),
-    ];
+    return {
+      title: `xmid ${w.xmid.toFixed(2)} m`,
+      ...(relief && sloped ? { values: `elevation ${groundAt(relief, w.xmid).toFixed(2)} m` } : {}),
+      notes: [
+        `receivers ${w.start_index + 1}–${w.end_index + 1}, ${((w.end_index - w.start_index) * spacing).toFixed(2)} m`,
+        `${w.n_shots} ${unit} stacked`,
+        ...(slope !== null ? [`slope ${slope < 10 ? slope.toFixed(1) : Math.round(slope)}°`] : []),
+      ],
+    };
   }, [hit, shots, receivers, receiverPoints, relief, sloped, windows, unit]);
 
   useEffect(() => {
@@ -342,7 +343,7 @@ export function GeometryPlot({
             className="viz-tooltip"
             style={mouse.x > width * 0.65 ? { right: width - mouse.x + 14, top: mouse.y + 14 } : { left: mouse.x + 14, top: mouse.y + 14 }}
           >
-            <TooltipLines lines={tooltip} />
+            <TipLines tip={tooltip} />
           </div>
         )}
       </div>

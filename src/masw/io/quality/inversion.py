@@ -57,11 +57,12 @@ from sigpipe.masw.inversion import (
     load_parameters,
 )
 from sigpipe.masw.inversion.measuring import (
+    INTERFACE_DZ,
     USEFUL_REFERENCE,
     BoundShare,
     InversionMeasures,
     ModelFit,
-    one_structure,
+    interface_shares,
     useful_depth,
 )
 from sigpipe.masw.inversion.section import (
@@ -148,9 +149,6 @@ class InversionThresholds(BaseModel):
     # (P90 - P10) / (2 P50), gets above this (sigpipe's useful_depth).
     useful_uncertainty: float = 0.25
     min_useful_share: float = 0.8  # of the model's depth
-    # The share of the model below 1 m the models' Vs at 1 m stays correlated with while precise,
-    # at most: over it, one structure the data pin, not its depths apart (a warning).
-    max_one_structure: float = 0.5
     max_vs_drop: float = 0.5
     plausible_vs: tuple[float, float] = (50.0, 2_500.0)
     min_contrast: float = 0.05
@@ -171,9 +169,10 @@ class VsProfile(BaseModel):
     spread_high: tuple[float, ...] = ()  # m/s, their 90th
     # %, their relative uncertainty at each depth, U = (P90 - P10) / (2 P50)
     uncertainty: tuple[float, ...] = ()
-    # m, how far below each depth their Vs stays correlated with its own (down to the bottom:
-    # at least that; None: all alike there)
-    correlation: tuple[float | None, ...] = ()
+    # %, per `interface_dz` (m) from the surface down: the share of the kept models placing a
+    # layer boundary there
+    interfaces: tuple[float, ...] = ()
+    interface_dz: float = INTERFACE_DZ
     bottom: float  # m, the bottom of the models sigpipe builds
     informed: float | None  # m, how deep the data inform them; None: to the bottom, or unknown
     deepest_top: float  # m, the deepest the half-space's top could be (the prior's)
@@ -298,27 +297,26 @@ def window_measures(folder: Path) -> tuple[WindowParameters, InversionMeasures |
     if not path.exists() or path.stat().st_mtime < samples.stat().st_mtime:
         return ran, None
     measures = InversionMeasures.model_validate_json(path.read_text())
-    if measures.useful_reference != USEFUL_REFERENCE or measures.one_structure is None:
-        # Measured before the depth informed was read from the kept models' band, or before one
-        # structure was: read again here, as the run's checks set it; the file left as it is.
+    if measures.useful_reference != USEFUL_REFERENCE:
+        # Measured before the depth informed was read from the kept models' band: read again
+        # here, as the run's checks set it; the measures' file left as it is.
         spread = window_spread(folder, ran.parameters.bottom)
         if spread is not None:
             limit = thresholds_of(folder.parent).useful_uncertainty
             measures = measures.model_copy(
                 update={
-                    "useful_depth_m": useful_depth(spread, limit),
+                    "useful_depth_m": useful_depth(spread, load_profiles(samples), limit),
                     "useful_reference": USEFUL_REFERENCE,
-                    "one_structure": one_structure(spread),
                 }
             )
     return ran, measures
 
 
 def window_spread(folder: Path, bottom: float) -> VsSpread | None:
-    """The kept models' Vs at each depth (their 10th, 50th and 90th percentiles, and how far
-    around each depth it moves together) saved beside window `folder`'s inversion; for one saved
-    before it was, made from its kept models down to `bottom` (m) and kept beside them, once (a
-    section reads every window's). None without its kept models."""
+    """The kept models' Vs at each depth (their 10th, 50th and 90th percentiles) saved beside
+    window `folder`'s inversion; for one saved before it was, made from its kept models down to
+    `bottom` (m) and kept beside them, once (a section reads every window's). None without its
+    kept models."""
     spread = load_vs_spread(folder)
     if spread is not None:
         return spread
@@ -434,19 +432,6 @@ def model_metrics(
             passed=piled is None or piled.share <= thresholds.max_at_bound,
         ),
     ]
-    metrics.append(
-        Metric(
-            name="one_structure",
-            value=None
-            if measures.one_structure is None
-            else round(100 * measures.one_structure, 1),
-            threshold=round(100 * thresholds.max_one_structure, 1),
-            bound="max",
-            passed=measures.one_structure is None
-            or measures.one_structure <= thresholds.max_one_structure,
-            unit="%",
-        )
-    )
     if informed_to(measures) is not None:
         metrics.append(
             Metric(
@@ -811,34 +796,21 @@ def _depth_sentences(
     parameters: InversionParameters, measures: InversionMeasures, thresholds: InversionThresholds
 ) -> list[Sentence]:
     """How deep the model goes, and how much of it the data inform: where the kept models'
-    relative uncertainty of Vs, U(z) = (P90 - P10) / (2 P50), gets above a limit (sigpipe's
-    useful_depth)."""
+    relative uncertainty of Vs, U(z) = (P90 - P10) / (2 P50), gets above a limit, but at an
+    interface they place at depths a little apart (sigpipe's useful_depth)."""
     if informed_to(measures) is None:
         return []
     bottom = measures.depth_max_m
     useful = measures.useful_depth_m
     enough = thresholds.min_useful_share * model_depth(parameters)
     limit = f"{thresholds.useful_uncertainty:.0%}"
-    one = measures.one_structure
-    if one is not None and one > thresholds.max_one_structure:
-        warning = [
-            Sentence(
-                mark="warn",
-                text=f"Precise but one structure: the models' Vs at 1 m stays within about "
-                f"±10 % and correlated down through {one:.0%} of the model below it, one "
-                "structure the data pin, not its depths apart.",
-            )
-        ]
-    else:
-        warning = []
     if useful is None:
         return [
             Sentence(
                 mark="pass",
                 text=f"The data inform the whole model, down to {number(bottom)} m: the models' "
-                f"Vs uncertainty stays within {limit}.",
-            ),
-            *warning,
+                f"Vs uncertainty stays within {limit} outside their interfaces.",
+            )
         ]
     if useful <= 0:
         return [
@@ -846,16 +818,14 @@ def _depth_sentences(
                 mark="warn",
                 text=f"The data inform none of the {number(bottom)} m modelled: at every depth, "
                 f"the models' Vs uncertainty is over {limit}.",
-            ),
-            *warning,
+            )
         ]
     return [
         Sentence(
             mark="pass" if useful >= enough else "warn",
             text=f"The data inform it down to {number(useful)} m of the {number(bottom)} m "
             f"modelled: deeper, the models' Vs uncertainty is over {limit}.",
-        ),
-        *warning,
+        )
     ]
 
 
@@ -1058,7 +1028,7 @@ def _profile(
     vs = np.asarray(velocity.vs_s, dtype=float)
     stride = max(1, -(-tops.size // PROFILE_POINTS))
     keep = np.unique(np.concatenate((np.arange(0, tops.size, stride), [tops.size - 1])))
-    depths, low, high, uncertain, together = _models_spread(window, parameters.bottom)
+    depths, low, high, uncertain = _models_spread(window, parameters.bottom)
     return VsProfile(
         model=model,
         tops=tuple(round(float(value), 3) for value in tops[keep]),
@@ -1067,8 +1037,9 @@ def _profile(
         spread_low=tuple(round(float(value), 1) for value in low),
         spread_high=tuple(round(float(value), 1) for value in high),
         uncertainty=tuple(round(100 * float(value), 1) for value in uncertain),
-        correlation=tuple(
-            None if np.isnan(value) else round(float(value), 2) for value in together
+        interfaces=tuple(
+            round(100 * share, 1)
+            for share in measures.interfaces or _interface_shares(window, parameters.bottom)
         ),
         bottom=measures.depth_max_m,
         informed=measures.useful_depth_m if informed_to(measures) is not None else None,
@@ -1076,24 +1047,25 @@ def _profile(
     )
 
 
+def _interface_shares(window: Path, bottom: float) -> tuple[float, ...]:
+    """Per INTERFACE_DZ from the surface down to `bottom`, the share of the kept models with an
+    interface there, for measures from before they held it; empty without the kept models."""
+    samples = window / SAMPLES_FILE
+    return interface_shares(load_profiles(samples), bottom) if samples.exists() else ()
+
+
 def _models_spread(
     window: Path, bottom: float
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """The kept models' Vs at PROFILE_POINTS depths at most (`window_spread`'s), as their 10th
-    and 90th percentiles (the curve's band's), their relative uncertainty U and each depth's
-    correlation length: depths, low, high, U, lengths; empty without the kept models."""
+    and 90th percentiles (the curve's band's) and their relative uncertainty U: depths, low,
+    high, U; empty without the kept models."""
     spread = window_spread(window, bottom)
     if spread is None:
         empty = np.zeros(0)
-        return empty, empty, empty, empty, empty
+        return empty, empty, empty, empty
     keep = np.arange(0, spread.depths.size, max(1, -(-spread.depths.size // PROFILE_POINTS)))
-    return (
-        spread.depths[keep],
-        spread.low[keep],
-        spread.high[keep],
-        spread.uncertainty()[keep],
-        spread.correlation[keep],
-    )
+    return spread.depths[keep], spread.low[keep], spread.high[keep], spread.uncertainty()[keep]
 
 
 def _curve(window: Path, model: ModelName) -> FitCurve | None:
