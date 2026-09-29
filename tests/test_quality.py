@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import time
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -17,13 +18,25 @@ import pytest
 from fastapi.testclient import TestClient
 
 from masw.api.main import app
-from masw.io.paths import OUTPUT_DIR
+from masw.io.paths import OUTPUT_DIR, workspace
 from masw.io.quality.dispersion import CurveThresholds, curve_metrics
-from sigpipe.base import Coordinate, DispersionCurve, LinearAcquisition, Mode, VelocityType
+from masw.io.quality.records import before_muting, signal_metrics, thresholds_of
+from sigpipe.base import (
+    Coordinate,
+    DispersionCurve,
+    LinearAcquisition,
+    Mode,
+    Stream,
+    VelocityType,
+)
+from sigpipe.dataio.stream.loading import load_stream
 from sigpipe.masw.inversion.measuring import USEFUL_REFERENCE, InversionMeasures
 from sigpipe.masw.inversion.window import (
     VS_SPREAD_FILE,
 )
+from sigpipe.masw.presets import make_preset, resolve_preset
+from sigpipe.masw.profiles import load_profile
+from sigpipe.masw.quality.signal import signal_windows
 
 client = TestClient(app)
 
@@ -217,6 +230,39 @@ def test_a_pac_run_shows_its_records_measures_without_verdicts(run: str) -> None
     assert card["attempts"] == [] and card["windows"] == ["xmid_2.50", "xmid_5.50", "xmid_8.50"]
     assert _texts(card)[0].startswith("Median SNR")
     assert client.get(f"/quality/records/card/{run}/nope.mseed").status_code == 404
+
+
+def test_a_muted_records_noise_is_measured_before_its_muting(run: str) -> None:
+    (path,) = (OUTPUT_DIR / run).glob("records/1/Stream_0000.hdf5")
+    stream = load_stream([path])[0]
+    thresholds = thresholds_of(OUTPUT_DIR / run)
+    # As a muting leaves it: nothing after the slowest arrival, where its noise is measured.
+    offsets = np.asarray(stream.acquisition.offsets, dtype=float)
+    windows = signal_windows(
+        offsets, np.asarray(stream.ts), thresholds.vg_min, thresholds.vg_max, thresholds.pad_s
+    )
+    assert windows is not None and windows.where.startswith("after the slowest arrival")
+    muted = replace(stream, xt=np.where(windows.noise, 0.0, stream.xt))
+
+    def snr(unmuted: tuple[Stream, float] | None = None) -> float | None:
+        metrics, _ = signal_metrics(muted, thresholds, True, unmuted)
+        return next(one.value for one in metrics if one.name == "snr_db")
+
+    own, _ = signal_metrics(stream, thresholds, True)
+    assert (snr() or 0.0) > 100  # a noise zeroed
+    assert snr((stream, 0.0)) == next(one.value for one in own if one.name == "snr_db")
+    # The record before its muting, from its input, for a muted preset only.
+    profile = load_profile("shots", workspace())
+    windowed = {"masw": {"length": 6, "step": 3}}
+    muting = {"muting": {"method": "mute", "vmin": 200.0, "vmax": 1500.0}}
+    on = resolve_preset(make_preset("active", windowed | muting), profile)
+    found = before_muting(on, profile, "1.mseed")
+    assert found is not None and found[1] == 0.0  # no trigger in its file
+    assert found[0].xt.shape == stream.xt.shape
+    assert (
+        before_muting(resolve_preset(make_preset("active", windowed), profile), profile, "1.mseed")
+        is None
+    )
 
 
 def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:

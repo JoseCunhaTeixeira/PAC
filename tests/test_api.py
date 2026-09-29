@@ -56,9 +56,11 @@ def test_a_records_spectrum_is_previewed_for_its_filter() -> None:
 
     spectrum = client.get(f"/spectrum/shots/{shots['files'][0]}").json()
 
-    freqs, power = spectrum["freqs"], spectrum["power_db"]
-    assert len(freqs) == len(power) <= 1_001 and freqs == sorted(freqs) and freqs[0] == 0.0
-    assert max(power) == 0.0 and min(power) >= -120.0  # in dB of its largest
+    # Each trace's, the whole of it (0 to Nyquist), each scaled to its own largest.
+    freqs, amplitude = spectrum["freqs"], spectrum["amplitude"]
+    assert freqs == sorted(freqs) and freqs[0] == 0.0 and freqs[-1] == SAMPLING / 2
+    assert len(amplitude) == N_RECEIVERS and {len(row) for row in amplitude} == {len(freqs)}
+    assert all(max(row) == 1.0 and min(row) >= 0.0 for row in amplitude)
     assert client.get("/spectrum/shots/nope.dat").status_code == 404
 
 

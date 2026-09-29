@@ -747,10 +747,10 @@ def _metric(metrics: tuple[Metric, ...], name: str) -> float | None:
 
 def window_gather(folder: str, xmid: float, norm: str = "trace") -> RecordGather:
     """The stacked correlations window `xmid`'s image was made of (passive and passive-active:
-    its Stream_0000.hdf5), as the wiggle plot takes them, up to where they carry signal; the
-    virtual source its star. None in an active window: a ValueError."""
+    its Stream_0000.hdf5), as the wiggle plot takes them, the whole of them; the virtual source
+    its star. None in an active window: a ValueError."""
     path = folder_path(folder) / f"xmid_{xmid:.2f}" / WINDOW_STREAM
     if not path.exists():
         raise ValueError(f"No stacked correlations for folder={folder}, xmid={xmid}")
     stream = load_stream([path])[0]
-    return gather_of(stream, f"xmid {xmid:g} m", norm, up_to_signal=True)
+    return gather_of(stream, f"xmid {xmid:g} m", norm)

@@ -1,25 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { API, type Acquisition } from "../api";
 import type { FilteringState } from "../presets";
-import { useTheme } from "../theme";
 import { BoxTools, PlotBox } from "./kit";
-import { LinePlot, type PlotArea } from "./viz/LinePlot";
-import { vizPalette } from "./viz/palette";
+import { SpectrumCanvas, type TraceSpectra } from "./SpectrumCanvas";
 
-// The filter's preview on a computing page, as the muting's is: a record's mean power spectrum
-// over its traces, the band the filter keeps shaded as its cuts are typed.
-
-interface Spectrum {
-  freqs: number[];
-  power_db: number[];
-}
+// The filter's preview on a computing page, as the muting's is: a record's spectra as its saved
+// figure draws them (each trace's, at its receiver, the whole of it), the band the filter keeps
+// dashed as its cuts are typed.
 
 export function FilterSpectrum({ acquisition, filtering }: { acquisition: Acquisition; filtering: FilteringState }) {
   const folder = acquisition.folder_path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
   const [file, setFile] = useState(acquisition.files[0] ?? "");
-  const [spectrum, setSpectrum] = useState<Spectrum | null>(null);
+  const [spectra, setSpectra] = useState<TraceSpectra | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const palette = vizPalette(useTheme());
 
   useEffect(() => {
     if (!file) return;
@@ -32,26 +25,13 @@ export function FilterSpectrum({ acquisition, filtering }: { acquisition: Acquis
         }
         return res.json();
       })
-      .then((data: Spectrum) => setSpectrum(data))
+      .then((data: TraceSpectra) => setSpectra(data))
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [file, folder]);
 
-  const floor = useMemo(() => Math.min(-60, ...(spectrum?.power_db ?? [0])), [spectrum]);
   // The band an IIR filter keeps: from its low cut to its high cut.
-  const band = filtering.method === "iir" && filtering.fmax > filtering.fmin;
-  const areas: PlotArea[] = band
-    ? [
-        {
-          color: palette.band,
-          polygon: [
-            [filtering.fmin, floor],
-            [filtering.fmax, floor],
-            [filtering.fmax, 0],
-            [filtering.fmin, 0],
-          ],
-        },
-      ]
-    : [];
+  const band: [number, number] | null =
+    filtering.method === "iir" && filtering.fmax > filtering.fmin ? [filtering.fmin, filtering.fmax] : null;
 
   return (
     <PlotBox>
@@ -66,24 +46,15 @@ export function FilterSpectrum({ acquisition, filtering }: { acquisition: Acquis
             ))}
           </select>
         </label>
-        {spectrum && <BoxTools />}
+        {spectra && <BoxTools />}
       </div>
       {error && <p style={{ color: "var(--accent)" }}>Error: {error}</p>}
-      {spectrum && (
-        <LinePlot
+      {spectra && (
+        <SpectrumCanvas
           key={file}
-          series={[
-            {
-              label: band ? `${file} · the band kept shaded` : file,
-              color: palette.series,
-              points: spectrum.freqs.map((f, i): [number, number] => [f, spectrum.power_db[i]]),
-              width: 1.4,
-            },
-          ]}
-          areas={areas}
-          xLabel="Frequency (Hz)"
-          yLabel="Power (dB of the peak)"
-          height={240}
+          spectra={spectra}
+          positions={acquisition.receiver_positions.map((position) => position[0])}
+          band={band}
         />
       )}
     </PlotBox>
