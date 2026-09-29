@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { PlotBox } from "../kit";
 import type { Range } from "../useZoom";
 import { LinePlot, type PlotArea, type PlotRef, type PlotSeries } from "./LinePlot";
-import { MODEL_LABELS, num } from "./format";
+import { DEPTH_INFORMED_TIP, MODEL_LABELS, num } from "./format";
 import { vizPalette } from "./palette";
 import type { FitCurve, SoilColumn, VsProfile } from "./types";
 import { PlotHead } from "./ui";
@@ -25,11 +25,11 @@ function steps(tops: number[], values: number[], bottom: number): [number, numbe
 export function VsProfilePlot({ profile }: { profile: VsProfile }) {
   const palette = vizPalette(useTheme());
   const bottom = Math.max(profile.bottom, profile.tops[profile.tops.length - 1] ?? 0);
-  const { spread_depths: depths, spread_low: low, spread_high: high, uncertainty, correlation } = profile;
+  const { spread_depths: depths, spread_low: low, spread_high: high, uncertainty } = profile;
   const xs = [...low, ...high, ...profile.vs];
   const xLo = Math.min(...xs);
   const xHi = Math.max(...xs);
-  // One zoom in depth for the profile and the correlation beside it, back to all of it with
+  // One zoom in depth for the profile and its uncertainty beside it, back to all of it with
   // another window.
   const [depth, setDepth] = useState<{ key: VsProfile; y: Range | null }>({ key: profile, y: null });
   const depthLink = {
@@ -79,17 +79,18 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
       width: 2.2,
     },
   ];
-  // How far below each depth the kept models' Vs stays correlated: a gap where all alike.
-  const lengths = depths.flatMap((z, i): [number, number][] => {
-    const length = correlation[i];
-    return length === null || length === undefined ? [] : [[length, z]];
-  });
-  const lengthMax = Math.max(1, ...lengths.map(([length]) => length));
-  // Their relative uncertainty U, %, against the depth informed's limit.
+  // Their relative uncertainty U, %.
   const uncertain = depths.map((z, i): [number, number] => [uncertainty[i], z]);
-  const uncertainMax = Math.max(30, ...uncertainty);
+  const uncertainMax = Math.max(10, ...uncertainty);
   const unlabelled = refs.map((ref) => ({ ...ref, label: "" }));
-  const uncertaintyColour = palette.chains[6];
+  const uncertaintyColour = palette.uncertainty;
+  // Where they place layer boundaries: the share of them per interface_dz, as steps.
+  const boundaries = profile.interfaces.flatMap((share, k): [number, number][] => [
+    [share, k * profile.interface_dz],
+    [share, (k + 1) * profile.interface_dz],
+  ]);
+  const boundaryMax = Math.max(10, ...profile.interfaces);
+  const interfaceColour = palette.interfaces;
   return (
     <PlotBox>
       <div>
@@ -110,12 +111,9 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
           />
           {uncertain.length > 0 && (
             <LinePlot
-              series={[{ label: "Vs uncertainty (%)", color: uncertaintyColour, points: uncertain, width: 1.8 }]}
+              series={[{ label: "uncertainty", color: uncertaintyColour, points: uncertain, width: 1.8 }]}
               areas={veils}
-              refs={[
-                ...unlabelled,
-                { axis: "x", at: 25, label: "", color: palette.status.warn, dash: [4, 3] },
-              ]}
+              refs={unlabelled}
               xLabel="Uncertainty (%)"
               yLabel="Depth (m)"
               yDown
@@ -128,18 +126,16 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
               yAxis={false}
             />
           )}
-          {lengths.length > 0 && (
+          {boundaries.length > 0 && (
             <LinePlot
-              series={[
-                { label: "Correlation length", color: palette.muted, points: lengths, width: 1.8 },
-              ]}
+              series={[{ label: "interfaces", color: interfaceColour, points: boundaries, width: 1.6 }]}
               areas={veils}
               refs={unlabelled}
-              xLabel="Correlation (m)"
+              xLabel="Interfaces (%)"
               yLabel="Depth (m)"
               yDown
               height={320}
-              xRange={[0, lengthMax * 1.08]}
+              xRange={[0, boundaryMax * 1.08]}
               yRange={[0, bottom * 1.04]}
               resetKey={profile}
               minWidth={90}
@@ -148,48 +144,49 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
             />
           )}
         </div>
-        <div className="viz-legend-inline">
-          <span style={{ color: palette.series }}>
-            <i />
-            {MODEL_LABELS[profile.model] ?? profile.model}
-          </span>
-          {depths.length > 0 && (
-            <span>
-              <i className="area" style={{ background: palette.seriesSoft }} />
-              10–90 % of the models
-            </span>
-          )}
-          {uncertain.length > 0 && (
-            <span
-              style={{ color: uncertaintyColour }}
-              data-tip={
-                "Vs uncertainty\nU = (P90 − P10) / (2 P50) of the kept models\n" +
-                "Its 25 % (dashed): the depth informed, from the surface down"
-              }
-            >
+        {/* Two lines: the models, then what is read from them. */}
+        <div className="viz-legend-rows">
+          <div className="viz-legend-inline">
+            <span style={{ color: palette.series }}>
               <i />
-              uncertainty
+              {MODEL_LABELS[profile.model] ?? profile.model}
             </span>
-          )}
-          {lengths.length > 0 && (
-            <span
-              style={{ color: palette.muted }}
-              data-tip={
-                "Correlation length\nHow far below each depth the kept models' Vs stays correlated " +
-                "with its own (rank correlation ≥ 0.5): the data do not tell those depths apart\n" +
-                "Down to the bottom: at least that. Reported, not judged"
-              }
-            >
-              <i />
-              correlation length
-            </span>
-          )}
-          {informed !== null && informed < bottom && (
-            <span>
-              <i className="area" style={{ background: palette.selected, outline: `1px solid ${palette.faint}` }} />
-              not informed by the data
-            </span>
-          )}
+            {depths.length > 0 && (
+              <span>
+                <i className="area" style={{ background: palette.seriesSoft }} />
+                10–90 % of the models
+              </span>
+            )}
+          </div>
+          <div className="viz-legend-inline">
+            {uncertain.length > 0 && (
+              <span
+                style={{ color: uncertaintyColour }}
+                data-tip={"Vs uncertainty\nU = (P90 − P10) / (2 P50) of the kept models"}
+              >
+                <i />
+                uncertainty
+              </span>
+            )}
+            {boundaries.length > 0 && (
+              <span
+                style={{ color: interfaceColour }}
+                data-tip={
+                  "Interfaces\nThe share of the kept models placing a layer boundary in each " +
+                  `${profile.interface_dz} m\nA peak: where they agree one lies; low and flat: anywhere`
+                }
+              >
+                <i />
+                interfaces
+              </span>
+            )}
+            {informed !== null && informed < bottom && (
+              <span data-tip={DEPTH_INFORMED_TIP}>
+                <i className="area" style={{ background: palette.selected, outline: `1px solid ${palette.faint}` }} />
+                not informed by the data
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </PlotBox>
@@ -256,18 +253,23 @@ export function CurveFitPlot({
           height={320}
           resetKey={`${axis}-${curve.label}`}
         />
-        <div className="viz-legend-inline">
-          <span style={{ color: palette.series }}>● picked, ± its uncertainty</span>
-          <span style={{ color: palette.status.fail }}>
-            <i className="dashed" />
-            {modelled}
-          </span>
-          {areas.length > 0 && (
-            <span>
-              <i className="area" style={{ background: palette.modelledSoft }} />
-              10–90 % of the models
+        {/* Two lines: the picks, then the models. */}
+        <div className="viz-legend-rows">
+          <div className="viz-legend-inline">
+            <span style={{ color: palette.series }}>● picked, ± its uncertainty</span>
+          </div>
+          <div className="viz-legend-inline">
+            <span style={{ color: palette.status.fail }}>
+              <i className="dashed" />
+              {modelled}
             </span>
-          )}
+            {areas.length > 0 && (
+              <span>
+                <i className="area" style={{ background: palette.modelledSoft }} />
+                10–90 % of the models
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </PlotBox>

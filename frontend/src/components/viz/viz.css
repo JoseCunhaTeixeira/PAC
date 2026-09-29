@@ -549,7 +549,7 @@
 
 @media (min-width: 760px) {
   .viz-plots-2 {
-    /* Halves whatever their plots' least widths: the profile beside its correlation. */
+    /* Halves whatever their plots' least widths: the profile beside its uncertainty. */
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
@@ -574,7 +574,7 @@
   gap: 8px;
 }
 
-/* The Vs profile, its uncertainty and its correlation length side by side: one depth axis. */
+/* The Vs profile and its uncertainty side by side: one depth axis. */
 .viz-profile-pair {
   display: flex;
   gap: 2px;
@@ -619,6 +619,18 @@
   margin-top: 4px;
   font-size: var(--fs-small);
   color: var(--text-muted);
+}
+
+/* A legend of two lines, centred under its plot. */
+.viz-legend-rows {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.viz-legend-rows .viz-legend-inline {
+  margin-top: 0;
 }
 
 .viz-legend-inline span {

@@ -3,7 +3,8 @@ import { CANVAS_FONT, canvasPalette, useTheme } from "../../theme";
 import { useContainerWidth } from "../useContainerWidth";
 import { tickDecimals, useZoom, type PlotRect, type Range } from "../useZoom";
 import { ZoomSelection } from "../ZoomOverlay";
-import { TooltipLines } from "../HoverTooltip";
+import { TipLines } from "../HoverTooltip";
+import { withUnit, type Tip } from "../tips";
 import { num } from "./format";
 import { alongLine } from "./line";
 
@@ -121,25 +122,29 @@ export function LinePlot({
   const [x0, x1] = zoom.view.x;
   const [y0, y1] = zoom.view.y;
 
-  const hover = useMemo(() => {
+  const hover = useMemo((): Tip | null => {
     if (!mouse || mouse.x < ml || mouse.x > ml + plotW || mouse.y < MT || mouse.y > MT + plotH) return null;
     const X = (x: number) => ml + ((x - x0) / (x1 - x0)) * plotW;
     const Y = (y: number) =>
       yDown ? MT + ((y - y0) / (y1 - y0)) * plotH : MT + plotH - ((y - y0) / (y1 - y0)) * plotH;
-    let best: { label: string; point: [number, number]; d: number } | null = null;
+    let best: { label: string; point: [number, number]; error: number | null; d: number } | null = null;
     for (const one of series) {
       if (one.quiet) continue;
-      for (const point of one.points) {
+      for (let i = 0; i < one.points.length; i++) {
+        const point = one.points[i];
         const d = Math.hypot(X(point[0]) - mouse.x, Y(point[1]) - mouse.y);
-        if (d < 14 && (!best || d < best.d)) best = { label: one.label, point, d };
+        if (d < 14 && (!best || d < best.d)) best = { label: one.label, point, error: one.errors?.[i] ?? null, d };
       }
     }
     const x = x0 + ((mouse.x - ml) / plotW) * (x1 - x0);
     const t = (mouse.y - MT) / plotH;
     const y = yDown ? y0 + t * (y1 - y0) : y1 - t * (y1 - y0);
-    return best
-      ? [best.label, `${xLabel}: ${num(best.point[0])}`, `${yLabel}: ${num(best.point[1])}`]
-      : [`${xLabel}: ${num(x)}`, `${yLabel}: ${num(y)}`];
+    // x; y with their axes' units, a pick's y with its uncertainty: the series nearest named
+    // first, when one is that near.
+    const [px, py] = best ? best.point : [x, y];
+    const error = best?.error != null ? ` ± ${num(best.error)}` : "";
+    const values = `${withUnit(xLabel, num(px))}; ${withUnit(yLabel, `${num(py)}${error}`)}`;
+    return best ? { title: best.label, values } : { values };
   }, [mouse, series, x0, x1, y0, y1, plotW, plotH, yDown, xLabel, yLabel, ml]);
 
   useEffect(() => {
@@ -295,7 +300,7 @@ export function LinePlot({
           className="viz-tooltip"
           style={mouse.x > width / 2 ? { right: width - mouse.x + 12, top: mouse.y + 12 } : { left: mouse.x + 12, top: mouse.y + 12 }}
         >
-          <TooltipLines lines={hover} />
+          <TipLines tip={hover} />
         </div>
       )}
     </div>

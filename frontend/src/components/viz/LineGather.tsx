@@ -3,7 +3,8 @@ import { CANVAS_FONT, canvasPalette, useTheme } from "../../theme";
 import { useContainerWidth } from "../useContainerWidth";
 import { tickDecimals, useZoom, type PlotRect, type Range } from "../useZoom";
 import { ZoomSelection } from "../ZoomOverlay";
-import { TooltipLines } from "../HoverTooltip";
+import { TipLines } from "../HoverTooltip";
+import type { Tip } from "../tips";
 import { num } from "./format";
 import { alongLine } from "./line";
 import { vizPalette } from "./palette";
@@ -120,22 +121,23 @@ export function LineGather({
     return best < 0 ? null : best;
   }, [mouse, plotW, plotH, x0, x1, data]);
 
-  const hover = useMemo(() => {
+  const hover = useMemo((): Tip | null => {
     if (pointed === null || !mouse) return null;
     const position = data.positions[pointed];
-    const lines = [`Receiver ${pointed + 1} at ${num(position, 4)} m`];
-    if (data.source !== null) lines.push(`${num(Math.abs(position - data.source), 4)} m from the shot`);
-    if (excluded.has(pointed)) lines.push("left out of the windows");
+    const notes: string[] = [];
+    if (data.source !== null) notes.push(`${num(Math.abs(position - data.source), 4)} m from the shot`);
+    if (excluded.has(pointed)) notes.push("left out of the windows");
     // In the plot, the time under the pointer, and whether the muting removes it.
+    let time = "";
     if (mouse.y >= MT) {
       const t = t0 + ((mouse.y - MT) / plotH) * (t1 - t0);
-      lines.push(`${num(t * 1000, 4)} ms`);
+      time = `; ${num(t * 1000, 4)} ms`;
       if (mute) {
         const [from, to] = kept(mute, pointed);
-        if (t < from || t > to) lines.push("muted");
+        if (t < from || t > to) notes.push("muted");
       }
     }
-    return lines;
+    return { title: `Receiver ${pointed + 1}`, values: `${num(position, 4)} m${time}`, notes };
   }, [pointed, mouse, plotH, t0, t1, data, excluded, mute]);
 
   useEffect(() => {
@@ -325,7 +327,7 @@ export function LineGather({
           className="viz-tooltip"
           style={mouse.x > width * 0.6 ? { right: width - mouse.x + 14, top: mouse.y + 14 } : { left: mouse.x + 14, top: mouse.y + 14 }}
         >
-          <TooltipLines lines={hover} />
+          <TipLines tip={hover} />
         </div>
       )}
     </div>

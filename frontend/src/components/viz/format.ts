@@ -64,7 +64,6 @@ const METRIC_LABELS: Record<string, string> = {
   samples_per_chain: "Samples a chain",
   at_bound: "Share at a prior's bound",
   useful_depth: "Useful depth",
-  one_structure: "One structure, of the model below 1 m",
   contrast: "Least contrast between layers",
   // G7 and G8, a petrophysical model
   water_table: "Water table",
@@ -76,6 +75,13 @@ const METRIC_LABELS: Record<string, string> = {
 };
 
 // The inversion's models, as the figures name them.
+/** How the depth informed is defined, as its hovers say it (sigpipe's useful_depth). */
+export const DEPTH_INFORMED_TIP =
+  "Depth informed\nFrom the surface down, to where the kept models' Vs uncertainty " +
+  "U = (P90 − P10) / (2 P50) goes over 25 %\nNot at an interface they only place at depths a " +
+  "little apart: each model's Vs there is its own just above or below it\nBelow it, veiled: " +
+  "the data no longer pin Vs";
+
 export const MODEL_LABELS: Record<string, string> = {
   ensemble: "median of the ensemble",
   median: "median, layered",

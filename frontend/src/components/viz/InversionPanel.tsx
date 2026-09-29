@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { API } from "../../api";
 import { canvasPalette, useTheme } from "../../theme";
-import { afmhotR, purples, terrain, viridis } from "../colormaps";
+import { afmhotR, purples, terrain } from "../colormaps";
 import { LayersIcon, StrataIcon } from "../icons";
 import { BoxTools, Card, PlotBox, Segmented } from "../kit";
 import { ModeHead } from "../PseudoSectionCanvas";
@@ -13,7 +13,7 @@ import {
   type InformedWindow,
 } from "../VelocitySectionCanvas";
 import { ChainLegend, ChainTracesCanvas, MarginalsGrid } from "./ChainPlots";
-import { MODEL_LABELS, num, parameterLabel, xmidOf } from "./format";
+import { DEPTH_INFORMED_TIP, MODEL_LABELS, num, parameterLabel, xmidOf } from "./format";
 import { StageHead, UnitCard } from "./panel";
 import { CurveFitPlot, VsProfilePlot, type CurveAxis } from "./plots";
 import type { Chains, InversionCard, ModelName, Overview } from "./types";
@@ -44,8 +44,6 @@ interface VelocitySection {
   // The kept models' relative uncertainty of Vs, U = (P90 - P10) / (2 P50), %: the depth
   // informed read from it.
   vs_uncertainty_grid: (number | null)[][];
-  // How far below each depth (m) their Vs stays correlated with its own.
-  correlation_grid: (number | null)[][];
   // The share of the kept models with an interface, % (null: not known).
   interface_grid: (number | null)[][];
   floors?: number[]; // per column, the elevation its models end at
@@ -432,22 +430,18 @@ export function InversionPanel({
           <Card
             className="viz-section"
             icon={<LayersIcon size={17} />}
-            title="Vs, uncertainty, correlation and interface sections"
+            title="Vs, uncertainty and interface sections"
             plots
             hint={
               "Of the kept models\nVs: their median at each depth, P50\n" +
               "Vs uncertainty: (P90 − P10) / (2 P50), %\n" +
-              "Correlation length: how far below each depth their Vs stays correlated, m\n" +
               "Interfaces: the share placing a layer boundary there"
             }
             aside={
               <div className="viz-toolbar" style={{ margin: 0 }}>
                 <div
                   className="viz-field"
-                  data-tip={
-                    "Depth informed\nBelow it, veiled: the Vs uncertainty over 25 %\n" +
-                    "From the surface down, on the kept models alone"
-                  }
+                  data-tip={DEPTH_INFORMED_TIP}
                 >
                   Depth informed
                   <Segmented
@@ -500,19 +494,6 @@ export function InversionPanel({
                   onPick={pick}
                   informed={overlay}
                 />
-                <VelocitySectionCanvas
-                  positions={section.data.positions}
-                  elevations={section.data.elevations}
-                  values={section.data.correlation_grid}
-                  colorLabel="Correlation length (m)"
-                  colormap={viridis}
-                  colorRange={{ min: 0 }}
-                  height={200}
-                  link={zoomLink}
-                  marker={xmid ?? undefined}
-                  onPick={pick}
-                  informed={overlay}
-                />
                 {section.data.interface_grid?.some((row) => row.some((value) => value !== null)) ? (
                   <VelocitySectionCanvas
                     positions={section.data.positions}
@@ -532,11 +513,11 @@ export function InversionPanel({
                 )}
                 {overlay?.windows.some((one) => one.informed !== null) && (
                   <div className="viz-legend-inline">
-                    <span style={{ color: colours.informed }}>
+                    <span style={{ color: colours.informed }} data-tip={DEPTH_INFORMED_TIP}>
                       <i className="dashed" style={{ borderTopWidth: 1 }} />
                       depth informed
                     </span>
-                    <span>
+                    <span data-tip={DEPTH_INFORMED_TIP}>
                       <i className="area" style={{ background: veiled(colours.veil) }} />
                       not informed by the data
                     </span>

@@ -13,7 +13,8 @@ import {
   symbolSizes,
   type CellTone,
 } from "../lineDraw";
-import { TooltipLines } from "../HoverTooltip";
+import { TipLines } from "../HoverTooltip";
+import type { Tip } from "../tips";
 import { num } from "./format";
 import { lineExtent } from "./line";
 import { vizPalette } from "./palette";
@@ -151,38 +152,42 @@ export function ProfilePlot({
 
   const hit = mouse ? hitAt(mouse.x, mouse.y) : null;
 
-  const tooltip = useMemo(() => {
+  const tooltip = useMemo((): Tip | null => {
     if (!hit) return null;
+    // A cell's own lines (the checks'): its name, then a bullet a line.
+    const cellTip = (lines: readonly string[]): Tip => ({ title: lines[0], notes: lines.slice(1) });
     if (hit.row === "shot") {
       const shot = shots[hit.index];
       if (mode === "records") {
         const cell = recordCells.get(shot.name);
-        return cell ? cell.hover : [shot.name, `shot at ${num(shot.x, 4)} m`];
+        return cell ? cellTip(cell.hover) : { title: shot.name, values: `${num(shot.x, 4)} m` };
       }
       const use = shotUse.get(shot.name);
-      const lines = [`Shot ${shot.name} at ${num(shot.x, 4)} m`];
-      if (use) lines.push(use.why);
-      else if (selectedWindow) lines.push(`${num(Math.abs(shot.x - selectedWindow.xmid), 4)} m from the window's middle`);
-      if (onShot) lines.push("click to open its record");
-      return lines;
+      const notes: string[] = [];
+      if (use) notes.push(use.why);
+      else if (selectedWindow) notes.push(`${num(Math.abs(shot.x - selectedWindow.xmid), 4)} m from the window's middle`);
+      if (onShot) notes.push("click to open its record");
+      return { title: `Shot ${shot.name}`, values: `${num(shot.x, 4)} m`, notes };
     }
     if (hit.row === "receiver") {
       const x = card.receivers[hit.index];
       const inside = selectedWindow && x >= selectedWindow.first - 1e-9 && x <= selectedWindow.last + 1e-9;
-      return [`Receiver ${hit.index + 1} at ${num(x, 4)} m`, ...(inside ? ["in the selected window"] : [])];
+      return { title: `Receiver ${hit.index + 1}`, values: `${num(x, 4)} m`, notes: inside ? ["in the selected window"] : [] };
     }
     const window = card.windows[hit.index];
     if (mode === "records") {
-      return [
-        `xmid ${num(window.xmid, 4)} m`,
-        stacked.has(window.key) ? "stacks the selected record" : "does not stack it",
-        ...(onWindow ? ["click to open its dispersion"] : []),
-      ];
+      return {
+        title: `xmid ${num(window.xmid, 4)} m`,
+        notes: [
+          stacked.has(window.key) ? "stacks the selected record" : "does not stack it",
+          ...(onWindow ? ["click to open its dispersion"] : []),
+        ],
+      };
     }
     const cell = windowCells.find((one) => one.key === window.key);
-    if (!cell) return [`xmid ${num(window.xmid, 4)} m`];
+    if (!cell) return { title: `xmid ${num(window.xmid, 4)} m` };
     const implied = implies?.[cell.status];
-    return implied ? [...cell.hover, implied] : cell.hover;
+    return cellTip(implied ? [...cell.hover, implied] : cell.hover);
   }, [hit, shots, mode, recordCells, shotUse, selectedWindow, card, stacked, windowCells, onShot, onWindow, implies]);
 
   useEffect(() => {
@@ -403,7 +408,7 @@ export function ProfilePlot({
               : { left: mouse.x + 14, top: mouse.y + 14 }
           }
         >
-          <TooltipLines lines={tooltip} />
+          <TipLines tip={tooltip} />
         </div>
       )}
     </div>

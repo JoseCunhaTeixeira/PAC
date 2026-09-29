@@ -1,11 +1,13 @@
 import { useEffect, useRef } from "react";
 import { gistSternR } from "./colormaps";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
-import { useCanvasHover } from "./useCanvasHover";
+import { nearestIndex, useCanvasHover } from "./useCanvasHover";
 import { useContainerWidth } from "./useContainerWidth";
 import { CLICK_PX, evenTicks, tickDecimals, useZoom, visibleCells, type PlotRect } from "./useZoom";
 import type { DragTool } from "./plotBox";
 import { ZoomSelection } from "./ZoomOverlay";
+import { HoverTooltip } from "./HoverTooltip";
+import type { Tip } from "./tips";
 
 export interface DispersionCurve {
   label: string;
@@ -59,7 +61,7 @@ export function DispersionImageCanvas({
   const PLOTS: PlotRect[] = [{ left: ML, top: MT, width: PLOT_W, height: PLOT_H, xAxis: MB, yAxis: ML }];
   const scale = 1;
   const lasso = dragMode === "lasso" && onLassoComplete !== undefined;
-  // Only for the zoom's cursor: the image has no hover read-out.
+  // The pointer: the zoom's cursor, and what the image holds under it.
   const { pos: hoverPos, onMouseMove: onHoverMove, onMouseLeave: onHoverLeave } = useCanvasHover(scale);
 
   const fMin = image.fs[0], fMax = image.fs[image.fs.length - 1];
@@ -372,6 +374,72 @@ export function DispersionImageCanvas({
     draw();
   }
 
+  // The amplitude as drawn at (f, v): a share of its frequency's peak ("; 0.87"), or nothing.
+  const amplitudeAt = (f: number, v: number): string => {
+    const column = image.fv_map[nearestIndex(image.fs, f)] ?? [];
+    const peak = column.reduce((most, value) => Math.max(most, value), 0);
+    const value = column[nearestIndex(image.vs, v)];
+    return peak > 0 && value !== undefined ? `; ${(value / peak).toFixed(2)}` : "";
+  };
+
+  // Over a λ line: how the checks define it, with its value.
+  const lambdaTip = ((): Tip | null => {
+    if (!hoverPos) return null;
+    const { x, y } = hoverPos;
+    if (x < ML || x > ML + PLOT_W || y < MT || y > MT + PLOT_H) return null;
+    const near = (lambda: number | null) => {
+      if (lambda === null) return false;
+      // Pixels from the line v = f λ, across it or along it, whichever is shorter.
+      const across = Math.abs(yOf(fOf(x) * lambda) - y);
+      const along = Math.abs(xOf(vOf(y) / lambda) - x);
+      return Math.min(across, along) <= 6;
+    };
+    const metres = (value: number) => `${+value.toFixed(value < 10 ? 2 : 1)} m`;
+    // The line's point under the pointer: its frequency and velocity, and the wavelength.
+    const onLine = (lambda: number) => {
+      const f = fOf(x);
+      const v = f * lambda;
+      return `${f.toFixed(1)} Hz; ${v.toFixed(0)} m/s${amplitudeAt(f, v)}; λ ${metres(lambda)}`;
+    };
+    if (near(image.lambda_min)) {
+      const lambda = image.lambda_min as number;
+      return { title: "λmin", values: onLine(lambda), notes: [`2 receiver spacings (${metres(lambda / 2)})`] };
+    }
+    if (near(image.lambda_max)) {
+      const lambda = image.lambda_max as number;
+      return { title: "λmax", values: onLine(lambda), notes: [`3 window lengths (${metres(lambda / 3)})`] };
+    }
+    return null;
+  })();
+
+  // Elsewhere on the image: what is under the pointer, a pick first when one is that near.
+  const dataTip = ((): Tip | null => {
+    if (!hoverPos) return null;
+    const { x, y } = hoverPos;
+    if (x < ML || x > ML + PLOT_W || y < MT || y > MT + PLOT_H) return null;
+    const f = fOf(x);
+    const v = vOf(y);
+    let pick: { label: string; f: number; v: number; err: number | null; d: number } | null = null;
+    for (const curve of image.curves) {
+      for (let k = 0; k < curve.fs.length; k++) {
+        const d = Math.hypot(xOf(curve.fs[k]) - x, yOf(curve.vs[k]) - y);
+        if (d <= 6 && (!pick || d < pick.d)) {
+          pick = { label: curve.label, f: curve.fs[k], v: curve.vs[k], err: curve.vs_std?.[k] ?? null, d };
+        }
+      }
+    }
+    if (pick) {
+      const { label, f: pf, v: pv, err } = pick;
+      return {
+        title: label,
+        values: `${pf.toFixed(1)} Hz; ${pv.toFixed(0)}${err !== null ? ` ± ${err.toFixed(0)}` : ""} m/s${amplitudeAt(pf, pv)}; λ ${(pv / pf).toFixed(1)} m`,
+      };
+    }
+    // x; y; z (the amplitude); the wavelength.
+    return { values: `${f.toFixed(1)} Hz; ${v.toFixed(0)} m/s${amplitudeAt(f, v)}; λ ${(v / f).toFixed(1)} m` };
+  })();
+  const tip = lambdaTip ?? dataTip;
+
   return (
     <div ref={containerRef} style={{ width: "100%", position: "relative" }}>
       <canvas
@@ -394,6 +462,7 @@ export function DispersionImageCanvas({
         }
       />
       <ZoomSelection box={zoom.selection} />
+      {tip && hoverPos && <HoverTooltip x={hoverPos.x * scale} y={hoverPos.y * scale} tip={tip} />}
     </div>
   );
 }

@@ -149,19 +149,16 @@ export function PetroSectionCanvas({
     const posIdx = nearestIndex(positions, position);
     const zIdx = nearestIndex(elevations, elevation);
 
-    const line =
-      panel === "soil"
-        ? `Soil: ${soil_grid[posIdx]?.[zIdx] ?? "—"}`
-        : `N: ${nText(n_grid[posIdx]?.[zIdx] ?? null)}`;
+    const value =
+      panel === "soil" ? `${soil_grid[posIdx]?.[zIdx] ?? "—"}` : `N ${nText(n_grid[posIdx]?.[zIdx] ?? null)}`;
 
     return {
       px: hoverPos.x * scale,
       py: hoverPos.y * scale,
-      lines: [
-        `xmid ${positions[posIdx].toFixed(2)} m`,
-        `elevation ${elevations[zIdx].toFixed(2)} m`,
-        line,
-      ],
+      tip: {
+        title: `xmid ${positions[posIdx].toFixed(2)} m`,
+        values: `${elevations[zIdx].toFixed(2)} m; ${value}`,
+      },
     };
   }, [hoverPos, section, scale, PLOT_W, x0, x1, z0, z1]);
 
@@ -398,7 +395,7 @@ export function PetroSectionCanvas({
         onClick={click.onClick}
       />
       <ZoomSelection box={zoom.selection} />
-      {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
+      {hover && <HoverTooltip x={hover.px} y={hover.py} tip={hover.tip} />}
     </div>
   );
 }

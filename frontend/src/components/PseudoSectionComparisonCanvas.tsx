@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { bwr, cividis } from "./colormaps";
 import { HoverTooltip } from "./HoverTooltip";
+import { withUnit } from "./tips";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { nearestIndex, useCanvasHover } from "./useCanvasHover";
 import { useContainerWidth } from "./useContainerWidth";
@@ -183,11 +184,12 @@ export function PseudoSectionComparisonCanvas({
     return {
       px: hoverPos.x * scale,
       py: hoverPos.y * scale,
-      lines: [
-        `xmid ${positions[posIdx].toFixed(2)} m`,
-        invertY ? `wavelength ${fs[fIdx].toFixed(2)} m` : `frequency ${fs[fIdx].toFixed(2)} Hz`,
-        `${label}: ${value === null ? "—" : value.toFixed(1)}`,
-      ],
+      tip: {
+        title: `xmid ${positions[posIdx].toFixed(2)} m`,
+        values: `${fs[fIdx].toFixed(2)} ${invertY ? "m" : "Hz"}; ${
+          value === null ? "—" : withUnit(label, value.toFixed(1))
+        }`,
+      },
     };
   }, [hoverPos, comparison, mode, invertY, velocityLabel, scale, PLOT_W, x0, x1, f0, f1]);
 
@@ -416,7 +418,7 @@ export function PseudoSectionComparisonCanvas({
         onClick={click.onClick}
       />
       <ZoomSelection box={zoom.selection} />
-      {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
+      {hover && <HoverTooltip x={hover.px} y={hover.py} tip={hover.tip} />}
     </div>
   );
 }
