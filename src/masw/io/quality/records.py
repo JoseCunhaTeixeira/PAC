@@ -5,12 +5,15 @@ first breaks point to), the records and traces the run left out, and for a run t
 made, its signal check's verdicts (G1) and the preprocessing's attempts. Shown along the line at
 each record's shot: the records strip of Visualization, and the selected record's card."""
 
+import logging
 from pathlib import Path
 from typing import cast
 
+import matplotlib.pyplot as plt
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
+from masw.io.quality.done import record_settings
 from masw.io.quality.files import folder_path, line_geometry, read_manifest
 from masw.io.quality.log import (
     AttemptSummary,
@@ -41,6 +44,7 @@ from masw.io.quality.view import (
     warnings,
 )
 from sigpipe.base.stream import Stream
+from sigpipe.dataio.signal_plotting import plot_record_spectrum
 from sigpipe.dataio.stream.loading import load_stream
 from sigpipe.dataio.stream.plotting import signal_end
 from sigpipe.masw.pipelines.common import PREPROCESSED
@@ -49,16 +53,21 @@ from sigpipe.masw.quality.signal import (
     dead_clipped_nan,
     first_breaks,
     lateral_coherence,
+    mean_spectrum,
     signal_windows,
     snr_db,
     trigger_shift,
     usable_band,
 )
 from sigpipe.masw.runs import RunManifest, xmid_of
+from sigpipe.transformers import Plot
 
 STAGE = "preprocessing"
 GATE = "G1"
+logger = logging.getLogger(__name__)
+
 MEASURES_FILE = "SignalMeasures_0000.json"  # beside a record's preprocessed file, PAC's job's
+SPECTRUM_FIGURE = "Spectrum_0000.png"  # beside it too: its spectrum, as G1 measures it
 GATHER_SAMPLES = 1_200  # the most samples a trace keeps for the wiggle plot
 
 
@@ -106,6 +115,59 @@ def measure_records(run_folder: Path) -> None:
         metrics, band = signal_metrics(path, thresholds, active)
         measures = SignalMeasures(metrics=metrics, band_hz=band)
         (path.parent / MEASURES_FILE).write_text(measures.model_dump_json(indent=2))
+        snr = next((one.value for one in metrics if one.name == "snr_db"), None)
+        try:
+            save_spectrum(path, thresholds, active, band, snr)
+        except Exception:  # a figure must not lose the measures
+            logger.exception("Could not draw the spectrum of %s", path.parent)
+
+
+def save_spectrum(
+    path: Path,
+    thresholds: SignalThresholds,
+    active: bool,
+    band: tuple[float, float] | None,
+    snr: float | None,
+) -> Path:
+    """The spectrum figure of the preprocessed record in `path`, beside it (SPECTRUM_FIGURE): a
+    shot's surface-wave window against its noise window (the windows signal_metrics measures), the
+    usable band G1 found shaded, its median SNR; a passive record's whole length."""
+    stream = load_stream([path])[0]
+    xt = np.nan_to_num(np.asarray(stream.xt, dtype=float))
+    dead, clipped, nan = dead_clipped_nan(xt, thresholds.dead_ratio, thresholds.clip_share)
+    usable = ~(dead | clipped | nan)
+    offsets = np.asarray(stream.acquisition.offsets, dtype=float)
+    ts = np.asarray(stream.ts, dtype=float)
+    windows = (
+        signal_windows(offsets, ts, thresholds.vg_min, thresholds.vg_max, thresholds.pad_s)
+        if active
+        else None
+    )
+    kept = xt[usable] if usable.any() else xt
+    if windows is not None and usable.any():
+        rows = _rows(windows, usable)
+        signal = mean_spectrum(kept, rows.signal, stream.sampling_freq)
+        noise = mean_spectrum(kept, rows.noise, stream.sampling_freq)
+        title = (f"Median SNR {snr:.1f} dB" if snr is not None else "SNR not measured") + (
+            f"; noise {windows.where}"
+        )
+    else:
+        signal = mean_spectrum(kept, np.ones_like(kept, dtype=bool), stream.sampling_freq)
+        noise = None
+        title = "The whole record"
+    if signal is None:
+        raise ValueError(f"No spectrum of {path}")
+    if noise is not None and float(noise[1].max()) <= 1e-12 * float(signal[1].max()):
+        # Muted after the slowest arrival: nothing left to measure the noise by.
+        noise = None
+        title += " (muted: nothing left in it)"
+    figure = plot_record_spectrum(
+        signal[0], signal[1], None if noise is None else noise[1], band, title
+    )
+    target = path.parent / SPECTRUM_FIGURE
+    Plot.savefig(path=target, figure=figure)
+    plt.close(figure)
+    return target
 
 
 class RecordCard(Card):
@@ -330,6 +392,7 @@ def record_card(folder: str, name: str) -> RecordCard:
         x=x,
         windows=windows,
         excluded_traces=excluded_traces,
+        settings=record_settings(manifest, log, name),
     )
 
 

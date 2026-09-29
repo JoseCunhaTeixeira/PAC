@@ -71,6 +71,7 @@ export function DispersionPanel({
   const windows = overview?.cells.length ?? 0;
   const place = xmid !== null ? { xmid } : null;
   const figures = useRunFigures(folder, place);
+  const runSaved = useRunFigures(folder);
   const [axis, setAxis] = useState<"frequency" | "wavelength">("frequency");
   const pick = (position: number) => {
     const cell = nearestCell(overview?.cells ?? [], position);
@@ -93,7 +94,9 @@ export function DispersionPanel({
               card.data && (
                 <>
                   <Details gates={card.data.gates} attempts={card.data.attempts} />
-                  <SavedFigures figures={runFigures(folder, figures, "", place ?? {})} />
+                  <SavedFigures
+                    figures={runFigures(folder, figures, ["Selection_", "Stream_", "DispersionImage_"], place ?? {})}
+                  />
                 </>
               )
             }
@@ -154,6 +157,7 @@ export function DispersionPanel({
         ) : (
           <Skeleton height={300} />
         )}
+        <SavedFigures figures={runFigures(folder, runSaved, "DispersionPicking_PseudoSection")} />
       </Card>
     </>
   );

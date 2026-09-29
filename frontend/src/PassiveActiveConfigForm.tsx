@@ -135,6 +135,7 @@ function Form({
               filtering={filtering}
               setFiltering={setFiltering}
               nyquist={nyquist}
+              acquisition={acquisition}
             />
           </div>
         </Card>

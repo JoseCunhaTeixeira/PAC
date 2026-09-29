@@ -8,10 +8,12 @@ from pathlib import Path
 
 from masw.io.quality.files import folder_path, read_manifest
 
-# The figures of a run's root Visualization shows: the seismic and petrophysical inversions'.
-RUN_FIGURE_PREFIXES = ("SeismicInversion_", "PetroInversion_")
-# A window's processing figures, in the order its steps made them.
-WINDOW_FIGURES = ("Selection_", "Stream_", "DispersionImage_")
+# The figures of a run's root Visualization shows: the picks', the seismic and petrophysical
+# inversions'.
+RUN_FIGURE_PREFIXES = ("DispersionPicking_", "SeismicInversion_", "PetroInversion_")
+# A window's figures Visualization lists (the inversion's are its card's), in the order its steps
+# made them: its processing's, then its petrophysical inversion's.
+WINDOW_FIGURES = ("Selection_", "Stream_", "DispersionImage_", "PetroInversion_")
 
 
 def unit_folder(folder: str, xmid: float | None = None, record: str | None = None) -> Path:

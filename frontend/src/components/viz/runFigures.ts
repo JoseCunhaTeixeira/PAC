@@ -26,10 +26,16 @@ export function useRunFigures(folder: string, place: FigurePlace | null = {}): s
   return useJson<string[]>(url).data ?? [];
 }
 
-/** Those of the run's `names` starting with `prefix` (one card's; "" for all), with their
- * URLs. */
-export function runFigures(folder: string, names: string[], prefix = "", place: FigurePlace = {}): SavedFigure[] {
+/** Those of the run's `names` starting with `prefix` (one card's, or any of several; "" for
+ * all), with their URLs. */
+export function runFigures(
+  folder: string,
+  names: string[],
+  prefix: string | string[] = "",
+  place: FigurePlace = {},
+): SavedFigure[] {
+  const prefixes = typeof prefix === "string" ? [prefix] : prefix;
   return names
-    .filter((name) => name.startsWith(prefix))
+    .filter((name) => prefixes.some((one) => name.startsWith(one)))
     .map((name) => ({ name, url: `${API}/quality/run_figure/${encodeURIComponent(folder)}/${name}${query(place)}` }));
 }

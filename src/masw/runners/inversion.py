@@ -167,6 +167,11 @@ def run_inversion(
                 label,
             )
 
+    try:
+        io.save_line_summary_plot(config.folder)
+    except Exception:
+        logger.exception("Failed to save the line summary for folder=%s", config.folder)
+
     return errors
 
 

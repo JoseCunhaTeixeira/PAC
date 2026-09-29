@@ -16,7 +16,8 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
 from masw.io.pick_origin import Origin, pick_origin
-from masw.io.quality.files import folder_path, fundamental, wavelengths
+from masw.io.quality.done import window_settings
+from masw.io.quality.files import folder_path, fundamental, read_manifest, wavelengths
 from masw.io.quality.log import (
     Attempt,
     AttemptSummary,
@@ -324,6 +325,7 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
     if not window.is_dir():
         raise ValueError(f"No window for folder={folder}, xmid={xmid}")
     log = read_log(run_folder)
+    manifest = read_manifest(run_folder)
     thresholds = thresholds_of(run_folder)
     image = load_image(window) if (window / IMAGE_FILE).exists() else None
     saved = load_curves(window)
@@ -413,6 +415,7 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         ),
         picked_by=picked_by,
         curves=tuple(stats),
+        settings=window_settings(manifest, log, unit) if manifest is not None else (),
         band_hz=band,
         wavelength_limits_m=limits,
     )

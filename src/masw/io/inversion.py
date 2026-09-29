@@ -31,6 +31,7 @@ from sigpipe.masw.inversion.section import (
     save_section,
     save_sections_file,
 )
+from sigpipe.masw.inversion.summary import save_line_summary
 from sigpipe.masw.runs import window_length
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,15 @@ def save_velocity_section_plot(folder: str, model: ModelName = DEFAULT_MODEL) ->
             f"At least two inverted positions are required to build a section in folder={folder}"
         )
     return path
+
+
+def save_line_summary_plot(folder: str) -> Path | None:
+    """Save the figure of the line's inversions at a glance in the output folder (sigpipe's
+    save_line_summary: per window, the depth informed, the misfit, R-hat and the layers), with
+    the run's limits."""
+    run_folder = output_folder(folder)
+    thresholds = thresholds_of(run_folder)
+    return save_line_summary(run_folder, _units(folder), thresholds.max_misfit, thresholds.max_rhat)
 
 
 def save_velocity_xzv(folder: str) -> Path:

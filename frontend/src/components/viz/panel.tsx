@@ -169,6 +169,11 @@ export function UnitCard({
         </p>
       )}
       {children}
+      {card.settings && card.settings.length > 0 && (
+        <Fold title="Settings, and why">
+          <SettingsList settings={card.settings} />
+        </Fold>
+      )}
       {details}
     </section>
   );
