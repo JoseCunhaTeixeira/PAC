@@ -64,6 +64,7 @@ const METRIC_LABELS: Record<string, string> = {
   samples_per_chain: "Samples a chain",
   at_bound: "Share at a prior's bound",
   useful_depth: "Useful depth",
+  one_structure: "One structure, of the model below 1 m",
   contrast: "Least contrast between layers",
   // G7 and G8, a petrophysical model
   water_table: "Water table",

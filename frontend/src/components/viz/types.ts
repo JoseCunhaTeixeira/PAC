@@ -269,11 +269,13 @@ export interface VsProfile {
   model: ModelName;
   tops: number[];
   vs: number[];
-  // The kept models' 10th and 90th percentiles at each depth (none without them), and how far
-  // around each depth their Vs moves together (m; null: all alike there).
+  // The kept models' 10th and 90th percentiles at each depth (none without them), their
+  // relative uncertainty U = (P90 - P10) / (2 P50) (%), and how far below each depth their Vs
+  // stays correlated with its own (m; to the bottom: at least that; null: all alike there).
   spread_depths: number[];
   spread_low: number[];
   spread_high: number[];
+  uncertainty: number[];
   correlation: (number | null)[];
   bottom: number;
   informed: number | null;

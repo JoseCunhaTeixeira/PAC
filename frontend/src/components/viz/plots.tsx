@@ -25,7 +25,7 @@ function steps(tops: number[], values: number[], bottom: number): [number, numbe
 export function VsProfilePlot({ profile }: { profile: VsProfile }) {
   const palette = vizPalette(useTheme());
   const bottom = Math.max(profile.bottom, profile.tops[profile.tops.length - 1] ?? 0);
-  const { spread_depths: depths, spread_low: low, spread_high: high, correlation } = profile;
+  const { spread_depths: depths, spread_low: low, spread_high: high, uncertainty, correlation } = profile;
   const xs = [...low, ...high, ...profile.vs];
   const xLo = Math.min(...xs);
   const xHi = Math.max(...xs);
@@ -79,12 +79,17 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
       width: 2.2,
     },
   ];
-  // How far around each depth the kept models' Vs moves together: a gap where all alike.
+  // How far below each depth the kept models' Vs stays correlated: a gap where all alike.
   const lengths = depths.flatMap((z, i): [number, number][] => {
     const length = correlation[i];
     return length === null || length === undefined ? [] : [[length, z]];
   });
   const lengthMax = Math.max(1, ...lengths.map(([length]) => length));
+  // Their relative uncertainty U, %, against the depth informed's limit.
+  const uncertain = depths.map((z, i): [number, number] => [uncertainty[i], z]);
+  const uncertainMax = Math.max(30, ...uncertainty);
+  const unlabelled = refs.map((ref) => ({ ...ref, label: "" }));
+  const uncertaintyColour = palette.chains[6];
   return (
     <PlotBox>
       <div>
@@ -103,13 +108,33 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
             resetKey={profile}
             depthLink={depthLink}
           />
+          {uncertain.length > 0 && (
+            <LinePlot
+              series={[{ label: "Vs uncertainty (%)", color: uncertaintyColour, points: uncertain, width: 1.8 }]}
+              areas={veils}
+              refs={[
+                ...unlabelled,
+                { axis: "x", at: 25, label: "", color: palette.status.warn, dash: [4, 3] },
+              ]}
+              xLabel="Uncertainty (%)"
+              yLabel="Depth (m)"
+              yDown
+              height={320}
+              xRange={[0, uncertainMax * 1.08]}
+              yRange={[0, bottom * 1.04]}
+              resetKey={profile}
+              minWidth={90}
+              depthLink={depthLink}
+              yAxis={false}
+            />
+          )}
           {lengths.length > 0 && (
             <LinePlot
               series={[
                 { label: "Correlation length", color: palette.muted, points: lengths, width: 1.8 },
               ]}
               areas={veils}
-              refs={refs.map((ref) => ({ ...ref, label: "" }))}
+              refs={unlabelled}
               xLabel="Correlation (m)"
               yLabel="Depth (m)"
               yDown
@@ -117,8 +142,9 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
               xRange={[0, lengthMax * 1.08]}
               yRange={[0, bottom * 1.04]}
               resetKey={profile}
-              minWidth={140}
+              minWidth={90}
               depthLink={depthLink}
+              yAxis={false}
             />
           )}
         </div>
@@ -133,12 +159,25 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
               10–90 % of the models
             </span>
           )}
+          {uncertain.length > 0 && (
+            <span
+              style={{ color: uncertaintyColour }}
+              data-tip={
+                "Vs uncertainty\nU = (P90 − P10) / (2 P50) of the kept models\n" +
+                "Its 25 % (dashed): the depth informed, from the surface down"
+              }
+            >
+              <i />
+              uncertainty
+            </span>
+          )}
           {lengths.length > 0 && (
             <span
               style={{ color: palette.muted }}
               data-tip={
-                "Correlation length\nHow far around each depth the kept models' Vs moves together " +
-                "(rank correlation ≥ 0.5): the data do not tell those depths apart\nReported, not judged"
+                "Correlation length\nHow far below each depth the kept models' Vs stays correlated " +
+                "with its own (rank correlation ≥ 0.5): the data do not tell those depths apart\n" +
+                "Down to the bottom: at least that. Reported, not judged"
               }
             >
               <i />

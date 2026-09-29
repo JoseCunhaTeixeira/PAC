@@ -574,20 +574,19 @@
   gap: 8px;
 }
 
-/* The Vs profile and, beside it, its correlation length: one depth axis. */
+/* The Vs profile, its uncertainty and its correlation length side by side: one depth axis. */
 .viz-profile-pair {
   display: flex;
-  gap: 4px;
+  gap: 2px;
+}
+
+.viz-profile-pair > * {
+  flex: 1;
+  min-width: 0;
 }
 
 .viz-profile-pair > :first-child {
-  flex: 2.4;
-  min-width: 0;
-}
-
-.viz-profile-pair > :nth-child(2) {
-  flex: 1;
-  min-width: 0;
+  flex: 2.2;
 }
 
 /* Room under the tools for the reset, over the plot's blank margin. */

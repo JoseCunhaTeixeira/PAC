@@ -386,7 +386,8 @@ def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> N
     assert vs1["prior"] == [100, 400] and 100 <= vs1["low"] <= vs1["median"] <= vs1["high"] <= 400
     assert vs1["step"] > 0 and vs1["step_unit"] == ""  # m/s, as the layer's own
     assert card["figures"] == ["marginals", "density_curves", "dispersion_image"]
-    assert any(text.startswith("Layered median: Vs ") for text in _texts(card))
+    # The median of the ensemble alone said (the user, 2026-09-29): no layered median.
+    assert not any(text.startswith("Layered median") for text in _texts(card))
     best = client.get(f"/quality/inversion/card/{run}/2.5?model=best").json()
     assert best["profile"]["model"] == "best"
     assert client.get(f"/quality/inversion/card/{run}/2.5?model=nope").status_code == 422
