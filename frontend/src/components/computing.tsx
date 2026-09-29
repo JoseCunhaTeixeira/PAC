@@ -602,7 +602,8 @@ export function FilteringRow({
           <NumberField label="Order" value={filtering.order} onChange={(v) => setFiltering({ ...filtering, order: v })} min={4} step={1} whole />
         </Fields>
       )}
-      {acquisition && <FilterSpectrum acquisition={acquisition} filtering={filtering} />}
+      {/* As the muting's record: shown only with a filter on. */}
+      {acquisition && filtering.method !== "none" && <FilterSpectrum acquisition={acquisition} filtering={filtering} />}
     </Row>
   );
 }

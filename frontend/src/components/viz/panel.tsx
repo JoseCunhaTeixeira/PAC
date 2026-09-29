@@ -12,9 +12,10 @@ import { STATE_MEANINGS } from "./format";
 import type { Card, Cell, Overview, Sentence, StageKey } from "./types";
 import { Empty, ErrorBox, Fold, GateBadge, PartBadge, Sentences, SettingsList, Skeleton, StatusBadge } from "./ui";
 
-// What every stage's panel is made of: its summary and the settings it ran with, and the
-// selected unit's card, with its neighbours a click away. A card says its verdict and its
-// warnings; the rest of what it says is folded under them.
+// What every stage's panel is made of: its summary, and the selected unit's card, with its
+// neighbours a click away. A card says its verdict and its warnings, shows the unit, and holds
+// everything its display was made with (its settings, and why; how the line's other units
+// differ in each); the rest of what it says is folded under them.
 
 // The marks said at once: what went wrong or needs a look.
 const LOUD = new Set<Sentence["mark"]>(["warn", "fail"]);
@@ -46,11 +47,6 @@ export function StageHead({
       </p>
       {aside}
       </div>
-      {overview.settings.length > 0 && (
-        <Fold title="Settings, and why">
-          <SettingsList settings={overview.settings} />
-        </Fold>
-      )}
     </section>
   );
 }

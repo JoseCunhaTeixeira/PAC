@@ -15,8 +15,15 @@ from typing import Any, cast
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-from masw.io.pick_origin import Origin, pick_origin
-from masw.io.quality.done import window_settings
+from masw.io.pick_origin import Origin, assistant_picked, pick_origin
+from masw.io.quality.done import (
+    most_common,
+    record_ranges,
+    record_settings,
+    window_ranges,
+    window_settings,
+    with_spreads,
+)
 from masw.io.quality.files import folder_path, fundamental, read_manifest, wavelengths
 from masw.io.quality.log import (
     Attempt,
@@ -27,7 +34,7 @@ from masw.io.quality.log import (
     config_section,
     read_log,
 )
-from masw.io.quality.records import RecordGather, gather_of
+from masw.io.quality.records import RecordGather, SavedSpectra, gather_of, saved_spectra
 from masw.io.quality.view import (
     Card,
     Cell,
@@ -60,8 +67,9 @@ from sigpipe.base.dispersion_image import DispersionImage
 from sigpipe.dataio.stream.loading import load_stream
 from sigpipe.masw.picks import load_curves
 from sigpipe.masw.quality.image import aliased, coherent_columns, competing_ridges, edge_peaks
-from sigpipe.masw.runs import load_image, window_folders, xmid_of
+from sigpipe.masw.runs import RunManifest, load_image, window_folders, xmid_of
 from sigpipe.masw.runs.finding import IMAGE_FILE
+from sigpipe.masw.windows import MASWWindow
 
 # The stacked correlations a passive or passive-active window's image is made of (the pipelines'
 # saved stream).
@@ -153,10 +161,11 @@ def dispersion_overview(folder: str) -> Overview:
     thresholds = thresholds_of(run_folder)
     cells: list[Cell] = []
     origins: Counter[Origin] = Counter()
-    by_hand: set[str] = set()
+    computed = 0  # the windows with an image
     present: set[tuple[int, PartState]] = set()  # each part's states on the line
     for unit in window_folders(run_folder):
         window = run_folder / unit
+        computed += (window / IMAGE_FILE).exists()
         curve = fundamental(window)
         saved = load_curves(window)
         modes = tuple(
@@ -169,8 +178,6 @@ def dispersion_overview(folder: str) -> Overview:
         picked_by = pick_origin(window, log, curve is not None)
         if picked_by is not None:
             origins[picked_by] += 1
-        if picked_by == "hand":
-            by_hand.add(unit)
         g2, g3, g4 = _results(log, unit, picked_by)
         stats = curve_stats(curve) if curve is not None else None
         image, picks = _states(g2, g3, g4, curve, picked_by, thresholds, (None, None))
@@ -207,15 +214,20 @@ def dispersion_overview(folder: str) -> Overview:
             )
         )
     picked = sum(origins.values())
-    summary = f"{picked} of {plural(len(cells), 'window')} picked"
-    if log is None or not origins["auto"]:
-        summary += " by hand"
-    elif not origins["hand"]:
-        summary += " automatically"
-    else:
-        summary += f" ({origins['auto']} automatically, {origins['hand']} by hand)"
-    if picked < len(cells):
-        summary += f" · {len(cells) - picked} without a curve"
+    how = (
+        "by hand"
+        if not origins["auto"]
+        else "automatically"
+        if not origins["hand"]
+        else f"({origins['auto']} automatically, {origins['hand']} by hand)"
+    )
+    summary = f"{computed} of {plural(len(cells), 'window')} computed"
+    if picked and picked == computed:
+        summary += f" and picked {how}"
+    elif picked:
+        summary += f" · {picked} picked {how}"
+    if picked < computed:
+        summary += f" · {computed - picked} without a curve"
     paco = log is not None
     return Overview(
         paco=paco,
@@ -229,7 +241,6 @@ def dispersion_overview(folder: str) -> Overview:
         cells=tuple(cells),
         parts=_legends(paco, present),
         track=Track(label="Longest wavelength picked (m)", short="Longest λ", kind="value"),
-        settings=_picking_settings(log, origins, by_hand),
     )
 
 
@@ -378,7 +389,15 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         )
     stats = [curve_stats(curve) for curve in curves]
     if not by_hand:
-        said += _picks(stats, picked_by, g3, curve_measures, lambda_min, judged)
+        said += _picks(
+            stats,
+            picked_by,
+            g3,
+            curve_measures,
+            lambda_min,
+            judged,
+            assistant_picked(window, log),
+        )
     if log is not None:
         said += _again(log.of(unit, "phase_shift"), "Imaged again")
         if judged:
@@ -415,7 +434,15 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         ),
         picked_by=picked_by,
         curves=tuple(stats),
-        settings=window_settings(manifest, log, unit) if manifest is not None else (),
+        settings=_records_settings(window, manifest, log)
+        + with_spreads(
+            unit,
+            _line_settings(run_folder, manifest, log),
+            "window",
+            ranges=window_ranges(manifest, log, window_folders(run_folder)),
+        )
+        if manifest is not None
+        else (),
         band_hz=band,
         wavelength_limits_m=limits,
     )
@@ -441,12 +468,20 @@ def _picks(
     measures: tuple[Metric, ...],
     lambda_min: float | None,
     paco: bool,
+    assistant: bool,
 ) -> list[Sentence]:
-    """What was picked, by whom, and how deep it reaches."""
+    """What was picked, by whom (`assistant`: the assistant's automatic pick, else PAC's), and
+    how deep it reaches."""
     if not stats:
         return [Sentence(mark="fail" if paco else "info", text="No curve picked.")]
     first, *others = stats
-    by = "automatically by the assistant" if picked_by == "auto" else "by hand"
+    by = (
+        "by hand"
+        if picked_by != "auto"
+        else "automatically by the assistant"
+        if assistant
+        else "automatically"
+    )
     text = (
         f"{first.label} picked {by}: {first.n_points} points, {span(*first.band_hz, 'Hz')}, "
         f"wavelengths {span(*first.wavelength_m, 'm')}"
@@ -529,51 +564,82 @@ def _overrides(overrides: Mapping[str, Any]) -> str:
     return ", ".join(part for part in said if part)
 
 
-def _picking_settings(
-    log: QCLog | None, origins: Counter[Origin], by_hand: set[str]
-) -> tuple[Setting, ...]:
-    """Who picked the windows, and what the curve check changed of the picks still the
-    assistant's (`by_hand`: the windows picked by hand since)."""
-    if log is None:
-        return (
-            Setting(
-                key="picking",
-                label="Picking",
-                value=f"{sum(origins.values())} by hand",
-                detail="windows picked",
-                why="in the Dispersion picking page",
-                origin="pac",
-            ),
+def _picking_setting(
+    log: QCLog | None, unit: str, picked_by: Origin | None, assistant: bool
+) -> Setting:
+    """Who picked window `unit`'s curves, and why: by hand or PAC's automatic picking (the
+    Dispersion picking page), or the assistant's picker along M0's ridge (`assistant`), picked
+    again by the curve check (G3) when it was."""
+    if picked_by is None:
+        return Setting(
+            key="picking", label="Picking", value="none", why="no curve picked", origin="default"
         )
-    again = [
-        attempt
-        for attempt in log.attempts
-        if attempt.stage == "picking"
-        and attempt.unit.startswith("xmid_")
-        and attempt.unit not in by_hand
-        and attempt.attempt > 1
-    ]
-    asked = Counter(flag_text(attempt.triggered_by.partition(":")[2]) for attempt in again)
-    why = "the assistant's picker tracked M0 along its ridge in every window"
+    if picked_by == "hand" or log is None or not assistant:
+        return Setting(
+            key="picking",
+            label="Picking",
+            value="by hand" if picked_by == "hand" else "automatic",
+            why="in the Dispersion picking page"
+            if picked_by == "hand"
+            else "PAC's automatic picking, in the Dispersion picking page",
+            origin="pac",
+        )
+    again = [one for one in log.of(unit, "picking") if one.attempt > 1]
+    asked = Counter(flag_text(one.triggered_by.partition(":")[2]) for one in again)
+    why = "the assistant's picker tracked M0 along its ridge"
     if again:
-        windows = {attempt.unit for attempt in again}
         why += (
-            f"; picked again in {plural(len(windows), 'window')} by the curve check (G3: "
+            "; picked again by the curve check (G3: "
             + ", ".join(f"{count} {name}" for name, count in asked.most_common())
             + ")"
         )
-    if origins["hand"]:
-        why += f"; {plural(origins['hand'], 'window')} picked again by hand afterwards"
-    return (
-        Setting(
-            key="picking",
-            label="Picking",
-            value=f"{origins['auto']} automatic",
-            detail=f"{origins['hand']} by hand" if origins["hand"] else "windows picked",
-            why=why,
-            origin="rule",
-        ),
+    return Setting(
+        key="picking",
+        label="Picking",
+        value="automatic",
+        detail=f"picked {len(again) + 1} times" if again else "",
+        why=why,
+        origin="rule",
     )
+
+
+def _records_settings(
+    window: Path, manifest: RunManifest, log: QCLog | None
+) -> tuple[Setting, ...]:
+    """How the records window folder `window` stacks were preprocessed, before its image was
+    made of them: what most ran with, the others named (most_common); none when it says no
+    records."""
+    path = window / "window.json"
+    if not path.exists():
+        return ()
+    names = [
+        one.name
+        for one in MASWWindow.model_validate_json(path.read_text()).selected_files
+        if one.name not in manifest.exclusions.records
+    ]
+    return most_common(
+        {name: record_settings(manifest, log, name) for name in names},
+        "record",
+        ranges=record_ranges(manifest, log, names),
+    )
+
+
+def _line_settings(
+    run_folder: Path, manifest: RunManifest, log: QCLog | None
+) -> dict[str, tuple[Setting, ...]]:
+    """Each window's settings: how its image was made (window_settings), who picked its curves."""
+    return {
+        unit: (
+            *window_settings(manifest, log, unit),
+            _picking_setting(
+                log,
+                unit,
+                pick_origin(run_folder / unit, log, fundamental(run_folder / unit) is not None),
+                assistant_picked(run_folder / unit, log),
+            ),
+        )
+        for unit in window_folders(run_folder)
+    }
 
 
 def coherent_band(
@@ -743,6 +809,14 @@ def _uncertainty(curve: DispersionCurve, vs: np.ndarray) -> float | None:
 
 def _metric(metrics: tuple[Metric, ...], name: str) -> float | None:
     return next((metric.value for metric in metrics if metric.name == name), None)
+
+
+def window_spectra(folder: str, xmid: float) -> SavedSpectra:
+    """The spectra of the stacked correlations window `xmid`'s image was made of (passive and
+    passive-active), as its job saved them."""
+    return saved_spectra(
+        folder_path(folder) / f"xmid_{xmid:.2f}", f"window xmid={xmid} in folder={folder}"
+    )
 
 
 def window_gather(folder: str, xmid: float, norm: str = "trace") -> RecordGather:

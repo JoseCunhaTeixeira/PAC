@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../../theme";
 import { useContainerWidth } from "../useContainerWidth";
-import { tickDecimals, useZoom, type PlotRect, type Range } from "../useZoom";
+import { niceTicks, type PlotRect, type Range, tickDecimals, useZoom } from "../useZoom";
 import { ZoomSelection } from "../ZoomOverlay";
 import { TipLines } from "../HoverTooltip";
 import type { Tip } from "../tips";
@@ -52,17 +52,6 @@ const ML = 84;
 const MR = 16;
 const MT = 26;
 const MB = 46; // the ticks' values, then the axis's title
-
-function niceTicks(lo: number, hi: number, count: number): number[] {
-  const raw = (hi - lo) / count;
-  if (!(raw > 0)) return [lo];
-  const power = 10 ** Math.floor(Math.log10(raw));
-  const m = raw / power;
-  const step = (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * power;
-  const ticks: number[] = [];
-  for (let t = Math.ceil(lo / step) * step; t <= hi + step * 1e-9; t += step) ticks.push(+t.toFixed(9));
-  return ticks;
-}
 
 export function LineGather({
   data,

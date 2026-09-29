@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { API, type Acquisition } from "../../api";
 import { PlotBox, Segmented } from "../kit";
+import { SpectrumCanvas } from "../SpectrumCanvas";
 import type { Range } from "../useZoom";
 import { LineGather, type GatherData } from "./LineGather";
 import { StageHead, UnitCard } from "./panel";
@@ -43,6 +44,52 @@ function RunGather({
         ) : (
           <Skeleton height={440} />
         )}
+      </div>
+    </PlotBox>
+  );
+}
+
+interface Spectra {
+  positions: number[];
+  freqs: number[];
+  amplitude: number[][];
+  band_hz: [number, number] | null;
+}
+
+/** The spectra a job saved beside a record or a window's stacked correlations, under their
+ * gather and along the line with it; nothing when none were saved (a run from before). */
+export function SavedSpectrum({
+  url,
+  title,
+  outside,
+  extent,
+  xZoom,
+  onXZoom,
+}: {
+  url: string;
+  title: string;
+  /** What the hover says outside the band drawn. */
+  outside: string;
+  extent: Range;
+  xZoom: Range | null;
+  onXZoom: (x: Range | null) => void;
+}) {
+  const spectra = useJson<Spectra>(url);
+  if (!spectra.data) return null;
+  return (
+    <PlotBox>
+      <div style={{ marginTop: 16 }}>
+        <PlotHead title={title} />
+        <SpectrumCanvas
+          key={url}
+          spectra={spectra.data}
+          positions={spectra.data.positions}
+          band={spectra.data.band_hz}
+          outside={outside}
+          extent={extent}
+          xZoom={xZoom}
+          onXZoom={onXZoom}
+        />
       </div>
     </PlotBox>
   );
@@ -161,6 +208,14 @@ export function RecordsPanel({
           {card && (
             <div style={{ marginTop: 16 }}>
               <RunGather folder={folder} name={card.key} extent={extent} xZoom={xZoom} onXZoom={onXZoom} />
+              <SavedSpectrum
+                url={`${API}/quality/records/spectrum/${encodeURIComponent(folder)}/${encodeURIComponent(card.key)}`}
+                title={`${card.key} · its spectrum, preprocessed`}
+                outside="outside its usable band"
+                extent={extent}
+                xZoom={xZoom}
+                onXZoom={onXZoom}
+              />
             </div>
           )}
         </UnitCard>

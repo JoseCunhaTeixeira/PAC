@@ -8,7 +8,7 @@ import type { Range } from "../useZoom";
 import { xmidOf } from "./format";
 import { LineGather, type GatherData } from "./LineGather";
 import { StageHead, UnitCard } from "./panel";
-import { Normalization } from "./RecordsPanel";
+import { Normalization, SavedSpectrum } from "./RecordsPanel";
 import { runFigures, useRunFigures } from "./runFigures";
 import type { DispersionCard, Overview, WindowSources } from "./types";
 import { Details, Empty, ErrorBox, PlotHead, SavedFigures, Skeleton } from "./ui";
@@ -43,6 +43,14 @@ function WindowGather({ folder, xmid }: { folder: string; xmid: number }) {
           <Normalization value={norm} onChange={setNorm} />
         </PlotHead>
         <LineGather key={xmid} data={gather.data} extent={extent} xZoom={xZoom} onXZoom={setXZoom} height={320} />
+        <SavedSpectrum
+          url={`${API}/quality/dispersion/spectrum/${at(folder)}/${xmid}`}
+          title="Stacked correlations · their spectrum"
+          outside="outside the band"
+          extent={extent}
+          xZoom={xZoom}
+          onXZoom={setXZoom}
+        />
       </div>
     </PlotBox>
   );
@@ -95,7 +103,12 @@ export function DispersionPanel({
                 <>
                   <Details gates={card.data.gates} attempts={card.data.attempts} />
                   <SavedFigures
-                    figures={runFigures(folder, figures, ["Selection_", "Stream_", "DispersionImage_"], place ?? {})}
+                    figures={runFigures(
+                      folder,
+                      figures,
+                      ["Selection_", "Stream_", "Spectrum_", "DispersionImage_"],
+                      place ?? {},
+                    )}
                   />
                 </>
               )

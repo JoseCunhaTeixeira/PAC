@@ -32,6 +32,8 @@ export interface Setting {
   detail: string; // what goes with it: "5 receivers"
   why: string;
   origin: Origin;
+  /** How the other units differ in it, their scope said ("along the line: …"); "" when alike. */
+  spread?: string;
 }
 
 export interface LengthTrial {
@@ -143,7 +145,6 @@ export interface Overview {
   legend: Partial<Record<Status, string>>;
   cells: Cell[];
   track: Track | null;
-  settings: Setting[];
   /** The cells' parts, when they say their checks apart. */
   parts?: PartLegend[];
 }

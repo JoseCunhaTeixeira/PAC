@@ -1,18 +1,19 @@
-"""What was done to a unit, as its card's "Settings, and why" says it: each step it went through
+"""What was done to a unit, as its stage's "Settings, and why" says it: each step it went through
 with the settings it ran with (the run's preset with the unit's own changes on top: the
-assistant's retries, from its QC log; a window's, the line's too), and where each comes from,
-its history when the retries changed it. Read, never measured."""
+assistant's retries, from its QC log; a window's, the line's too), where each comes from, its
+history when the retries changed it, and how the line's other units differ in it. Read, never
+measured."""
 
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
 from masw.io.quality.files import merged, preset_stage
 from masw.io.quality.log import LINE, Attempt, QCLog
 from masw.io.quality.runs import DEFAULT, GIVEN, PAC
-from masw.io.quality.view import Origin, Setting, number
-from sigpipe.masw.inversion import InversionParameters
+from masw.io.quality.view import Origin, Setting, number, plural, span
 from sigpipe.masw.presets import make_preset
-from sigpipe.masw.runs import RunManifest
+from sigpipe.masw.runs import RunManifest, xmid_of
 
 # The stages as their steps say them, and their values' units.
 _NAMES = {
@@ -42,6 +43,17 @@ _UNITS = {
 }
 # A step every run does the same way.
 _ALWAYS = "every run does it"
+# The stages a record's preprocessing and a window's image went through, by mode.
+_RECORD_STAGES = ("trigger", "muting", "filtering")
+_WINDOW_STAGES = {
+    "active": ("dispersion", "image_stacking"),
+    "passive-active": ("stacking", "dispersion"),
+    "passive": ("slicing", "selection", "whitening", "normalization", "stacking", "dispersion"),
+}
+# A spread names the other values, the most common first, and with each the units that ran with
+# it, when so few; more are counted.
+_SPREAD_VALUES = 3
+_SPREAD_UNITS = 3
 # From sigpipe c17b3de (2026-09-28 16:46, +02:00) on, a shot's trigger is corrected with its
 # muting only; the runs before corrected it whatever the muting.
 _TRIGGER_WITH_MUTING = datetime(2026, 9, 28, 14, 46, tzinfo=UTC)
@@ -62,7 +74,7 @@ def _values(values: dict[str, Any]) -> str:
     )
 
 
-def _trigger(attempt: Attempt) -> str:
+def trigger_text(attempt: Attempt) -> str:
     """Why an attempt ran, in words."""
     if attempt.triggered_by == "initial":
         return "first run"
@@ -86,7 +98,7 @@ class _Origins:
         changed = [one for one in self.own if stage in one.parameters]
         if changed:
             history = "; ".join(
-                f"attempt {one.attempt} ({_trigger(one)}): "
+                f"attempt {one.attempt} ({trigger_text(one)}): "
                 + (_values(one.parameters[stage]) or str(one.parameters[stage].get("method")))
                 for one in changed
             )
@@ -131,7 +143,7 @@ def _fixed(key: str, label: str, value: str) -> Setting:
 def record_settings(manifest: RunManifest, log: QCLog | None, name: str) -> tuple[Setting, ...]:
     """What was done to record `name` before any window used it: its trigger corrected (a shot's,
     when muted), detrended, muted, filtered."""
-    stages = _stages(manifest, log, name, "preprocessing", ("trigger", "muting", "filtering"))
+    stages = _stages(manifest, log, name, "preprocessing", _RECORD_STAGES)
     origins = _Origins(manifest, log, name, "preprocessing")
     fields = type(manifest.preset).model_fields
     settings: list[Setting] = []
@@ -165,18 +177,7 @@ def window_settings(manifest: RunManifest, log: QCLog | None, unit: str) -> tupl
     (passive-active), or the noise's segments selected, whitened, normalized, correlated and
     stacked (passive); the phase shift."""
     mode = str(manifest.preset.mode)
-    names = {
-        "active": ("dispersion", "image_stacking"),
-        "passive-active": ("stacking", "dispersion"),
-        "passive": (
-            "slicing",
-            "selection",
-            "whitening",
-            "normalization",
-            "stacking",
-            "dispersion",
-        ),
-    }[mode]
+    names = _WINDOW_STAGES[mode]
     stages = _stages(manifest, log, unit, "phase_shift", ("masw", *names))
     origins = _Origins(manifest, log, unit, "phase_shift")
     length = int(stages["masw"].get("length", 0))
@@ -216,78 +217,132 @@ def window_settings(manifest: RunManifest, log: QCLog | None, unit: str) -> tupl
     return tuple(settings)
 
 
-def inversion_settings_of(
-    parameters: InversionParameters, log: QCLog | None, unit: str
+def with_spreads(
+    unit: str,
+    per_unit: Mapping[str, Sequence[Setting]],
+    noun: str,
+    ranges: Mapping[str, str] | None = None,
 ) -> tuple[Setting, ...]:
-    """What the window's inversion ran with: the sampler and its layers' priors; the checks'
-    retries that changed them, their history."""
-    retried = [one for one in log.of(unit, "inversion") if one.parameters] if log else []
-    history = "; ".join(f"attempt {one.attempt} ({_trigger(one)})" for one in retried)
-    origin: Origin = "rule" if retried else ("given" if log is not None else "pac")
-    why = (
-        f"the checks changed them on this unit: {history}"
-        if retried
-        else GIVEN
-        if log is not None
-        else PAC
-    )
-    if parameters.layering == "free":
-        free = parameters.free
-        layers = Setting(
-            key="layers",
-            label="Layers",
-            value=f"chosen by the data, at most {free.max_layers}",
-            detail=f"interfaces {number(free.depth_min or 0.0, 4)}-"
-            f"{number(free.depth_max or 0.0, 4)} m, Vs {number(free.vs_min or 0.0, 4)}-"
-            f"{number(free.vs_max or 0.0, 4)} m/s",
-            why=why,
-            origin=origin,
-        )
-    else:
-        layers = Setting(
-            key="layers",
-            label="Layers",
-            value=f"{parameters.n_layers} given",
-            detail="Vs "
-            + ", ".join(
-                f"{number(one.vs_min, 4)}-{number(one.vs_max, 4)}" for one in parameters.vs_layers
+    """`unit`'s settings (`per_unit`: each unit of the line's), each with how the line's other
+    units differ in it (`spread`, "along the line: …"; "" when they all ran with the same): the
+    other values, the most common first, each with the units that ran with it (named when a
+    few, else counted, a `noun` each), or its range over them all (`ranges`) when too many to
+    name."""
+    others = [(other, settings) for other, settings in per_unit.items() if other != unit]
+    spread: list[Setting] = []
+    for setting in per_unit.get(unit, ()):
+        values: dict[str, list[str]] = {}
+        for other, settings in others:
+            match = next((one for one in settings if one.key == setting.key), None)
+            if match is not None and _shown(match) != _shown(setting):
+                values.setdefault(_shown(match), []).append(other)
+        said = ""
+        if len(values) > _SPREAD_VALUES:
+            said = (
+                f"{ranges[setting.key]} over the {plural(len(per_unit), noun)}"
+                if ranges is not None and ranges.get(setting.key)
+                else f"{plural(len(values), 'other value')} on "
+                f"{plural(sum(len(units) for units in values.values()), noun)}"
             )
-            + " m/s",
-            why=why,
-            origin=origin,
+        elif values:
+            ranked = sorted(values.items(), key=lambda item: -len(item[1]))
+            said = "; ".join(
+                f"{shown} on {_named(units, noun, len(others))}" for shown, units in ranked
+            )
+        update = {"spread": f"along the line: {said}" if said else ""}
+        spread.append(setting.model_copy(update=update))
+    return tuple(spread)
+
+
+def most_common(
+    per_unit: Mapping[str, Sequence[Setting]],
+    noun: str,
+    ranges: Mapping[str, str] | None = None,
+) -> tuple[Setting, ...]:
+    """The settings most of `per_unit`'s units ran with (a window's records), each with the
+    other values and the units that ran with them (`spread`, "among its records: …"; named
+    when a few, else counted), or their range (`ranges`) when too many values to name."""
+    first = next(iter(per_unit.values()), ())
+    common: list[Setting] = []
+    for setting in first:
+        groups: dict[str, list[tuple[str, Setting]]] = {}
+        for unit, settings in per_unit.items():
+            match = next((one for one in settings if one.key == setting.key), None)
+            if match is not None:
+                groups.setdefault(_shown(match), []).append((unit, match))
+        ranked = sorted(groups.values(), key=len, reverse=True)
+        others = sum(len(group) for group in ranked[1:])
+        if len(ranked) - 1 > _SPREAD_VALUES:
+            said = (
+                f"{ranges[setting.key]} on {plural(others, noun)}"
+                if ranges is not None and ranges.get(setting.key)
+                else f"{plural(len(ranked) - 1, 'other value')} on {plural(others, noun)}"
+            )
+        else:
+            said = "; ".join(
+                f"{_shown(group[0][1])} on {_named([unit for unit, _ in group], noun, -1)}"
+                for group in ranked[1:]
+            )
+        update = {"spread": f"among its {noun}s: {said}" if said else ""}
+        common.append(ranked[0][0][1].model_copy(update=update))
+    return tuple(common)
+
+
+def record_ranges(
+    manifest: RunManifest, log: QCLog | None, names: Sequence[str] | None = None
+) -> dict[str, str]:
+    """The numbers the records' preprocessing ran with (`names`, else every record's) that vary
+    over them, by setting, as their ranges ("t0 0-0.0228 s")."""
+    return _ranges(
+        {
+            name: _stages(manifest, log, name, "preprocessing", _RECORD_STAGES)
+            for name in (names if names is not None else [one.name for one in manifest.records])
+        }
+    )
+
+
+def window_ranges(manifest: RunManifest, log: QCLog | None, units: Sequence[str]) -> dict[str, str]:
+    """The numbers the windows' images were made with that vary over them, by setting, as
+    their ranges ("fmax 42-100 Hz")."""
+    names = ("masw", *_WINDOW_STAGES[str(manifest.preset.mode)])
+    ranges = _ranges({unit: _stages(manifest, log, unit, "phase_shift", names) for unit in units})
+    if "masw" in ranges:
+        ranges["window"] = ranges.pop("masw")
+    return ranges
+
+
+def _ranges(per_unit: Mapping[str, dict[str, dict[str, Any]]]) -> dict[str, str]:
+    """By stage, the numeric fields of its values (`per_unit`: each unit's) that vary over the
+    units, each as its range."""
+    numbers: dict[str, dict[str, list[float]]] = {}
+    for stages in per_unit.values():
+        for stage, values in stages.items():
+            for field, value in values.items():
+                if isinstance(value, int | float) and not isinstance(value, bool):
+                    numbers.setdefault(stage, {}).setdefault(field, []).append(float(value))
+    return {
+        stage: ", ".join(
+            f"{field.replace('_', ' ')} {span(min(found), max(found), _UNITS.get(field, ''), 4)}"
+            for field, found in fields.items()
+            if min(found) != max(found)
         )
-    return (
-        Setting(
-            key="sampler",
-            label="MCMC",
-            value=f"{parameters.n_chains} chains of {parameters.n_iterations:,} iterations",
-            detail=f"{parameters.n_burnin_iterations:,} burn-in",
-            why=why,
-            origin=origin,
-        ),
-        layers,
-        Setting(
-            key="drop",
-            label="Vs drop",
-            value=f"at most {parameters.max_vs_drop:.0%}",
-            detail="from a layer to the next",
-            why=why,
-            origin=origin,
-        ),
-    )
+        for stage, fields in numbers.items()
+    }
 
 
-def petro_settings(model: str | None, log: QCLog | None) -> tuple[Setting, ...]:
-    """What the window's petrophysical inversion ran: the Silex model, on its fundamental mode."""
-    if not model:
-        return ()
-    return (
-        Setting(
-            key="model",
-            label="Silex model",
-            value=model,
-            detail="fitted to the picked fundamental mode",
-            why=GIVEN if log is not None else PAC,
-            origin="given" if log is not None else "pac",
-        ),
-    )
+def _shown(setting: Setting) -> str:
+    return f"{setting.value} {setting.detail}" if setting.detail else setting.value
+
+
+def _named(units: Sequence[str], noun: str, others: int) -> str:
+    """The units a value was run with: all the others, a few by name, or counted."""
+    if len(units) == others and others > 1:
+        return f"the {plural(others, 'other ' + noun)}"
+    if len(units) <= _SPREAD_UNITS:
+        return ", ".join(unit_name(one) for one in units)
+    return plural(len(units), noun)
+
+
+def unit_name(unit: str) -> str:
+    """A unit as the pages name it: a record by its file, a window by its middle."""
+    return f"xmid {number(xmid_of(unit), 4)} m" if unit.startswith("xmid_") else unit

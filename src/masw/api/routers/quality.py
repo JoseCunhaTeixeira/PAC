@@ -11,7 +11,7 @@ from masw.io.quality import dispersion, figures, inversion, petro, records, runs
 from masw.io.quality.dispersion import DispersionCard
 from masw.io.quality.inversion import Chains, FigureName, InversionCard
 from masw.io.quality.petro import PetroCard
-from masw.io.quality.records import RecordCard, RecordGather
+from masw.io.quality.records import RecordCard, RecordGather, SavedSpectra
 from masw.io.quality.runs import ProfileRuns, RunCard
 from masw.io.quality.sources import WindowSources
 from masw.io.quality.view import Overview
@@ -62,6 +62,12 @@ def get_record_gather(
 ) -> RecordGather:
     """The record as the windows used it, each trace at its receiver along the line."""
     return _found(lambda: records.record_gather(folder, name, norm))
+
+
+@router.get("/quality/records/spectrum/{folder:path}/{name}")
+def get_record_spectra(folder: str, name: str) -> SavedSpectra:
+    """The record's spectra, preprocessed, as its job saved them."""
+    return _found(lambda: records.record_spectra(folder, name))
 
 
 @router.get("/quality/dispersion/overview/{folder:path}")
@@ -123,6 +129,13 @@ def get_window_gather(
     """The stacked correlations a passive or passive-active window's image was made of, each
     trace at its receiver along the line."""
     return _found(lambda: dispersion.window_gather(folder, xmid, norm))
+
+
+@router.get("/quality/dispersion/spectrum/{folder:path}/{xmid}")
+def get_window_spectra(folder: str, xmid: float) -> SavedSpectra:
+    """The spectra of a passive or passive-active window's stacked correlations, as its job
+    saved them."""
+    return _found(lambda: dispersion.window_spectra(folder, xmid))
 
 
 @router.get("/quality/petro/overview/{folder:path}")

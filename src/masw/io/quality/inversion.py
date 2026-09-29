@@ -18,7 +18,7 @@ from typing import Literal
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-from masw.io.quality.done import inversion_settings_of
+from masw.io.quality.done import trigger_text, with_spreads
 from masw.io.quality.files import folder_path
 from masw.io.quality.log import (
     Attempt,
@@ -33,6 +33,7 @@ from masw.io.quality.log import (
 from masw.io.quality.view import (
     Card,
     Cell,
+    Origin,
     Overview,
     Sentence,
     Setting,
@@ -505,43 +506,66 @@ def inversion_overview(folder: str) -> Overview:
         },
         cells=tuple(cells),
         track=Track(label="Depth informed, of the depth modelled (m)", short="Depth", kind="depth"),
-        settings=inversion_settings(run_folder, runs, paco),
     )
 
 
-def inversion_settings(
-    run_folder: Path, runs: Sequence[InversionParameters], paco: bool
-) -> tuple[Setting, ...]:
-    """The parameters the windows were inverted with, as ranges over them, each with why: the
-    assistant's rules, or PAC's form."""
-    if not runs:
-        return ()
+# The settings each parameter a retry of the checks changed shows in.
+_CHANGED_IN: dict[str, tuple[str, ...]] = {
+    "layering": ("layers",),
+    "n_layers": ("layers",),
+    "free": ("layers", "vs", "thickness", "depth"),
+    "vs_layers": ("vs",),
+    "thickness_layers": ("thickness", "depth"),
+    "max_vs_drop": ("drop",),
+    "n_iterations": ("effort",),
+    "n_burnin_iterations": ("effort",),
+    "n_chains": ("effort",),
+}
 
-    def why(rule: str) -> str:
-        if paco:
-            return RULES[rule]
-        return "set by hand" + (
-            "" if (run_folder / PAC_CONFIG_FILE).exists() else " (or by the assistant, earlier)"
+
+def window_inversion_settings(
+    run_folder: Path, parameters: InversionParameters, log: QCLog | None, unit: str
+) -> tuple[Setting, ...]:
+    """What window `unit`'s inversion ran with (`parameters`), each with why: the assistant's
+    rule and the checks' retries that changed it, or PAC's form."""
+    assistant = by_assistant(log, unit, run_folder)
+    # Each setting the retries changed, with those retries, each once (the first run's own
+    # parameters changed nothing).
+    changed: dict[str, dict[int, str]] = {}
+    for attempt in log.of(unit, STAGE) if log is not None and assistant else ():
+        if attempt.triggered_by == "initial":
+            continue
+        for name in attempt.parameters:
+            for key in _CHANGED_IN.get(name, ()):
+                changed.setdefault(key, {})[attempt.attempt] = (
+                    f"attempt {attempt.attempt} ({trigger_text(attempt)})"
+                )
+
+    def why(key: str) -> str:
+        if not assistant:
+            return "set by hand" + (
+                "" if (run_folder / PAC_CONFIG_FILE).exists() else " (or by the assistant, earlier)"
+            )
+        retried = changed.get(key)
+        return RULES[key] + (
+            f"; the checks changed it on this window: {'; '.join(retried.values())}"
+            if retried
+            else ""
         )
 
-    origin = "rule" if paco else "pac"
-    free = [run.free for run in runs if run.layering == "free"]
-    given = [run for run in runs if run.layering == "fixed"]
-    lows = [bound.vs_min or 0.0 for bound in free] + [
-        layer.bounds[0] for run in given for layer in run.vs_layers
-    ]
-    highs = [bound.vs_max or 0.0 for bound in free] + [
-        layer.bounds[1] for run in given for layer in run.vs_layers
-    ]
-    if free and not given:
-        layers = ("chosen by the data", f"{_range(bound.max_layers for bound in free)} at most")
-    elif given and not free:
-        layers = (_range(run.n_layers - 1 for run in given), "over a half-space")
+    origin: Origin = "rule" if assistant else "pac"
+    free = parameters.free if parameters.layering == "free" else None
+    if free is not None:
+        layers = ("chosen by the data", f"{free.max_layers} at most")
+        vs = (free.vs_min or 0.0, free.vs_max or 0.0)
+        thinnest = free.depth_min or 0.0
     else:
-        layers = ("chosen by the data or given", "by window")
-    thinnest = [bound.depth_min or 0.0 for bound in free] + [
-        layer.bounds[0] for run in given for layer in run.thickness_layers
-    ]
+        layers = (str(parameters.n_layers - 1), "over a half-space")
+        vs = (
+            min(layer.bounds[0] for layer in parameters.vs_layers),
+            max(layer.bounds[1] for layer in parameters.vs_layers),
+        )
+        thinnest = min(layer.bounds[0] for layer in parameters.thickness_layers)
     return (
         Setting(
             key="layers",
@@ -554,23 +578,21 @@ def inversion_settings(
         Setting(
             key="vs",
             label="Vs bounds",
-            value=span(min(lows), max(highs), "m/s", 4),
-            detail="by window" if len(runs) > 1 else "",
+            value=span(*vs, "m/s", 4),
             why=why("vs"),
             origin=origin,
         ),
         Setting(
             key="thickness",
-            label="Shallowest interface" if free and not given else "Thinnest layer",
-            value=f"{_range(thinnest)} m",
-            detail="by window" if len(runs) > 1 else "",
+            label="Shallowest interface" if free is not None else "Thinnest layer",
+            value=f"{number(thinnest)} m",
             why=why("thickness"),
             origin=origin,
         ),
         Setting(
             key="depth",
             label="Deepest interface",
-            value=f"{_range(model_depth(run) for run in runs)} m",
+            value=f"{number(model_depth(parameters))} m",
             detail="at most",
             why=why("depth"),
             origin=origin,
@@ -578,7 +600,7 @@ def inversion_settings(
         Setting(
             key="drop",
             label="Vs drop",
-            value=f"{_range(100 * run.max_vs_drop for run in runs)} %",
+            value=f"{number(100 * parameters.max_vs_drop)} %",
             detail="at most, from a layer to the next",
             why=why("drop"),
             origin=origin,
@@ -586,13 +608,57 @@ def inversion_settings(
         Setting(
             key="effort",
             label="Sampling",
-            value=f"{_range(run.n_iterations for run in runs)} iterations",
-            detail=f"{_range(run.n_burnin_iterations for run in runs)} burn-in, "
-            f"{plural(max(run.n_chains for run in runs), 'chain')}",
+            value=f"{parameters.n_iterations:,} iterations",
+            detail=f"{parameters.n_burnin_iterations:,} burn-in, "
+            f"{plural(parameters.n_chains, 'chain')}",
             why=why("effort"),
             origin=origin,
         ),
     )
+
+
+def _settings_along(run_folder: Path, log: QCLog | None, unit: str) -> tuple[Setting, ...]:
+    """Window `unit`'s inversion settings, each with how the line's other inverted windows
+    differ in it (with_spreads; their ranges when too many values to name)."""
+    runs = {
+        one: load_parameters(run_folder / one / PARAMETERS_FILE).parameters
+        for one in window_folders(run_folder)
+        if (run_folder / one / PARAMETERS_FILE).exists()
+        and (run_folder / one / SAMPLES_FILE).exists()
+    }
+    return with_spreads(
+        unit,
+        {one: window_inversion_settings(run_folder, runs[one], log, one) for one in runs},
+        "window",
+        ranges=line_ranges(tuple(runs.values())),
+    )
+
+
+def line_ranges(runs: Sequence[InversionParameters]) -> dict[str, str]:
+    """Each inversion setting's range over the windows' parameters (`runs`), as a spread says
+    it when the windows ran with too many values to name."""
+    free = [run.free for run in runs if run.layering == "free"]
+    given = [run for run in runs if run.layering == "fixed"]
+    lows = [bound.vs_min or 0.0 for bound in free] + [
+        layer.bounds[0] for run in given for layer in run.vs_layers
+    ]
+    highs = [bound.vs_max or 0.0 for bound in free] + [
+        layer.bounds[1] for run in given for layer in run.vs_layers
+    ]
+    thinnest = [bound.depth_min or 0.0 for bound in free] + [
+        min(layer.bounds[0] for layer in run.thickness_layers) for run in given
+    ]
+    layers = [f"{bound.max_layers} at most" for bound in free] + [
+        f"{run.n_layers - 1} over a half-space" for run in given
+    ]
+    return {
+        "layers": ", ".join(sorted(set(layers))),
+        "vs": span(min(lows), max(highs), "m/s", 4) if lows else "",
+        "thickness": f"{_range(thinnest)} m",
+        "depth": f"{_range(model_depth(run) for run in runs)} m",
+        "drop": f"{_range(100 * run.max_vs_drop for run in runs)} %",
+        "effort": f"{_range(run.n_iterations for run in runs)} iterations",
+    }
 
 
 def inversion_card(folder: str, xmid: float, model: ModelName = DEFAULT_MODEL) -> InversionCard:
@@ -626,7 +692,7 @@ def inversion_card(folder: str, xmid: float, model: ModelName = DEFAULT_MODEL) -
     said += warnings(g5, g6)
     return InversionCard(
         key=unit,
-        settings=inversion_settings_of(parameters, log, unit),
+        settings=_settings_along(run_folder, log, unit),
         status=verdict_status(g5, g6) if g5 is not None else measured_status(metrics),
         # The layers given: their count; chosen by the data, the ensemble has none of its own.
         title=f"{title} · {_layers(len(measures.vs_layers))}"

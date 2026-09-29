@@ -158,7 +158,8 @@ export function OriginTag({ origin }: { origin: Setting["origin"] }) {
   );
 }
 
-/** Settings as a definition list: each its value, then why. */
+/** Settings as a definition list: each its value, then why, then how the line's other units
+ * differ in it. */
 export function SettingsList({ settings }: { settings: Setting[] }) {
   return (
     <dl className="viz-settings">
@@ -170,6 +171,7 @@ export function SettingsList({ settings }: { settings: Setting[] }) {
             {setting.detail && <span className="viz-muted">{setting.detail} </span>}
             <OriginTag origin={setting.origin} />
             <span className="viz-why">{capitalized(setting.why)}.</span>
+            {setting.spread && <span className="viz-why viz-muted">{capitalized(setting.spread)}.</span>}
           </dd>
         </div>
       ))}

@@ -44,6 +44,17 @@ def auto_at(window: Path) -> datetime | None:
     return _time(window, AUTO_FILE, "picked_at")
 
 
+def assistant_picked(window: Path, log: QCLog | None) -> bool:
+    """Whether window folder `window`'s last automatic pick is the assistant's, not PAC's own
+    automatic picking."""
+    attempts = log.of(window.name, "picking") if log is not None else ()
+    done = [attempt for attempt in attempts if attempt.status == "succeeded"]
+    if not done:
+        return False
+    own = auto_at(window)
+    return own is None or (done[-1].finished_at or done[-1].started_at) >= own
+
+
 def pick_origin(window: Path, log: QCLog | None, picked: bool) -> Origin | None:
     """Who picked the curves of window folder `window` (`picked`: it holds some); None when it
     holds none."""

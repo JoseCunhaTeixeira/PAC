@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { gistSternR } from "./colormaps";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { nearestIndex, useCanvasHover } from "./useCanvasHover";
@@ -26,7 +26,9 @@ export interface DispersionImage {
   lambda_max: number | null;
 }
 
-const ML = 60, MR = 16, MT = 16, MB = 38;
+// The top margin holds the colour bar.
+const ML = 60, MR = 16, MT = 30, MB = 38;
+const LEGEND_W = 120, LEGEND_H = 8;
 const BASE_W = 716; // the drawing's width until its card is measured
 const FONT = CANVAS_FONT;
 
@@ -84,6 +86,24 @@ export function DispersionImageCanvas({
   const yOf = (v: number) => MT + PLOT_H - ((v - v0) / (v1 - v0)) * PLOT_H;
   const fOf = (px: number) => f0 + ((px - ML) / PLOT_W) * (f1 - f0);
   const vOf = (py: number) => v0 + ((MT + PLOT_H - py) / PLOT_H) * (v1 - v0);
+
+  // The colour bar's image: the amplitude (normalized per frequency) from 0 on the left, in the
+  // colours the heatmap gives it (its square's, below).
+  const legend = useMemo(() => {
+    const off = document.createElement("canvas");
+    off.width = 256;
+    off.height = 1;
+    const octx = off.getContext("2d");
+    if (octx) {
+      const data = octx.createImageData(256, 1);
+      for (let px = 0; px < 256; px++) {
+        const [r, g, b] = gistSternR((px / 255) ** 2);
+        data.data.set([r, g, b, 255], px * 4);
+      }
+      octx.putImageData(data, 0, 0);
+    }
+    return off;
+  }, []);
 
   // build the heatmap once per image, at native (nf x nv) resolution
   useEffect(() => {
@@ -257,6 +277,27 @@ export function DispersionImageCanvas({
       ctx.fillText(text, x - 4, y - 2);
       ctx.restore();
     });
+
+    // The colour bar above the image, on its right.
+    {
+      const legendX = ML + PLOT_W - LEGEND_W - 12;
+      const legendY = (MT - LEGEND_H) / 2 - 2;
+      ctx.drawImage(legend, 0, 0, legend.width, 1, legendX, legendY, LEGEND_W, LEGEND_H);
+      ctx.strokeStyle = palette.axis;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(legendX, legendY, LEGEND_W, LEGEND_H);
+      ctx.font = FONT;
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = palette.tick;
+      ctx.textAlign = "right";
+      ctx.fillText("0", legendX - 5, legendY + LEGEND_H / 2);
+      ctx.textAlign = "left";
+      ctx.fillText("1", legendX + LEGEND_W + 5, legendY + LEGEND_H / 2);
+      ctx.fillStyle = palette.title;
+      ctx.textAlign = "right";
+      ctx.fillText("Amplitude (normalized per frequency)", legendX - 18, legendY + LEGEND_H / 2);
+      ctx.textAlign = "left";
+    }
 
     // legend
     ctx.font = FONT;
