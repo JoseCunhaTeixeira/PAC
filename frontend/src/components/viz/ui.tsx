@@ -21,6 +21,7 @@ import type {
   Status,
   Verdict,
 } from "./types";
+import type { SavedFigure } from "./runFigures";
 import "./viz.css";
 
 // The pieces every panel of Visualization says things with: a state's badge, a card's
@@ -173,6 +174,23 @@ export function SettingsList({ settings }: { settings: Setting[] }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+/** The figures a run or a window saved, each linking to itself, in a fold; nothing without
+ * any. */
+export function SavedFigures({ figures }: { figures: SavedFigure[] }) {
+  if (figures.length === 0) return null;
+  return (
+    <Fold title="Saved figures">
+      <div className="viz-figures">
+        {figures.map(({ name, url }) => (
+          <a key={name} href={url} target="_blank" rel="noreferrer" title={name}>
+            <img src={url} alt={name} loading="lazy" />
+          </a>
+        ))}
+      </div>
+    </Fold>
   );
 }
 

@@ -1,13 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { API } from "../../api";
 import { DispersionImageCanvas, type DispersionImage } from "../DispersionImageCanvas";
 import { StrataIcon } from "../icons";
 import { Card, PlotBox, Segmented } from "../kit";
 import { ModeHead, PseudoSectionCanvas, type PseudoSection } from "../PseudoSectionCanvas";
+import type { Range } from "../useZoom";
 import { xmidOf } from "./format";
+import { LineGather, type GatherData } from "./LineGather";
 import { StageHead, UnitCard } from "./panel";
+import { Normalization } from "./RecordsPanel";
+import { runFigures, useRunFigures } from "./runFigures";
 import type { DispersionCard, Overview, WindowSources } from "./types";
-import { Details, Empty, ErrorBox, PlotHead, Skeleton } from "./ui";
+import { Details, Empty, ErrorBox, PlotHead, SavedFigures, Skeleton } from "./ui";
 import { nearestCell } from "./cells";
 import { useJson } from "./useJson";
 
@@ -16,6 +20,33 @@ import { useJson } from "./useJson";
 // of each mode's picked curves (M0, M1…), as the picking page shows them.
 
 const at = (folder: string) => encodeURIComponent(folder);
+
+/** The stacked correlations a passive or passive-active window's image was made of, each trace
+ * at its receiver; nothing in an active window (it stacks images, not correlations). */
+function WindowGather({ folder, xmid }: { folder: string; xmid: number }) {
+  const [norm, setNorm] = useState<"trace" | "global">("trace");
+  const [xZoom, setXZoom] = useState<Range | null>(null);
+  const gather = useJson<GatherData>(`${API}/quality/dispersion/gather/${at(folder)}/${xmid}?norm=${norm}`);
+  const positions = gather.data?.positions;
+  const extent = useMemo((): Range => {
+    const xs = positions && positions.length > 0 ? positions : [0, 1];
+    const low = Math.min(...xs);
+    const high = Math.max(...xs);
+    const pad = Math.max((high - low) / Math.max(xs.length - 1, 1), 0.5);
+    return [low - pad, high + pad];
+  }, [positions]);
+  if (!gather.data) return null;
+  return (
+    <PlotBox>
+      <div style={{ marginTop: 16 }}>
+        <PlotHead title="Stacked correlations · the image's signal">
+          <Normalization value={norm} onChange={setNorm} />
+        </PlotHead>
+        <LineGather key={xmid} data={gather.data} extent={extent} xZoom={xZoom} onXZoom={setXZoom} height={320} />
+      </div>
+    </PlotBox>
+  );
+}
 
 export function DispersionPanel({
   folder,
@@ -38,6 +69,8 @@ export function DispersionPanel({
   const labels = useJson<Record<string, number>>(`${API}/dispersion_image_labels/${at(folder)}`);
   const modes = Object.entries(labels.data ?? {});
   const windows = overview?.cells.length ?? 0;
+  const place = xmid !== null ? { xmid } : null;
+  const figures = useRunFigures(folder, place);
   const [axis, setAxis] = useState<"frequency" | "wavelength">("frequency");
   const pick = (position: number) => {
     const cell = nearestCell(overview?.cells ?? [], position);
@@ -56,7 +89,14 @@ export function DispersionPanel({
             lead={sources && sources.key === selected ? sources.sentences : []}
             cells={overview?.cells ?? []}
             onSelect={onSelect}
-            details={card.data && <Details gates={card.data.gates} attempts={card.data.attempts} />}
+            details={
+              card.data && (
+                <>
+                  <Details gates={card.data.gates} attempts={card.data.attempts} />
+                  <SavedFigures figures={runFigures(folder, figures, "", place ?? {})} />
+                </>
+              )
+            }
           >
             <PlotBox>
               <div style={{ marginTop: 16 }}>
@@ -72,6 +112,7 @@ export function DispersionPanel({
                 )}
               </div>
             </PlotBox>
+            {xmid !== null && <WindowGather folder={folder} xmid={xmid} />}
           </UnitCard>
         </div>
       )}

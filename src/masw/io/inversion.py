@@ -12,38 +12,26 @@ import numpy as np
 from masw.io.dispersion_images import xmid_folder
 from masw.io.folders import get_xmid_folders
 from masw.io.paths import output_folder
-from masw.io.quality.files import preset_stage, read_manifest
-from masw.io.quality.inversion import (
-    MEASURES_FILE,
-    informed_to,
-    thresholds_of,
-    window_measures,
-    window_spread,
-)
+from masw.io.quality.inversion import thresholds_of
 from sigpipe.base.dispersion_curve import Mode
 from sigpipe.base.inversion import InversionResult
-from sigpipe.base.velocity_model import VelocityModel, VelocityModelsSection
 from sigpipe.masw.inversion import InversionParameters, invert_window
-from sigpipe.masw.inversion.measuring import measure_inversion
+from sigpipe.masw.inversion.measuring import MEASURES_FILE, measure_inversion
 from sigpipe.masw.inversion.section import (
     DEFAULT_MODEL,
     ComparisonGrids,
     ModelName,
-    VelocityGrid,
+    VelocitySection,
     comparison_grids,
-    informed_levels,
-    interface_grid,
     is_inverted,
+    line_section,
     picked_curve,
     predicted_curve,
     save_comparison,
     save_section,
     save_sections_file,
-    uncertainty_grid,
-    velocity_grid,
-    window_model,
 )
-from sigpipe.masw.inversion.window import VsSpread
+from sigpipe.masw.runs import window_length
 
 logger = logging.getLogger(__name__)
 
@@ -77,106 +65,21 @@ def list_inversion_status(folder: str) -> list[tuple[float, bool]]:
     return [(xmid, is_inverted(xmid_folder(folder, xmid))) for xmid in get_xmid_folders(folder)]
 
 
-@dataclass(slots=True, frozen=True)
-class SectionWindow:
-    """A window's column in the sections: its middle, its ground's elevation, how deep its model
-    reaches and how deep its data inform it (m; None when its measures do not say)."""
-
-    x: float
-    top: float
-    depth: float
-    informed: float | None
-    # Per INTERFACE_DZ from its ground, the share of its kept models with an interface there
-    # (none when its measures do not say).
-    interfaces: tuple[float, ...] = ()
-    # Its kept models' Vs at each depth, as their 10th, 50th and 90th percentiles (None: none).
-    spread: VsSpread | None = None
-
-
-@dataclass(slots=True, frozen=True)
-class VelocitySection:
-    grid: VelocityGrid
-    windows: list[SectionWindow]  # by position
-    # Per column of the grid, the elevation down to which the data inform it (NaN: not known),
-    # smoothed across positions as the grid is.
-    levels: np.ndarray
-    # On the grid, the share of the kept models with an interface (NaN: not known).
-    interfaces: np.ndarray
-    # On the grid, the kept models' relative uncertainty of Vs, U(z) = (P90 - P10) / (2 P50)
-    # (NaN: not known): what the depth informed is read from.
-    uncertainty: np.ndarray
-
-
 def get_velocity_section(
     folder: str, model: ModelName = DEFAULT_MODEL, lateral_smoothing: bool = False
 ) -> VelocitySection:
     """The section of the windows' model `model` on a grid, and each window's column: its model
-    and the measures its inversion saved, each read once; nothing measured."""
+    and the measures its inversion saved, each read once; nothing measured (sigpipe's
+    line_section, the figures' own), smoothed over the run's window length."""
     run_folder = output_folder(folder)
-    found = {
-        unit: one
-        for unit in _units(folder)
-        if (one := window_model(run_folder / unit, model)) is not None
-    }
-    if len(found) < 2:
+    section = line_section(
+        run_folder, _units(folder), model, lateral_smoothing, window_length(run_folder)
+    )
+    if section is None:
         raise ValueError(
             f"At least two inverted positions are required to build a section in folder={folder}"
         )
-    ordered = sorted(found.items(), key=lambda item: item[1].position.x)
-    section = VelocityModelsSection(velocity_models=tuple(one for _, one in ordered))
-    windows = [_section_window(run_folder / unit, one) for unit, one in ordered]
-    # Smoothed along the line over a window's length: what each window's model describes. Each
-    # column down to its models' depth, no half-space carried further.
-    window_m = window_length(run_folder)
-    grid = velocity_grid(
-        section, lateral_smoothing, window_m=window_m, depths=[one.depth for one in windows]
-    )
-    informed = [
-        (one.x, one.top, None if one.informed is None else min(one.informed, one.depth))
-        for one in windows
-    ]
-    levels = informed_levels(grid, informed, lateral_smoothing, window_m)
-    spreads = [(one.x, one.top, one.spread) for one in windows]
-    shares = [(one.x, one.top, one.interfaces) for one in windows]
-    return VelocitySection(
-        grid=grid,
-        windows=windows,
-        levels=levels,
-        interfaces=interface_grid(grid, shares, lateral_smoothing, window_m),
-        uncertainty=uncertainty_grid(grid, spreads, lateral_smoothing, window_m),
-    )
-
-
-def window_length(run_folder: Path) -> float | None:
-    """A window's length along the line (m), from its first receiver to its last; None for a
-    folder without its run's settings."""
-    manifest = read_manifest(run_folder)
-    masw = preset_stage(manifest, "masw")
-    if manifest is None or "length" not in masw:
-        return None
-    return (int(masw["length"]) - 1) * manifest.profile.receiver_spacing_m
-
-
-def _section_window(window: Path, model: VelocityModel) -> SectionWindow:
-    measured = window_measures(window)
-    measures = measured[1] if measured is not None else None
-    # How deep its models were built (a layered model's own file ends half way into the
-    # half-space); the model's own depth without measures.
-    depth = round(
-        measures.depth_max_m if measures is not None else float(np.sum(model.thicknesses)), 2
-    )
-    informed = None
-    if measures is not None and (known := informed_to(measures)) is not None:
-        # All of it: the model's own depth, the bottom the section draws.
-        informed = depth if measures.useful_depth_m is None else known
-    return SectionWindow(
-        x=float(model.position.x),
-        top=float(model.position.z),
-        depth=depth,
-        informed=informed,
-        interfaces=measures.interfaces if measures is not None else (),
-        spread=window_spread(window, measured[0].parameters.bottom) if measured else None,
-    )
+    return section
 
 
 def measure_position(
@@ -198,11 +101,12 @@ def measure_position(
     ((output_folder or window) / MEASURES_FILE).write_text(measures.model_dump_json(indent=2))
 
 
-def save_velocity_section_plot(
-    folder: str, model: ModelName = DEFAULT_MODEL, lateral_smoothing: bool = False
-) -> Path:
-    """Save the Vs(x,z) + std(x,z) section plot in the output folder."""
-    path = save_section(output_folder(folder), _units(folder), model, lateral_smoothing)
+def save_velocity_section_plot(folder: str, model: ModelName = DEFAULT_MODEL) -> Path:
+    """Save the section's figure in the output folder as Visualization shows it (Vs, its
+    uncertainty, the interfaces; the depth informed), as the windows' columns and smoothed along
+    the line (sigpipe's save_section): the first's path."""
+    run_folder = output_folder(folder)
+    path = save_section(run_folder, _units(folder), model, window_length(run_folder))
     if path is None:
         raise ValueError(
             f"At least two inverted positions are required to build a section in folder={folder}"
@@ -222,8 +126,8 @@ def save_velocity_xzv(folder: str) -> Path:
 def save_pseudo_section_comparison_plot(
     folder: str, label: str, model: ModelName = DEFAULT_MODEL
 ) -> Path:
-    """Save the observed-vs-predicted pseudo-section comparison for one label in the output
-    folder."""
+    """Save the picked-vs-modelled pseudo-section comparison of one label in the output folder,
+    by frequency and by wavelength (sigpipe's save_comparison): the first's path."""
     path = save_comparison(output_folder(folder), _units(folder), Mode.from_label(label), model)
     if path is None:
         raise ValueError(_too_few_comparisons(folder, label))

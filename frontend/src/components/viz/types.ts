@@ -317,7 +317,7 @@ export interface InversionAttempt extends AttemptSummary {
   depth_m: number | null;
 }
 
-export type FigureName = "marginals" | "density_curves" | "dispersion_image";
+export type FigureName = "marginals" | "density_curves" | "dispersion_image" | "chains";
 
 export interface InversionCard extends Card {
   attempts: InversionAttempt[];

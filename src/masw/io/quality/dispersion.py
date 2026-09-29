@@ -26,6 +26,7 @@ from masw.io.quality.log import (
     config_section,
     read_log,
 )
+from masw.io.quality.records import RecordGather, gather_of
 from masw.io.quality.view import (
     Card,
     Cell,
@@ -55,10 +56,15 @@ from sigpipe.algorithms.picking.dispersion.curve import (
 )
 from sigpipe.base.dispersion_curve import DispersionCurve
 from sigpipe.base.dispersion_image import DispersionImage
+from sigpipe.dataio.stream.loading import load_stream
 from sigpipe.masw.picks import load_curves
 from sigpipe.masw.quality.image import aliased, coherent_columns, competing_ridges, edge_peaks
 from sigpipe.masw.runs import load_image, window_folders, xmid_of
 from sigpipe.masw.runs.finding import IMAGE_FILE
+
+# The stacked correlations a passive or passive-active window's image is made of (the pipelines'
+# saved stream).
+WINDOW_STREAM = "Stream_0000.hdf5"
 
 # The units the attempts' overrides are said in.
 UNITS = {"fmin": "Hz", "fmax": "Hz", "vmin": "m/s", "vmax": "m/s", "wavelength_step": "m"}
@@ -734,3 +740,14 @@ def _uncertainty(curve: DispersionCurve, vs: np.ndarray) -> float | None:
 
 def _metric(metrics: tuple[Metric, ...], name: str) -> float | None:
     return next((metric.value for metric in metrics if metric.name == name), None)
+
+
+def window_gather(folder: str, xmid: float, norm: str = "trace") -> RecordGather:
+    """The stacked correlations window `xmid`'s image was made of (passive and passive-active:
+    its Stream_0000.hdf5), as the wiggle plot takes them, up to where they carry signal; the
+    virtual source its star. None in an active window: a ValueError."""
+    path = folder_path(folder) / f"xmid_{xmid:.2f}" / WINDOW_STREAM
+    if not path.exists():
+        raise ValueError(f"No stacked correlations for folder={folder}, xmid={xmid}")
+    stream = load_stream([path])[0]
+    return gather_of(stream, f"xmid {xmid:g} m", norm, up_to_signal=True)

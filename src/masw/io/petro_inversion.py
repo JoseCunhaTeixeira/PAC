@@ -3,11 +3,9 @@ inversion of a window (sigpipe.masw.petro), and the line's views (sigpipe.masw.p
 over the folder's windows."""
 
 from dataclasses import dataclass
-from pathlib import Path
 
 from masw.io.dispersion_images import xmid_folder
 from masw.io.folders import get_xmid_folders
-from masw.io.inversion import window_length
 from masw.io.paths import output_folder
 from sigpipe.algorithms.inversion.rayleigh.petro.silex_catalog import list_bundled_silex_models
 from sigpipe.base.petro_model import PetroModel
@@ -26,11 +24,8 @@ from sigpipe.masw.petro.section import (
     petro_grid,
     petro_models,
     rock_physics_grid,
-    save_petro_section,
-    save_petro_sections_file,
-    save_rock_physics_file,
-    save_rock_physics_section,
 )
+from sigpipe.masw.runs import window_length
 
 
 def _units(folder: str) -> list[str]:
@@ -114,22 +109,6 @@ def get_petro_section(folder: str, lateral_smoothing: bool = False) -> PetroGrid
     return petro_grid(section, lateral_smoothing, window_length(run_folder))
 
 
-def save_petro_section_plot(folder: str) -> Path:
-    """Save the soil-type + N-value section plot in the output folder."""
-    path = save_petro_section(output_folder(folder), _units(folder))
-    if path is None:
-        raise _too_few(folder)
-    return path
-
-
-def save_petro_section_hdf5(folder: str) -> Path:
-    """Save the soil-type + N-value section grids into one HDF5 file in the output folder."""
-    path = save_petro_sections_file(output_folder(folder), _units(folder))
-    if path is None:
-        raise _too_few(folder)
-    return path
-
-
 def _rock_physics(folder: str, quantity: Quantity, lateral_smoothing: bool) -> RockPhysicsGrid:
     run_folder = output_folder(folder)
     grid = rock_physics_grid(
@@ -146,30 +125,6 @@ def get_shear_modulus_section(folder: str, lateral_smoothing: bool = False) -> R
 
 def get_vs_section(folder: str, lateral_smoothing: bool = False) -> RockPhysicsGrid:
     return _rock_physics(folder, "vs", lateral_smoothing)
-
-
-def _save_rock_physics(folder: str, quantity: Quantity, as_file: bool) -> Path:
-    save = save_rock_physics_file if as_file else save_rock_physics_section
-    path = save(output_folder(folder), _units(folder), quantity)
-    if path is None:
-        raise _too_few(folder)
-    return path
-
-
-def save_shear_modulus_section_plot(folder: str) -> Path:
-    return _save_rock_physics(folder, "shear_modulus", as_file=False)
-
-
-def save_shear_modulus_section_hdf5(folder: str) -> Path:
-    return _save_rock_physics(folder, "shear_modulus", as_file=True)
-
-
-def save_vs_section_plot(folder: str) -> Path:
-    return _save_rock_physics(folder, "vs", as_file=False)
-
-
-def save_vs_section_hdf5(folder: str) -> Path:
-    return _save_rock_physics(folder, "vs", as_file=True)
 
 
 def get_pseudo_section_comparison(folder: str) -> ComparisonGrids:
