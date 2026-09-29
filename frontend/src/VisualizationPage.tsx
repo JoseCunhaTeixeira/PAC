@@ -445,8 +445,7 @@ export default function VisualizationPage() {
                       : undefined
                   }
                   onWindow={(key) => update({ tab: "dispersion", x: key })}
-                  xZoom={lineX}
-                  onXZoom={setLineX}
+                  xZoom={records ? lineX : null}
                 />
                 <LineLegend
                   overview={overview.data}

@@ -3,8 +3,8 @@ import { API } from "./api";
 import {
   DispersionImageCanvas,
   type DispersionImage,
-  type DragMode,
 } from "./components/DispersionImageCanvas";
+import { PICK_TOOLS } from "./components/dragTools";
 import {
   ModeHead,
   PseudoSectionCanvas,
@@ -16,15 +16,23 @@ import {
   CheckIcon,
   CrosshairIcon,
   ImageIcon,
-  LassoIcon,
   RulerIcon,
   SparklesIcon,
   SpectrumIcon,
   StrataIcon,
   TrashIcon,
-  ZoomIcon,
 } from "./components/icons";
-import { Badge, Callout, Card, Empty, Page, Segmented } from "./components/kit";
+import {
+  Badge,
+  BoxTools,
+  Callout,
+  Card,
+  Empty,
+  Page,
+  PlotBox,
+  Segmented,
+} from "./components/kit";
+import type { DragTool } from "./components/plotBox";
 import { RunSelect } from "./components/RunSelect";
 import {
   PositionRail,
@@ -102,8 +110,9 @@ export default function DispersionPickingPage() {
     [number, number][] | null
   >(null);
   const [label, setLabel] = useState("M0");
-  // What a drag on the image does; the zoom itself stays from one position to the next.
-  const [dragMode, setDragMode] = useStoredState<DragMode>(
+  // What a drag on the image does, the lasso first (picking is the page's work); the zoom
+  // itself stays from one position to the next.
+  const [dragMode, setDragMode] = useStoredState<DragTool>(
     "pac.picking.drag",
     "lasso",
   );
@@ -477,16 +486,20 @@ export default function DispersionPickingPage() {
 
           {image && xmid !== null && (
             <div className="pick-grid">
+              <PlotBox tool={dragMode} onTool={setDragMode}>
               <Card
                 icon={<ImageIcon size={17} />}
                 title={`xmid ${xmid.toFixed(2)} m`}
                 hint={
                   dragMode === "lasso"
                     ? "Lasso a mode: the picker follows its ridge."
-                    : "Drag to zoom; double-click to go back."
+                    : dragMode === "zoom"
+                      ? "Drag a box to zoom; the wheel zooms too."
+                      : "Drag to move; the wheel zooms."
                 }
                 aside={
                   <>
+                    <BoxTools options={PICK_TOOLS} />
                     <button
                       type="button"
                       className="secondary icon"
@@ -505,30 +518,6 @@ export default function DispersionPickingPage() {
                     >
                       <ArrowRightIcon size={16} />
                     </button>
-                    <Segmented
-                      size="sm"
-                      label="What a drag does"
-                      value={dragMode}
-                      onChange={setDragMode}
-                      options={[
-                        {
-                          value: "lasso",
-                          label: (
-                            <>
-                              <LassoIcon size={14} /> Lasso
-                            </>
-                          ),
-                        },
-                        {
-                          value: "zoom",
-                          label: (
-                            <>
-                              <ZoomIcon size={14} /> Zoom
-                            </>
-                          ),
-                        },
-                      ]}
-                    />
                   </>
                 }
               >
@@ -601,6 +590,7 @@ export default function DispersionPickingPage() {
                   </span>
                 </div>
               </Card>
+              </PlotBox>
 
               <Card icon={<SpectrumIcon size={17} />} title="Picked curves">
                 {image.curves.length === 0 ? (
@@ -633,6 +623,7 @@ export default function DispersionPickingPage() {
               icon={<StrataIcon size={17} />}
               title="Pseudo-sections"
               hint="Click a column to open its window."
+              plots
               aside={
                 <Segmented
                   size="sm"

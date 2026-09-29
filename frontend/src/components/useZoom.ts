@@ -1,11 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { usePlotBox } from "./plotBox";
 
-// Zoom, shared by every plot and done as Plotly does it: a drag on a plot
-// area draws a rectangle, and releasing it zooms both axes to it; a drag
-// that is nearly horizontal or vertical, or one along an axis's tick labels,
-// zooms that axis only. A double-click (or the "Reset zoom" button, see
-// ZoomOverlay) goes back to the full view. The zoom is held in data units, so
-// it survives a resize, and new data keeps it where it still fits.
+// Zoom, shared by every plot. The wheel zooms in and out around the cursor
+// (along one axis over its tick labels). A drag on the plot does what its
+// box's tools say (kit's BoxTools, on its head): with the hand, the default,
+// it moves the view; with the zoom, it draws a rectangle, as Plotly does, and
+// releasing it zooms both axes to it, or one axis for a drag that is nearly
+// horizontal or vertical. Along an axis's tick labels, a drag zooms that axis,
+// whatever the tool. Shift+drag always moves. The box's "Reset zoom" goes back
+// to its plots' full views (no double-click, on any plot). The zoom is held in
+// data units, so it survives a resize, and new data keeps it where it still
+// fits.
 
 /** [low, high], low < high, in data units. */
 export type Range = readonly [number, number];
@@ -54,10 +59,16 @@ const THIN_PX = 10;
 // Past a millionth of the full range there is nothing more to see.
 const MIN_ZOOM_FRACTION = 1e-6;
 
+// The wheel's zoom: a view scaled by exp(this x the wheel's pixels), about 20 %
+// a notch.
+const WHEEL_RATE = 0.002;
+
 /** Where a drag started: in a plot, or on one of its axis strips. */
 type Region = "plot" | "x" | "y";
 /** What a drag zooms. */
 type Axes = "xy" | "x" | "y";
+/** What a drag does: draw a zoom box, or move the view (the hand tool). */
+export type Tool = "zoom" | "pan";
 
 interface Point {
   x: number;
@@ -66,6 +77,7 @@ interface Point {
 
 interface Drag {
   el: Element;
+  kind: Tool;
   plot: PlotRect;
   region: Region;
   start: Point;
@@ -75,7 +87,7 @@ interface Drag {
   yDown: boolean;
   width: number;
   height: number;
-  setZoom: (zoom: View) => void;
+  setZoom: (zoom: View | null) => void;
   onZoom?: () => void;
 }
 
@@ -154,6 +166,32 @@ function zoomTo(drag: Drag, end: Point, axes: Axes): View | null {
   return clampView(next, extent);
 }
 
+/** `range` moved by `by` (data units), kept within `full` at the same width. */
+function shifted(range: Range, by: number, full: Range): Range {
+  const width = range[1] - range[0];
+  if (width >= full[1] - full[0]) return full;
+  const lo = clamp(range[0] + by, full[0], full[1] - width);
+  return [lo, lo + width];
+}
+
+/** The view a pan drag from `start` to `end` (logical pixels) moves to: the data follow the
+ * mouse, along one axis from its strip. */
+function panTo(drag: Drag, end: Point): View | null {
+  const { plot, start, view, extent, yDown, region } = drag;
+  const dx = ((end.x - start.x) / plot.width) * (view.x[1] - view.x[0]);
+  const dy = ((end.y - start.y) / plot.height) * (view.y[1] - view.y[0]);
+  const next: View = {
+    x: region === "y" ? view.x : shifted(view.x, -dx, extent.x),
+    y: region === "x" ? view.y : shifted(view.y, yDown ? -dy : dy, extent.y),
+  };
+  return clampView(next, extent);
+}
+
+/** `range` scaled by `factor` about `at` (data units). */
+function scaled(range: Range, at: number, factor: number): Range {
+  return [at - (at - range[0]) * factor, at + (range[1] - at) * factor];
+}
+
 /** A zoom several plots share (pass it to each as `link`), back to the full
  * view when `resetKey` changes (another folder). */
 export function useZoomLink(resetKey?: unknown): ZoomLink {
@@ -175,6 +213,8 @@ export function useZoom({
   resetKey,
   link,
   onZoom,
+  tool: given,
+  canvas,
 }: {
   /** The full view: the data's x and y ranges, as the plot maps them. */
   extent: View;
@@ -191,14 +231,21 @@ export function useZoom({
   resetKey?: unknown;
   /** A zoom shared with other plots, instead of this plot's own. */
   link?: ZoomLink;
-  /** Called after a drag zooms. */
+  /** Called after a drag or the wheel zooms or moves the view. */
   onZoom?: () => void;
+  /** What a drag does, when the plot chooses (the picking's image, beside its lasso); else
+   * its box's tool, or outside any box, the hand. */
+  tool?: Tool;
+  /** The drawing the wheel zooms over. */
+  canvas?: RefObject<HTMLElement | null>;
 }) {
   const [ownZoom, setOwnZoom] = useState<View | null>(null);
   const zoom = link ? link.zoom : ownZoom;
   const setZoom = link ? link.setZoom : setOwnZoom;
   const [drag, setDrag] = useState<Drag | null>(null);
   const [selection, setSelection] = useState<SelectionBox | null>(null);
+  const box = usePlotBox();
+  const tool: Tool = given ?? (box?.tool === "zoom" ? "zoom" : "pan");
 
   // New data (the next position, a new model...) keeps the zoom where it
   // still lies within the data, clamps it where it doesn't, and resets it
@@ -214,6 +261,20 @@ export function useZoom({
   }
 
   const view = (zoom && clampView(zoom, extent)) ?? extent;
+  const zoomed = view !== extent;
+
+  // What the wheel and the box's reset read, always the latest: they are handed over once.
+  const latest = useRef({ view, extent, plots, width, height, yDown, setZoom, onZoom });
+  useEffect(() => {
+    latest.current = { view, extent, plots, width, height, yDown, setZoom, onZoom };
+  });
+
+  // While zoomed, the box's "Reset zoom" brings this plot back too.
+  const add = box?.add;
+  useEffect(() => {
+    if (!add || !zoomed) return;
+    return add(() => latest.current.setZoom(null));
+  }, [add, zoomed]);
 
   // While dragging, follow the mouse on the whole window: the rectangle
   // stops at the plot's edges, and a release anywhere ends the drag.
@@ -223,11 +284,16 @@ export function useZoom({
 
     const at = (ev: MouseEvent) => {
       const box = el.getBoundingClientRect();
-      return {
-        x: clamp(((ev.clientX - box.left) / box.width) * w, plot.left, plot.left + plot.width),
-        y: clamp(((ev.clientY - box.top) / box.height) * h, plot.top, plot.top + plot.height),
-        cssPerPx: box.width / w,
-      };
+      const x = ((ev.clientX - box.left) / box.width) * w;
+      const y = ((ev.clientY - box.top) / box.height) * h;
+      // A zoom box stops at the plot's edges; a pan follows the mouse anywhere.
+      return drag.kind === "pan"
+        ? { x, y, cssPerPx: box.width / w }
+        : {
+            x: clamp(x, plot.left, plot.left + plot.width),
+            y: clamp(y, plot.top, plot.top + plot.height),
+            cssPerPx: box.width / w,
+          };
     };
     const axesTo = (end: { x: number; y: number; cssPerPx: number }) =>
       dragAxes(
@@ -246,6 +312,10 @@ export function useZoom({
         return;
       }
       const end = at(ev);
+      if (drag.kind === "pan") {
+        if (axesTo(end)) drag.setZoom(panTo(drag, end));
+        return;
+      }
       const axes = axesTo(end);
       setSelection(axes && selectionBox(plot, start, end, axes, end.cssPerPx));
     };
@@ -253,6 +323,10 @@ export function useZoom({
       const end = at(ev);
       stop();
       const axes = axesTo(end);
+      if (drag.kind === "pan") {
+        if (axes) drag.onZoom?.();
+        return;
+      }
       const next = axes && zoomTo(drag, end, axes);
       if (next) {
         drag.setZoom(next);
@@ -285,29 +359,76 @@ export function useZoom({
     if (!hit) return;
     // No text selection while dragging across the page.
     e.preventDefault();
-    setDrag({ el, ...hit, start, view, extent, yDown, width, height, setZoom, onZoom });
+    // Along an axis's tick labels, a zoom of that axis whatever the tool; Shift always moves.
+    const kind: Tool = e.shiftKey ? "pan" : hit.region !== "plot" ? "zoom" : tool;
+    setDrag({ el, kind, ...hit, start, view, extent, yDown, width, height, setZoom, onZoom });
   }
 
-  /** The cursor at a hover position (logical pixels): a crosshair on a plot,
-   * a resize arrow on an axis strip, and the drag's all along a drag. */
+  /** The wheel at a plot: zooms in or out about the cursor, along one axis over its strip;
+   * whether it did (the page then does not scroll). `el` is the drawing. */
+  const onWheel = useCallback((ev: WheelEvent, el: Element): boolean => {
+    const { view: current, extent: full, plots: rects, width: w, height: h, yDown: down } = latest.current;
+    const box = el.getBoundingClientRect();
+    const px = ((ev.clientX - box.left) / box.width) * w;
+    const py = ((ev.clientY - box.top) / box.height) * h;
+    const hit = regionAt(rects, px, py);
+    if (!hit || ev.deltaY === 0) return false;
+    const { plot, region } = hit;
+    const pixels = ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? h : 1);
+    const factor = Math.exp(pixels * WHEEL_RATE);
+    const [x0, x1] = current.x;
+    const [y0, y1] = current.y;
+    const xAt = x0 + ((clamp(px, plot.left, plot.left + plot.width) - plot.left) / plot.width) * (x1 - x0);
+    const t = (clamp(py, plot.top, plot.top + plot.height) - plot.top) / plot.height;
+    const yAt = down ? y0 + t * (y1 - y0) : y1 - t * (y1 - y0);
+    const next: View = {
+      x: region === "y" ? current.x : scaled(current.x, xAt, factor),
+      y: region === "x" ? current.y : scaled(current.y, yAt, factor),
+    };
+    const tooSmall = (r: Range, whole: Range) => r[1] - r[0] < (whole[1] - whole[0]) * MIN_ZOOM_FRACTION;
+    if (tooSmall(next.x, full.x) || tooSmall(next.y, full.y)) return true;
+    latest.current.setZoom(clampView(next, full));
+    latest.current.onZoom?.();
+    return true;
+  }, []);
+
+  // Listened to by hand: React's wheel listeners are passive, they cannot keep the page from
+  // scrolling while the wheel zooms.
+  useEffect(() => {
+    const el = canvas?.current;
+    if (!el) return;
+    const listener = (ev: WheelEvent) => {
+      if (onWheel(ev, el)) ev.preventDefault();
+    };
+    el.addEventListener("wheel", listener, { passive: false });
+    return () => el.removeEventListener("wheel", listener);
+  }, [canvas, onWheel]);
+
+  /** The axis strip at a hover position (logical pixels), whose drag zooms it; null off them. */
+  function axisAt(pos: Point | null): "x" | "y" | null {
+    const region = pos ? regionAt(plots, pos.x, pos.y)?.region : undefined;
+    return region === "x" || region === "y" ? region : null;
+  }
+
+  /** The cursor at a hover position (logical pixels): a hand or a crosshair on
+   * a plot, as its tool, a resize arrow on an axis strip, and the drag's all
+   * along a drag. */
   function cursorAt(pos: Point | null): string | undefined {
     const region = drag?.region ?? (pos ? regionAt(plots, pos.x, pos.y)?.region : undefined);
+    if (!region) return undefined;
+    if (drag?.kind === "pan") return "grabbing";
     if (region === "x") return "ew-resize";
     if (region === "y") return "ns-resize";
-    return region === "plot" ? "crosshair" : undefined;
+    return tool === "pan" ? "grab" : "crosshair";
   }
-
-  const reset = () => setZoom(null);
 
   return {
     /** What the plot shows: the zoom, or the full extent. */
     view,
-    zoomed: view !== extent,
     /** The rectangle or band being dragged, for ZoomSelection. */
     selection,
-    reset,
     onMouseDown,
-    onDoubleClick: reset,
+    axisAt,
     cursorAt,
   };
 }

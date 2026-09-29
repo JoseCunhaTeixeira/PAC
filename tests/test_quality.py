@@ -20,7 +20,8 @@ from masw.api.main import app
 from masw.io.paths import OUTPUT_DIR
 from masw.io.quality.dispersion import CurveThresholds, curve_metrics
 from sigpipe.base import Coordinate, DispersionCurve, LinearAcquisition, Mode, VelocityType
-from sigpipe.masw.inversion.measuring import USEFUL_REFERENCE, InversionMeasures
+from sigpipe.masw.inversion.measuring import USEFUL_REFERENCE, InversionMeasures, useful_depth
+from sigpipe.masw.inversion.window import VS_SPREAD_FILE, load_vs_spread
 
 client = TestClient(app)
 
@@ -307,23 +308,26 @@ def test_an_inversion_newer_than_its_measures_shows_none_of_them(run: str) -> No
     path.write_text(saved)
 
 
-def test_a_depth_read_against_the_runs_own_prior_is_not_shown(run: str) -> None:
-    path = OUTPUT_DIR / run / "xmid_5.50" / "SeismicInversion_Measures_0000.json"
+def test_a_depth_measured_by_an_older_rule_is_read_again_from_the_models_band(run: str) -> None:
+    window = OUTPUT_DIR / run / "xmid_5.50"
+    path = window / "SeismicInversion_Measures_0000.json"
     saved = path.read_text()
-    # As saved before 2026-09-28: no yardstick named, the depth read against the run's prior.
-    older = {key: value for key, value in json.loads(saved).items() if key != "useful_reference"}
-    path.write_text(json.dumps(older | {"useful_depth_m": 0.123}))
+    # As saved before 2026-09-29: the depth read against a prior, and no band of the models' Vs.
+    older = json.loads(saved) | {"useful_reference": "curve", "useful_depth_m": 0.123}
+    path.write_text(json.dumps(older))
+    (window / VS_SPREAD_FILE).unlink()
 
-    overview = client.get(f"/quality/inversion/overview/{run}").json()
     card = client.get(f"/quality/inversion/card/{run}/5.5").json()
     section = client.get(f"/inversion/velocity_section/{run}").json()
 
-    cell = next(one for one in overview["cells"] if one["x"] == 5.5)
-    assert cell["value"] is None and not any("informed" in line for line in cell["hover"])
-    assert card["profile"]["informed"] is None
-    assert not any("inform" in text for text in _texts(card))
-    assert "useful_depth" not in {metric["name"] for metric in card["gates"][0]["metrics"]}
-    assert next(one for one in section["windows"] if one["x"] == 5.5)["informed"] is None
+    # Read again from the kept models' band, made from them once and kept beside them.
+    spread = load_vs_spread(window)
+    assert spread is not None
+    expected = useful_depth(spread, 0.25)  # None: the whole model
+    assert card["profile"]["informed"] == expected != 0.123
+    assert any("inform" in text for text in _texts(card))
+    column = next(one for one in section["windows"] if one["x"] == 5.5)
+    assert column["informed"] == (column["depth"] if expected is None else expected)
     assert json.loads(path.read_text())["useful_depth_m"] == 0.123  # never measured here
     path.write_text(saved)
 
@@ -350,7 +354,18 @@ def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> N
         text.startswith(("The median of the ensemble fits", "The median of the ensemble misfits"))
         for text in _texts(card)
     )
-    assert len(profile["tops"]) == len(profile["vs"]) == len(profile["std"]) <= 401
+    assert len(profile["tops"]) == len(profile["vs"]) <= 401
+    # The kept models' 10th and 90th percentiles at each depth (sigpipe's band, every 5 cm), as
+    # the curve's band.
+    depths = profile["spread_depths"]
+    assert 0 < len(depths) == len(profile["spread_low"]) == len(profile["spread_high"]) <= 400
+    assert depths[0] == 0.025 and depths[-1] < profile["bottom"]
+    assert all(
+        low <= high for low, high in zip(profile["spread_low"], profile["spread_high"], strict=True)
+    )
+    # How far around each depth the models' Vs moves together, at the same depths.
+    assert len(profile["correlation"]) == len(depths)
+    assert all(one is None or one >= 0.25 for one in profile["correlation"])
     assert profile["deepest_top"] == 5.0 and profile["bottom"] > 0
     curve = card["curve"]
     assert curve["label"] == "M0" and len(curve["observed_fs"]) == len(curve["observed_vs"]) > 0

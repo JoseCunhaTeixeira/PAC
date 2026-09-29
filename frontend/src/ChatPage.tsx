@@ -18,6 +18,7 @@ import {
   TrashIcon,
 } from "./components/icons";
 import { PageArt } from "./components/PageArt";
+import { usePageTitle } from "./components/pageTitle";
 import "./ChatPage.css";
 
 // PACo's agent, in PAC's process (GET /agent/status says whether it can run, and if not why).
@@ -177,6 +178,7 @@ async function detail(res: Response): Promise<string> {
 }
 
 export default function ChatPage() {
+  usePageTitle("AI assistant");
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [session, setSession] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);

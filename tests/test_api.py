@@ -231,8 +231,10 @@ def test_an_inversion_gives_a_section(run: str) -> None:
     assert all(0 <= one["informed"] <= one["depth"] for one in section["windows"])
     assert (output_folder(run) / "xmid_2.50" / "SeismicInversion_Measures_0000.json").exists()
     assert len(section["informed_levels"]) == len(section["positions"])
-    # The spread in % of Vs, and where the kept models put interfaces (the job counted them).
-    assert all(0 <= std < 200 for row in section["vs_std_grid"] for std in row if std is not None)
+    # The kept models' relative uncertainty of Vs, % (the depth informed read from it), and
+    # where they put interfaces (the job counted them).
+    uncertain = [one for row in section["vs_uncertainty_grid"] for one in row if one is not None]
+    assert uncertain and all(0 <= one < 500 for one in uncertain)
     shares = [one for row in section["interface_grid"] for one in row if one is not None]
     assert shares and all(0 <= one <= 100 for one in shares)
     smoothed = client.get(f"/inversion/velocity_section/{run}", params={"lateral_smoothing": True})
@@ -324,6 +326,18 @@ def test_a_petrophysical_inversion_gives_its_sections(run: str) -> None:
         grid = client.get(f"/petro_inversion/{quantity}/{run}").json()
         assert grid["positions"] == [2.5, 5.5]
         assert any(value is not None for row in grid["values"] for value in row)
+    # Smoothed along the line, as the Vs section: more columns, between the two windows.
+    smoothed = client.get(
+        f"/petro_inversion/section/{run}", params={"lateral_smoothing": True}
+    ).json()
+    assert smoothed["positions"][0] == 2.5 and smoothed["positions"][-1] == 5.5
+    assert len(smoothed["positions"]) == len(smoothed["soil_grid"]) > 2
+    assert {soil for row in smoothed["soil_grid"] for soil in row if soil is not None} <= soils
+    for quantity in ("shear_modulus_section", "vs_section"):
+        grid = client.get(
+            f"/petro_inversion/{quantity}/{run}", params={"lateral_smoothing": True}
+        ).json()
+        assert len(grid["positions"]) == len(grid["values"]) > 2
     curves = client.get(f"/petro_inversion/curves/{run}").json()
     assert [one["predicted_fs"] is not None for one in curves] == [True, True, False]
     comparison = client.get(f"/petro_inversion/pseudo_section_comparison/{run}").json()

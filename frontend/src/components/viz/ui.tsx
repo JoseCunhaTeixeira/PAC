@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Callout } from "../kit";
+import { BoxTools, Callout, Segmented } from "../kit";
 import {
   capitalized,
   changes,
@@ -378,6 +378,39 @@ export function Details({ gates, attempts, children }: {
       )}
       {children}
     </Fold>
+  );
+}
+
+/** A section's lateral smoothing, off or on, named above it as a card's other switches. */
+export function SmoothingSwitch({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <div className="viz-field">
+      Lateral smoothing
+      <Segmented
+        size="sm"
+        label="Lateral smoothing"
+        value={on ? "on" : "off"}
+        onChange={(one) => onChange(one === "on")}
+        options={[
+          { value: "off", label: "Off" },
+          { value: "on", label: "On" },
+        ]}
+      />
+    </div>
+  );
+}
+
+/** A plot's head, in its PlotBox: its title, and on the right its switches (`children`) then
+ * the box's tools. */
+export function PlotHead({ title, children }: { title?: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="viz-row viz-plot-head boxed">
+      {title !== undefined && <p className="viz-plot-title">{title}</p>}
+      <span className="viz-plot-tools">
+        {children}
+        <BoxTools />
+      </span>
+    </div>
   );
 }
 

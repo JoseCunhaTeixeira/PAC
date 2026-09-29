@@ -12,7 +12,7 @@ import { xmidOf } from "./format";
 import { StageHead, UnitCard } from "./panel";
 import { CurveFitPlot, SoilColumnView, type CurveAxis } from "./plots";
 import type { Overview, PetroCard } from "./types";
-import { Details, Empty, Skeleton } from "./ui";
+import { Details, Empty, ErrorBox, Skeleton, SmoothingSwitch } from "./ui";
 import { nearestCell } from "./cells";
 import { useJson } from "./useJson";
 
@@ -23,6 +23,11 @@ import { useJson } from "./useJson";
 const at = (folder: string) => encodeURIComponent(folder);
 // GPa shear moduli run 0.05 to 0.5: one decimal would round them all away.
 const formatGPa = (v: number) => v.toFixed(2);
+
+/** A section the server failed to make: not one it has none of (a 404). */
+function failed(loaded: { error: string | null; missing: boolean }): boolean {
+  return loaded.error !== null && !loaded.missing;
+}
 
 interface Continuous {
   positions: number[];
@@ -48,15 +53,24 @@ export function PetroPanel({
   const [comparisonAxis, setComparisonAxis] = useState<"frequency" | "wavelength">("frequency");
   // The window's curve's axis.
   const [curveAxis, setCurveAxis] = useState<CurveAxis>("frequency");
+  // Each section card's own: its sections smoothed along the line, as the Vs section can be.
+  const [soilSmoothing, setSoilSmoothing] = useState(false);
+  const [rockSmoothing, setRockSmoothing] = useState(false);
   const xmid = selected ? xmidOf(selected) : null;
   const card = useJson<PetroCard>(xmid !== null ? `${API}/quality/petro/card/${at(folder)}/${xmid}` : null);
   const columns = (overview?.cells ?? []).filter((cell) => cell.status !== "none").length;
   const inverted = columns > 0;
   // The line's views take two columns at least.
   const line = columns >= 2;
-  const section = useJson<PetroSectionData>(line ? `${API}/petro_inversion/section/${at(folder)}` : null);
-  const modulus = useJson<Continuous>(line ? `${API}/petro_inversion/shear_modulus_section/${at(folder)}` : null);
-  const vs = useJson<Continuous>(line ? `${API}/petro_inversion/vs_section/${at(folder)}` : null);
+  const section = useJson<PetroSectionData>(
+    line ? `${API}/petro_inversion/section/${at(folder)}?lateral_smoothing=${soilSmoothing}` : null,
+  );
+  const modulus = useJson<Continuous>(
+    line ? `${API}/petro_inversion/shear_modulus_section/${at(folder)}?lateral_smoothing=${rockSmoothing}` : null,
+  );
+  const vs = useJson<Continuous>(
+    line ? `${API}/petro_inversion/vs_section/${at(folder)}?lateral_smoothing=${rockSmoothing}` : null,
+  );
   const comparison = useJson<PseudoSectionComparisonData>(
     line ? `${API}/petro_inversion/pseudo_section_comparison/${at(folder)}` : null,
   );
@@ -121,23 +135,31 @@ export function PetroPanel({
             className="viz-section"
             icon={<OutcropIcon size={17} />}
             title="Soil type and penetration resistance (N) sections"
+            plots
             hint={"N (SPT)\nBlow count: the soil's resistance to a driven sampler"}
+            aside={<SmoothingSwitch on={soilSmoothing} onChange={setSoilSmoothing} />}
           >
             {section.data ? (
               <PetroSectionCanvas section={section.data} marker={xmid ?? undefined} onPick={pick} />
-            ) : !line || section.error ? (
+            ) : !line || section.missing ? (
               <Empty>Needs 2 windows with a soil column.</Empty>
+            ) : section.error ? (
+              <ErrorBox message={`Not loaded: ${section.error}`} />
             ) : (
               <Skeleton height={380} />
             )}
           </Card>
-          {(modulus.data || vs.data) && (
+          {(modulus.data || vs.data || failed(modulus) || failed(vs)) && (
             <Card
               className="viz-section"
               icon={<LayersIcon size={17} />}
               title="Shear modulus and Vs sections"
+              plots
               hint={"From the soil columns (Hertz-Mindlin)\nBefore the fit to the picked curves"}
+              aside={<SmoothingSwitch on={rockSmoothing} onChange={setRockSmoothing} />}
             >
+              {failed(modulus) && <ErrorBox message={`Shear modulus not loaded: ${modulus.error}`} />}
+              {failed(vs) && <ErrorBox message={`Vs not loaded: ${vs.error}`} />}
               {modulus.data && (
                 <VelocitySectionCanvas
                   positions={modulus.data.positions}
@@ -172,6 +194,7 @@ export function PetroPanel({
               className="viz-section"
               icon={<StrataIcon size={17} />}
               title="Picked and modelled pseudo-sections"
+              plots
               aside={
                 <Segmented
                   size="sm"

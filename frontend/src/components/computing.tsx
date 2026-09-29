@@ -5,7 +5,7 @@ import { bound } from "../builders";
 import type { FilteringState, MutingState, StackingState } from "../presets";
 import { GeometryPlot } from "./GeometryPlot";
 import { ArrowRightIcon, CpuIcon, FilterIcon, FolderIcon, InfoIcon, RulerIcon, ScissorsIcon, SpectrumIcon, StackIcon } from "./icons";
-import { Callout, Card, Empty, Fields, NumberField, NumberInput, Page, Segmented, SelectField, Stat, Stats } from "./kit";
+import { BoxTools, Callout, Card, Empty, Fields, NumberField, NumberInput, Page, PlotBox, Segmented, SelectField, Stat, Stats } from "./kit";
 import { runningJob } from "./jobs";
 import { boundsOf, tipOf, written } from "./numbers";
 import { dataEnd, distinct, sampleOf, shortestRecord } from "./records";
@@ -261,54 +261,60 @@ export function WindowsCard({
   const spacing = useMemo(() => spacingOf(acquisition.receiver_positions.map((p) => p[0])), [acquisition]);
   return (
     <Card step={1} title="MASW windows">
-      <Fields>
-        <NumberField
-          label="Length"
-          unit="receivers"
-          value={masw.length}
-          onChange={(v) => setMasw({ ...masw, length: v })}
-          min={3}
-          max={receivers}
-          whole
-          hint={Number.isFinite(masw.length) ? `${+((masw.length - 1) * spacing).toFixed(2)} m` : undefined}
-        />
-        <NumberField
-          label="Step"
-          unit="receivers"
-          value={masw.step}
-          onChange={(v) => setMasw({ ...masw, step: v })}
-          min={1}
-          max={receivers}
-          whole
-          hint={Number.isFinite(masw.step) ? `${+(masw.step * spacing).toFixed(2)} m` : undefined}
-        />
-        {/* The shots' distances: a passive line has no shot. */}
-        {showSources && (
-          <>
-            <NumberField
-              label="Nearest shot"
-              title="From the window's middle"
-              unit="m"
-              value={masw.distance_min ?? Number.NaN}
-              optional="0"
-              onChange={(v) => setMasw({ ...masw, distance_min: v })}
-              min={0}
-            />
-            <NumberField
-              label="Farthest shot"
-              title="From the window's middle"
-              unit="m"
-              value={masw.distance_max ?? Number.NaN}
-              optional="∞"
-              onChange={(v) => setMasw({ ...masw, distance_max: v })}
-              gt={bound(masw.distance_min) ?? 0}
-            />
-          </>
-        )}
-      </Fields>
-      <div style={{ marginTop: 18 }}>
-        <GeometryPlot acquisition={acquisition} masw={masw} onCount={onCount} showSources={showSources} unit={unit} />
-      </div>
+      <PlotBox>
+        <Fields>
+          <NumberField
+            label="Length"
+            unit="receivers"
+            value={masw.length}
+            onChange={(v) => setMasw({ ...masw, length: v })}
+            min={3}
+            max={receivers}
+            whole
+            hint={Number.isFinite(masw.length) ? `${+((masw.length - 1) * spacing).toFixed(2)} m` : undefined}
+          />
+          <NumberField
+            label="Step"
+            unit="receivers"
+            value={masw.step}
+            onChange={(v) => setMasw({ ...masw, step: v })}
+            min={1}
+            max={receivers}
+            whole
+            hint={Number.isFinite(masw.step) ? `${+(masw.step * spacing).toFixed(2)} m` : undefined}
+          />
+          {/* The shots' distances: a passive line has no shot. */}
+          {showSources && (
+            <>
+              <NumberField
+                label="Nearest shot"
+                title="From the window's middle"
+                unit="m"
+                value={masw.distance_min ?? Number.NaN}
+                optional="0"
+                onChange={(v) => setMasw({ ...masw, distance_min: v })}
+                min={0}
+              />
+              <NumberField
+                label="Farthest shot"
+                title="From the window's middle"
+                unit="m"
+                value={masw.distance_max ?? Number.NaN}
+                optional="∞"
+                onChange={(v) => setMasw({ ...masw, distance_max: v })}
+                gt={bound(masw.distance_min) ?? 0}
+              />
+            </>
+          )}
+          {/* The line's tools at the fields' right end, right above its plot. */}
+          <div className="fields-tools">
+            <BoxTools />
+          </div>
+        </Fields>
+        <div style={{ marginTop: 18 }}>
+          <GeometryPlot acquisition={acquisition} masw={masw} onCount={onCount} showSources={showSources} unit={unit} />
+        </div>
+      </PlotBox>
     </Card>
   );
 }

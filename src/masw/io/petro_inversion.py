@@ -7,6 +7,7 @@ from pathlib import Path
 
 from masw.io.dispersion_images import xmid_folder
 from masw.io.folders import get_xmid_folders
+from masw.io.inversion import window_length
 from masw.io.paths import output_folder
 from sigpipe.algorithms.inversion.rayleigh.petro.silex_catalog import list_bundled_silex_models
 from sigpipe.base.petro_model import PetroModel
@@ -103,11 +104,14 @@ def get_curves_by_position(folder: str) -> list[PositionCurves]:
     return result
 
 
-def get_petro_section(folder: str) -> PetroGrid:
-    section = petro_models(output_folder(folder), _units(folder))
+def get_petro_section(folder: str, lateral_smoothing: bool = False) -> PetroGrid:
+    """The soils, N values and water table on a grid; smoothed along the line as the Vs section
+    is, over a window's length, when `lateral_smoothing`."""
+    run_folder = output_folder(folder)
+    section = petro_models(run_folder, _units(folder))
     if section is None:
         raise _too_few(folder)
-    return petro_grid(section)
+    return petro_grid(section, lateral_smoothing, window_length(run_folder))
 
 
 def save_petro_section_plot(folder: str) -> Path:
@@ -126,19 +130,22 @@ def save_petro_section_hdf5(folder: str) -> Path:
     return path
 
 
-def _rock_physics(folder: str, quantity: Quantity) -> RockPhysicsGrid:
-    grid = rock_physics_grid(output_folder(folder), _units(folder), quantity)
+def _rock_physics(folder: str, quantity: Quantity, lateral_smoothing: bool) -> RockPhysicsGrid:
+    run_folder = output_folder(folder)
+    grid = rock_physics_grid(
+        run_folder, _units(folder), quantity, lateral_smoothing, window_length(run_folder)
+    )
     if grid is None:
         raise _too_few(folder)
     return grid
 
 
-def get_shear_modulus_section(folder: str) -> RockPhysicsGrid:
-    return _rock_physics(folder, "shear_modulus")  # GPa
+def get_shear_modulus_section(folder: str, lateral_smoothing: bool = False) -> RockPhysicsGrid:
+    return _rock_physics(folder, "shear_modulus", lateral_smoothing)  # GPa
 
 
-def get_vs_section(folder: str) -> RockPhysicsGrid:
-    return _rock_physics(folder, "vs")
+def get_vs_section(folder: str, lateral_smoothing: bool = False) -> RockPhysicsGrid:
+    return _rock_physics(folder, "vs", lateral_smoothing)
 
 
 def _save_rock_physics(folder: str, quantity: Quantity, as_file: bool) -> Path:

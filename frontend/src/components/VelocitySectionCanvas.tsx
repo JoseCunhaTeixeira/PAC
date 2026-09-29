@@ -14,7 +14,7 @@ import {
   visibleColumns,
   type ZoomLink,
 } from "./useZoom";
-import { ZoomReset, ZoomSelection } from "./ZoomOverlay";
+import { ZoomSelection } from "./ZoomOverlay";
 import { drawMarker, useClick } from "./sectionPick";
 
 const ML = 60, MR = 120, MT = 16, MB = 40;
@@ -165,6 +165,7 @@ export function VelocitySectionCanvas({
     width: TOTAL_W,
     height: TOTAL_H,
     link,
+    canvas: canvasRef,
   });
   // The positions and elevations on show: the whole section, or the zoom.
   const [x0, x1] = zoom.view.x;
@@ -402,10 +403,8 @@ export function VelocitySectionCanvas({
         onMouseLeave={onMouseLeave}
         onMouseDown={click.onMouseDown}
         onClick={click.onClick}
-        onDoubleClick={zoom.onDoubleClick}
       />
       <ZoomSelection box={zoom.selection} />
-      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: 0, right: MR * scale }} />
       {hover && <HoverTooltip x={hover.px} y={hover.py} lines={hover.lines} />}
     </div>
   );

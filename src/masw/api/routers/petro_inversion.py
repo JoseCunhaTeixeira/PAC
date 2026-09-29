@@ -97,9 +97,9 @@ def get_curves_by_position(folder: str) -> list[PositionCurvesOut]:
 
 
 @router.get("/petro_inversion/section/{folder:path}")
-def get_petro_section(folder: str) -> PetroSectionOut:
+def get_petro_section(folder: str, lateral_smoothing: bool = False) -> PetroSectionOut:
     try:
-        section = io.get_petro_section(folder)
+        section = io.get_petro_section(folder, lateral_smoothing)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return PetroSectionOut(
@@ -115,9 +115,9 @@ def get_petro_section(folder: str) -> PetroSectionOut:
 
 
 @router.get("/petro_inversion/shear_modulus_section/{folder:path}")
-def get_shear_modulus_section(folder: str) -> ContinuousSectionOut:
+def get_shear_modulus_section(folder: str, lateral_smoothing: bool = False) -> ContinuousSectionOut:
     try:
-        section = io.get_shear_modulus_section(folder)
+        section = io.get_shear_modulus_section(folder, lateral_smoothing)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return ContinuousSectionOut(
@@ -128,9 +128,9 @@ def get_shear_modulus_section(folder: str) -> ContinuousSectionOut:
 
 
 @router.get("/petro_inversion/vs_section/{folder:path}")
-def get_vs_section(folder: str) -> ContinuousSectionOut:
+def get_vs_section(folder: str, lateral_smoothing: bool = False) -> ContinuousSectionOut:
     try:
-        section = io.get_vs_section(folder)
+        section = io.get_vs_section(folder, lateral_smoothing)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return ContinuousSectionOut(

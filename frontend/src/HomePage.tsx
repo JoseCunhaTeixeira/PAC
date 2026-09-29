@@ -18,6 +18,7 @@ import fieldIllustration from "./assets/logo.png";
 import partners from "./assets/logo2.png";
 import logoDeepWaveLight from "./assets/logo_DeepWave_lightmode.png";
 import logoDeepWaveDark from "./assets/logo_DeepWave_darkmode.png";
+import { usePageTitle } from "./components/pageTitle";
 import { useTheme } from "./theme";
 import "./home.css";
 
@@ -74,6 +75,7 @@ function Ways({ title, ways }: { title: string; ways: Way[] }) {
 }
 
 export default function HomePage({ assistant = false }: { assistant?: boolean }) {
+  usePageTitle("Home");
   const theme = useTheme();
   return (
     <div className="page home">

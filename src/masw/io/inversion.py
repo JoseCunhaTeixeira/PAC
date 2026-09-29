@@ -18,6 +18,7 @@ from masw.io.quality.inversion import (
     informed_to,
     thresholds_of,
     window_measures,
+    window_spread,
 )
 from sigpipe.base.dispersion_curve import Mode
 from sigpipe.base.inversion import InversionResult
@@ -38,9 +39,11 @@ from sigpipe.masw.inversion.section import (
     save_comparison,
     save_section,
     save_sections_file,
+    uncertainty_grid,
     velocity_grid,
     window_model,
 )
+from sigpipe.masw.inversion.window import VsSpread
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +89,8 @@ class SectionWindow:
     # Per INTERFACE_DZ from its ground, the share of its kept models with an interface there
     # (none when its measures do not say).
     interfaces: tuple[float, ...] = ()
+    # Its kept models' Vs at each depth, as their 10th, 50th and 90th percentiles (None: none).
+    spread: VsSpread | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -97,6 +102,9 @@ class VelocitySection:
     levels: np.ndarray
     # On the grid, the share of the kept models with an interface (NaN: not known).
     interfaces: np.ndarray
+    # On the grid, the kept models' relative uncertainty of Vs, U(z) = (P90 - P10) / (2 P50)
+    # (NaN: not known): what the depth informed is read from.
+    uncertainty: np.ndarray
 
 
 def get_velocity_section(
@@ -134,6 +142,9 @@ def get_velocity_section(
         windows=windows,
         levels=levels,
         interfaces=interface_grid(grid, shares, lateral_smoothing, window_m),
+        uncertainty=uncertainty_grid(
+            grid, [(one.x, one.top, one.spread) for one in windows], lateral_smoothing, window_m
+        ),
     )
 
 
@@ -165,6 +176,7 @@ def _section_window(window: Path, model: VelocityModel) -> SectionWindow:
         depth=depth,
         informed=informed,
         interfaces=measures.interfaces if measures is not None else (),
+        spread=window_spread(window, measured[0].parameters.bottom) if measured else None,
     )
 
 
@@ -181,7 +193,7 @@ def measure_position(
         parameters,
         n_bands=thresholds.n_bands,
         bound_edge=thresholds.bound_edge,
-        std_ratio=thresholds.useful_std_ratio,
+        max_uncertainty=thresholds.useful_uncertainty,
         output_folder=output_folder,
     )
     ((output_folder or window) / MEASURES_FILE).write_text(measures.model_dump_json(indent=2))

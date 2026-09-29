@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../../theme";
 import { useContainerWidth } from "../useContainerWidth";
 import { tickDecimals, useZoom, type PlotRect, type Range } from "../useZoom";
-import { ZoomReset, ZoomSelection } from "../ZoomOverlay";
+import { ZoomSelection } from "../ZoomOverlay";
 import { TooltipLines } from "../HoverTooltip";
 import { num } from "./format";
+import { alongLine } from "./line";
 
 // One plot of lines, points and shaded areas against two axes, sized to its column: the plots
 // of a selected window's card (its Vs against depth, its curve against the model's). Zooms like
@@ -50,6 +51,8 @@ export function LinePlot({
   xRange,
   yRange,
   resetKey,
+  minWidth = 240,
+  depthLink,
 }: {
   series: PlotSeries[];
   areas?: PlotArea[];
@@ -62,12 +65,16 @@ export function LinePlot({
   xRange?: Range;
   yRange?: Range;
   resetKey?: unknown;
+  /** The narrowest the drawing gets, in CSS pixels. */
+  minWidth?: number;
+  /** A zoom along y shared with plots beside it (null: all of it); x the plot's own. */
+  depthLink?: { y: Range | null; setY: (y: Range | null) => void };
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
   const palette = canvasPalette(theme);
   const [containerRef, containerWidth] = useContainerWidth<HTMLDivElement>();
-  const width = Math.max(240, Math.floor(containerWidth || 360));
+  const width = Math.max(minWidth, Math.floor(containerWidth || 360));
   const plotW = width - ML - MR;
   const plotH = height - MT - MB;
   const [mouse, setMouse] = useState<{ x: number; y: number } | null>(null);
@@ -100,7 +107,13 @@ export function LinePlot({
     return { x: fit(xs, xRange), y: fit(ys, yRange) };
   }, [series, areas, refs, xRange, yRange]);
   const plots: PlotRect[] = [{ left: ML, top: MT, width: plotW, height: plotH, xAxis: MB, yAxis: ML }];
-  const zoom = useZoom({ extent, plots, width, height, yDown, resetKey });
+  // Sharing y: its x zoom its own, back to all of it with new data (`resetKey`).
+  const [ownX, setOwnX] = useState<{ key: unknown; x: Range | null }>({ key: resetKey, x: null });
+  const xZoom = Object.is(ownX.key, resetKey) ? ownX.x : null;
+  const link = depthLink
+    ? alongLine(xZoom, (next) => setOwnX({ key: resetKey, x: next }), depthLink.y, depthLink.setY, extent)
+    : undefined;
+  const zoom = useZoom({ extent, plots, width, height, yDown, resetKey, canvas: canvasRef, link });
   const [x0, x1] = zoom.view.x;
   const [y0, y1] = zoom.view.y;
 
@@ -269,10 +282,8 @@ export function LinePlot({
         }}
         onMouseLeave={() => setMouse(null)}
         onMouseDown={zoom.onMouseDown}
-        onDoubleClick={zoom.onDoubleClick}
       />
       <ZoomSelection box={zoom.selection} />
-      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: MT + 2, right: MR + 4 }} />
       {hover && mouse && (
         <div
           className="viz-tooltip"

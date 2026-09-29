@@ -1,9 +1,12 @@
 import { useTheme } from "../../theme";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { PlotBox } from "../kit";
+import type { Range } from "../useZoom";
 import { LinePlot, type PlotArea, type PlotRef, type PlotSeries } from "./LinePlot";
 import { MODEL_LABELS, num } from "./format";
 import { vizPalette } from "./palette";
 import type { FitCurve, SoilColumn, VsProfile } from "./types";
+import { PlotHead } from "./ui";
 
 // The plots of a selected window's card: its model's Vs against depth, with the depth its data
 // inform; its picked curve against the one its model gives back; its soil column.
@@ -22,27 +25,45 @@ function steps(tops: number[], values: number[], bottom: number): [number, numbe
 export function VsProfilePlot({ profile }: { profile: VsProfile }) {
   const palette = vizPalette(useTheme());
   const bottom = Math.max(profile.bottom, profile.tops[profile.tops.length - 1] ?? 0);
-  const low = profile.vs.map((vs, i) => vs - profile.std[i]);
-  const high = profile.vs.map((vs, i) => vs + profile.std[i]);
-  const left = steps(profile.tops, low, bottom);
-  const right = steps(profile.tops, high, bottom).reverse();
-  const xs = [...low, ...high];
+  const { spread_depths: depths, spread_low: low, spread_high: high, correlation } = profile;
+  const xs = [...low, ...high, ...profile.vs];
   const xLo = Math.min(...xs);
   const xHi = Math.max(...xs);
-  const areas: PlotArea[] = [{ color: palette.seriesSoft, polygon: [...left, ...right] }];
+  // One zoom in depth for the profile and the correlation beside it, back to all of it with
+  // another window.
+  const [depth, setDepth] = useState<{ key: VsProfile; y: Range | null }>({ key: profile, y: null });
+  const depthLink = {
+    y: depth.key === profile ? depth.y : null,
+    setY: (y: Range | null) => setDepth({ key: profile, y }),
+  };
+  // The kept models' 10-90 %, as the curve's band: down along the 90th, back up the 10th.
+  const areas: PlotArea[] = depths.length
+    ? [
+        {
+          color: palette.seriesSoft,
+          polygon: [
+            ...depths.map((z, i): [number, number] => [high[i], z]),
+            ...depths.map((z, i): [number, number] => [low[i], z]).reverse(),
+          ],
+        },
+      ]
+    : [];
   const refs: PlotRef[] = [];
+  const veils: PlotArea[] = [];
   const informed = profile.informed;
   if (informed !== null && informed < bottom) {
-    // Below the depth the data inform, the kept models spread as widely as the curve allows.
-    areas.push({
+    // Below the depth the data inform, the kept models' Vs uncertainty over the limit.
+    const veil = (lo: number, hi: number): PlotArea => ({
       color: palette.selected,
       polygon: [
-        [xLo - (xHi - xLo), informed],
-        [xHi + (xHi - xLo), informed],
-        [xHi + (xHi - xLo), bottom * 1.1],
-        [xLo - (xHi - xLo), bottom * 1.1],
+        [lo, informed],
+        [hi, informed],
+        [hi, bottom * 1.1],
+        [lo, bottom * 1.1],
       ],
     });
+    areas.push(veil(xLo - (xHi - xLo), xHi + (xHi - xLo)));
+    veils.push(veil(-1_000, 1_000));
     refs.push({
       axis: "y",
       at: informed,
@@ -58,39 +79,81 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
       width: 2.2,
     },
   ];
+  // How far around each depth the kept models' Vs moves together: a gap where all alike.
+  const lengths = depths.flatMap((z, i): [number, number][] => {
+    const length = correlation[i];
+    return length === null || length === undefined ? [] : [[length, z]];
+  });
+  const lengthMax = Math.max(1, ...lengths.map(([length]) => length));
   return (
-    <div>
-      <div className="viz-row viz-plot-head">
-        <p className="viz-plot-title">Vs profile</p>
-      </div>
-      <LinePlot
-        series={series}
-        areas={areas}
-        refs={refs}
-        xLabel="Vs (m/s)"
-        yLabel="Depth (m)"
-        yDown
-        height={320}
-        xRange={[Math.max(0, xLo - (xHi - xLo) * 0.08), xHi + (xHi - xLo) * 0.08]}
-        yRange={[0, bottom * 1.04]}
-        resetKey={profile}
-      />
-      <div className="viz-legend-inline">
-        <span style={{ color: palette.series }}>
-          <i />
-          {MODEL_LABELS[profile.model] ?? profile.model}
-        </span>
-        <span>
-          <i className="area" style={{ background: palette.seriesSoft }} />± its spread
-        </span>
-        {informed !== null && informed < bottom && (
-          <span>
-            <i className="area" style={{ background: palette.selected, outline: `1px solid ${palette.faint}` }} />
-            not informed by the data
+    <PlotBox>
+      <div>
+        <PlotHead title="Vs profile" />
+        <div className="viz-profile-pair">
+          <LinePlot
+            series={series}
+            areas={areas}
+            refs={refs}
+            xLabel="Vs (m/s)"
+            yLabel="Depth (m)"
+            yDown
+            height={320}
+            xRange={[Math.max(0, xLo - (xHi - xLo) * 0.08), xHi + (xHi - xLo) * 0.08]}
+            yRange={[0, bottom * 1.04]}
+            resetKey={profile}
+            depthLink={depthLink}
+          />
+          {lengths.length > 0 && (
+            <LinePlot
+              series={[
+                { label: "Correlation length", color: palette.muted, points: lengths, width: 1.8 },
+              ]}
+              areas={veils}
+              refs={refs.map((ref) => ({ ...ref, label: "" }))}
+              xLabel="Correlation (m)"
+              yLabel="Depth (m)"
+              yDown
+              height={320}
+              xRange={[0, lengthMax * 1.08]}
+              yRange={[0, bottom * 1.04]}
+              resetKey={profile}
+              minWidth={140}
+              depthLink={depthLink}
+            />
+          )}
+        </div>
+        <div className="viz-legend-inline">
+          <span style={{ color: palette.series }}>
+            <i />
+            {MODEL_LABELS[profile.model] ?? profile.model}
           </span>
-        )}
+          {depths.length > 0 && (
+            <span>
+              <i className="area" style={{ background: palette.seriesSoft }} />
+              10–90 % of the models
+            </span>
+          )}
+          {lengths.length > 0 && (
+            <span
+              style={{ color: palette.muted }}
+              data-tip={
+                "Correlation length\nHow far around each depth the kept models' Vs moves together " +
+                "(rank correlation ≥ 0.5): the data do not tell those depths apart\nReported, not judged"
+              }
+            >
+              <i />
+              correlation length
+            </span>
+          )}
+          {informed !== null && informed < bottom && (
+            <span>
+              <i className="area" style={{ background: palette.selected, outline: `1px solid ${palette.faint}` }} />
+              not informed by the data
+            </span>
+          )}
+        </div>
       </div>
-    </div>
+    </PlotBox>
   );
 }
 
@@ -143,33 +206,32 @@ export function CurveFitPlot({
       ]
     : [];
   return (
-    <div>
-      <div className="viz-row viz-plot-head">
-        <p className="viz-plot-title">Picked and modelled curve</p>
-        {aside}
-      </div>
-      <LinePlot
-        series={[observed, predicted]}
-        areas={areas}
-        xLabel={axis === "frequency" ? "Frequency (Hz)" : "Wavelength (m)"}
-        yLabel="Phase velocity (m/s)"
-        height={320}
-        resetKey={`${axis}-${curve.label}`}
-      />
-      <div className="viz-legend-inline">
-        <span style={{ color: palette.series }}>● picked, ± its uncertainty</span>
-        <span style={{ color: palette.status.fail }}>
-          <i className="dashed" />
-          {modelled}
-        </span>
-        {areas.length > 0 && (
-          <span>
-            <i className="area" style={{ background: palette.modelledSoft }} />
-            10–90 % of the models
+    <PlotBox>
+      <div>
+        <PlotHead title="Picked and modelled curve">{aside}</PlotHead>
+        <LinePlot
+          series={[observed, predicted]}
+          areas={areas}
+          xLabel={axis === "frequency" ? "Frequency (Hz)" : "Wavelength (m)"}
+          yLabel="Phase velocity (m/s)"
+          height={320}
+          resetKey={`${axis}-${curve.label}`}
+        />
+        <div className="viz-legend-inline">
+          <span style={{ color: palette.series }}>● picked, ± its uncertainty</span>
+          <span style={{ color: palette.status.fail }}>
+            <i className="dashed" />
+            {modelled}
           </span>
-        )}
+          {areas.length > 0 && (
+            <span>
+              <i className="area" style={{ background: palette.modelledSoft }} />
+              10–90 % of the models
+            </span>
+          )}
+        </div>
       </div>
-    </div>
+    </PlotBox>
   );
 }
 

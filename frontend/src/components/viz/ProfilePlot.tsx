@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { canvasPalette, useTheme } from "../../theme";
 import { useContainerWidth } from "../useContainerWidth";
-import { CLICK_PX, useZoom, type PlotRect, type Range } from "../useZoom";
+import { CLICK_PX, type Range } from "../useZoom";
 import {
   cellWidth,
   drawCell,
@@ -13,10 +13,9 @@ import {
   symbolSizes,
   type CellTone,
 } from "../lineDraw";
-import { ZoomReset, ZoomSelection } from "../ZoomOverlay";
 import { TooltipLines } from "../HoverTooltip";
 import { num } from "./format";
-import { alongLine, lineExtent } from "./line";
+import { lineExtent } from "./line";
 import { vizPalette } from "./palette";
 import type { Cell, RunCard, Shot, Status, WindowSources } from "./types";
 
@@ -25,7 +24,7 @@ import type { Cell, RunCard, Shot, Status, WindowSources } from "./types";
 // shots its image stacks (blue), those it leaves out (red, grey) and the reach it stacks them
 // within. On the records' stage, the cells are the shots themselves, and the windows that stack
 // the selected one are blue. What the pointer is on stands out, as on the computing pages. A
-// click selects, a drag zooms along the line, a double-click shows all of it again.
+// click selects: no zoom of its own (no tools, no wheel), the records' gathers' along the line.
 
 // The lanes every line plot shares (lineDraw.ts).
 const ML = LANE.left;
@@ -54,7 +53,6 @@ export function ProfilePlot({
   onShot,
   onWindow,
   xZoom = null,
-  onXZoom,
 }: {
   card: RunCard;
   /** The stage's cells: windows at their middle, or records at their shot. */
@@ -71,9 +69,9 @@ export function ProfilePlot({
   onSelect: (key: string) => void;
   onShot?: (name: string) => void;
   onWindow?: (key: string) => void;
-  /** The zoom along the line, shared with the plots under it; null for the whole line. */
+  /** The zoom along the line of the plots under it (the records' gathers), followed to stay
+   * aligned with them; null for the whole line. */
   xZoom?: Range | null;
-  onXZoom?: (x: Range | null) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
@@ -92,17 +90,10 @@ export function ProfilePlot({
     () => Object.entries(card.sources).map(([name, x]) => ({ name, x })).sort((a, b) => a.x - b.x),
     [card.sources],
   );
-  const extent = useMemo(() => ({ x: lineExtent(card), y: [0, 1] as const }), [card]);
-  const plots: PlotRect[] = [{ left: ML, top: 0, width: plotW, height: axisTop, xAxis: AXIS_H }];
-  const zoom = useZoom({
-    extent,
-    plots,
-    width,
-    height,
-    resetKey: card.folder,
-    link: onXZoom ? alongLine(xZoom, onXZoom, null, () => {}, extent) : undefined,
-  });
-  const [x0, x1] = zoom.view.x;
+  const full = useMemo(() => lineExtent(card), [card]);
+  // The gathers' zoom, within the line; the whole line without one.
+  const x0 = xZoom ? Math.max(xZoom[0], full[0]) : full[0];
+  const x1 = xZoom && Math.min(xZoom[1], full[1]) > x0 ? Math.min(xZoom[1], full[1]) : full[1];
   const xOf = (x: number) => ML + ((x - x0) / (x1 - x0)) * plotW;
 
   // The cells by key, and those at a position along the line, in order.
@@ -390,7 +381,7 @@ export function ProfilePlot({
     }
   }
 
-  const cursor = hit && hit.row !== "receiver" ? "pointer" : zoom.cursorAt(mouse);
+  const cursor = hit && hit.row !== "receiver" ? "pointer" : undefined;
   return (
     <div ref={containerRef} style={{ position: "relative", width: "100%" }}>
       <canvas
@@ -400,13 +391,9 @@ export function ProfilePlot({
         onMouseLeave={() => setMouse(null)}
         onMouseDown={(e) => {
           down.current = { x: e.clientX, y: e.clientY };
-          zoom.onMouseDown(e);
         }}
         onClick={click}
-        onDoubleClick={zoom.onDoubleClick}
       />
-      <ZoomSelection box={zoom.selection} />
-      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: -2, right: MR }} />
       {tooltip && mouse && (
         <div
           className="viz-tooltip"

@@ -445,6 +445,74 @@
   gap: 10px;
 }
 
+/* A box's plot tools (BoxTools), on its head's right: the reset hangs under them, centred, in the
+   head's margin, over nothing drawn. */
+.box-tools {
+  position: relative;
+  display: flex;
+}
+
+/* At the bottom of the head's controls, whose names may stand above them. */
+.card-aside > .box-tools {
+  align-self: flex-end;
+}
+
+.box-tools .segmented.sm button {
+  padding: 3px 8px;
+}
+
+/* An icon's button as tall as a word's, beside the head's other switches. */
+.box-tools .segmented button::after {
+  content: "\200b";
+}
+
+/* A box's own head, when it is no card (a preview): its tools on the right, room under them
+   for the reset. */
+.box-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 16px;
+}
+
+.box-head > .box-tools {
+  margin-left: auto;
+}
+
+/* A box's tools in a line of fields: at its right end, at the fields' foot, over their plot. */
+.fields-tools {
+  grid-column: -2 / -1;
+  justify-self: end;
+  align-self: end;
+}
+
+/* A quiet button, not the global red one: `button.` outweighs `button:hover`. */
+button.box-reset {
+  position: absolute;
+  top: calc(100% + 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 0 6px;
+  font-size: var(--fs-caption);
+  font-weight: 400;
+  line-height: 13px;
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+button.box-reset:hover {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--text-faint);
+}
+
 .card.muted {
   background: var(--surface-2);
 }

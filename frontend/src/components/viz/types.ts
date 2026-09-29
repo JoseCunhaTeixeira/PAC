@@ -269,7 +269,12 @@ export interface VsProfile {
   model: ModelName;
   tops: number[];
   vs: number[];
-  std: number[];
+  // The kept models' 10th and 90th percentiles at each depth (none without them), and how far
+  // around each depth their Vs moves together (m; null: all alike there).
+  spread_depths: number[];
+  spread_low: number[];
+  spread_high: number[];
+  correlation: (number | null)[];
   bottom: number;
   informed: number | null;
   deepest_top: number;

@@ -8,6 +8,18 @@ const base = {
   strokeLinejoin: "round" as const,
 };
 
+/** The hand tool: a drag moves the view. */
+export function HandIcon({ size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...base}>
+      <path d="M7 11V5.5a1.5 1.5 0 0 1 3 0V10" />
+      <path d="M10 9.5V4a1.5 1.5 0 0 1 3 0v6" />
+      <path d="M13 9.5V5a1.5 1.5 0 0 1 3 0v6" />
+      <path d="M16 10.5V8a1.5 1.5 0 0 1 3 0v6a7 7 0 0 1-7 7h-1.2a6 6 0 0 1-4.6-2.2L3.5 15.3a1.5 1.5 0 0 1 2.3-1.9L7 15" />
+    </svg>
+  );
+}
+
 export function HomeIcon({ size = 18 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" {...base}>

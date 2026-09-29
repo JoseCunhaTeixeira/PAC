@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { API, type Acquisition } from "../../api";
-import { Segmented } from "../kit";
+import { PlotBox, Segmented } from "../kit";
 import type { Range } from "../useZoom";
 import { LineGather, type GatherData } from "./LineGather";
 import { StageHead, UnitCard } from "./panel";
 import type { Overview, RecordCard } from "./types";
-import { Details, Empty, Skeleton } from "./ui";
+import { Details, Empty, PlotHead, Skeleton } from "./ui";
 import { useJson } from "./useJson";
 
 // The records: the selected record's card (its signal, what the checks said and redid, the
@@ -30,19 +30,20 @@ function RunGather({
     `${API}/quality/records/gather/${encodeURIComponent(folder)}/${encodeURIComponent(name)}?norm=${norm}`,
   );
   return (
-    <div>
-      <div className="viz-row viz-plot-head">
-        <p className="viz-plot-title">{name} · preprocessed, as the windows used it</p>
-        <Normalization value={norm} onChange={setNorm} />
+    <PlotBox>
+      <div>
+        <PlotHead title={`${name} · preprocessed, as the windows used it`}>
+          <Normalization value={norm} onChange={setNorm} />
+        </PlotHead>
+        {gather.data ? (
+          <LineGather key={name} data={gather.data} extent={extent} xZoom={xZoom} onXZoom={onXZoom} />
+        ) : gather.error ? (
+          <Empty>{gather.error}</Empty>
+        ) : (
+          <Skeleton height={440} />
+        )}
       </div>
-      {gather.data ? (
-        <LineGather key={name} data={gather.data} extent={extent} xZoom={xZoom} onXZoom={onXZoom} />
-      ) : gather.error ? (
-        <Empty>{gather.error}</Empty>
-      ) : (
-        <Skeleton height={440} />
-      )}
-    </div>
+    </PlotBox>
   );
 }
 
@@ -103,12 +104,14 @@ export function Gather({ profile, file }: { profile: string; file: string }) {
   if (acquisition.error || raw.error) return <Empty>{acquisition.error ?? raw.error}</Empty>;
   if (!data) return <Skeleton height={440} />;
   return (
-    <div>
-      <div className="viz-row" style={{ marginBottom: 6, justifyContent: "flex-end" }}>
-        <Normalization value={norm} onChange={setNorm} />
+    <PlotBox>
+      <div>
+        <PlotHead>
+          <Normalization value={norm} onChange={setNorm} />
+        </PlotHead>
+        <LineGather key={file} data={data} extent={extent} xZoom={xZoom} onXZoom={setXZoom} />
       </div>
-      <LineGather key={file} data={data} extent={extent} xZoom={xZoom} onXZoom={setXZoom} />
-    </div>
+    </PlotBox>
   );
 }
 

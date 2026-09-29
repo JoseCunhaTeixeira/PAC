@@ -22,7 +22,7 @@ import {
   symbolSizes,
 } from "./lineDraw";
 import { useZoom, type PlotRect, type Range } from "./useZoom";
-import { ZoomReset, ZoomSelection } from "./ZoomOverlay";
+import { ZoomSelection } from "./ZoomOverlay";
 import { TooltipLines } from "./HoverTooltip";
 import { vizPalette } from "./viz/palette";
 
@@ -30,7 +30,7 @@ import { vizPalette } from "./viz/palette";
 // (inverted triangles) and the windows the MASW settings make (a cell at each middle), and the
 // line's topography under them (straight when it is flat). Hover a shot, a receiver or a window
 // for what it is; a window shows its receivers, the shots it stacks and the distances it takes
-// them within. A drag zooms along the line, a double-click shows all of it.
+// them within. The wheel zooms along the line; a drag does what its box's tools say (above it).
 
 interface WindowSummary {
   xmid: number;
@@ -155,6 +155,7 @@ export function GeometryPlot({
       zoom: xZoom ? { x: xZoom, y: full.y } : null,
       setZoom: (view) => setXZoom(view && (Math.abs(view.x[0] - extent[0]) > 1e-9 || Math.abs(view.x[1] - extent[1]) > 1e-9) ? view.x : null),
     },
+    canvas: canvasRef,
   });
   const [x0, x1] = zoom.view.x;
   const X = (x: number) => ML + ((x - x0) / (x1 - x0)) * plotW;
@@ -334,10 +335,8 @@ export function GeometryPlot({
           onMouseMove={(e) => setMouse(logical(e))}
           onMouseLeave={() => setMouse(null)}
           onMouseDown={zoom.onMouseDown}
-          onDoubleClick={zoom.onDoubleClick}
         />
         <ZoomSelection box={zoom.selection} />
-        <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: 0, right: MR }} />
         {tooltip && mouse && (
           <div
             className="viz-tooltip"

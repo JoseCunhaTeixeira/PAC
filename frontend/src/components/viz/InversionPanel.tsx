@@ -3,7 +3,7 @@ import { API } from "../../api";
 import { canvasPalette, useTheme } from "../../theme";
 import { afmhotR, purples, terrain } from "../colormaps";
 import { LayersIcon, StrataIcon } from "../icons";
-import { Card, Segmented } from "../kit";
+import { BoxTools, Card, PlotBox, Segmented } from "../kit";
 import { ModeHead } from "../PseudoSectionCanvas";
 import { PseudoSectionComparisonCanvas, type PseudoSectionComparisonData } from "../PseudoSectionComparisonCanvas";
 import { useZoomLink } from "../useZoom";
@@ -17,7 +17,7 @@ import { MODEL_LABELS, num, parameterLabel, xmidOf } from "./format";
 import { StageHead, UnitCard } from "./panel";
 import { CurveFitPlot, VsProfilePlot, type CurveAxis } from "./plots";
 import type { Chains, InversionCard, ModelName, Overview } from "./types";
-import { AttemptTable, Empty, Fold, GateTables, Skeleton } from "./ui";
+import { AttemptTable, Empty, ErrorBox, Fold, GateTables, PlotHead, Skeleton, SmoothingSwitch } from "./ui";
 import { nearestCell } from "./cells";
 import { useJson } from "./useJson";
 
@@ -44,7 +44,9 @@ interface VelocitySection {
   positions: number[];
   elevations: number[];
   vs_grid: (number | null)[][];
-  vs_std_grid: (number | null)[][]; // % of Vs
+  // The kept models' relative uncertainty of Vs, U = (P90 - P10) / (2 P50), %: the depth
+  // informed read from it.
+  vs_uncertainty_grid: (number | null)[][];
   // The share of the kept models with an interface, % (null: not known).
   interface_grid: (number | null)[][];
   floors?: number[]; // per column, the elevation its models end at
@@ -259,26 +261,31 @@ function ChainsView({ folder, xmid }: { folder: string; xmid: number }) {
   const marginal = chains.data.marginals.find((one) => one.parameter === traces?.parameter);
   return (
     <div>
-      <div className="viz-toolbar" style={{ marginTop: 8 }}>
-        <label className="viz-field">
-          Parameter
-          <select value={traces?.parameter ?? ""} onChange={(e) => setParameter(e.target.value)}>
-            {chains.data.traces.map((one) => (
-              <option key={one.parameter} value={one.parameter}>
-                {parameterLabel(one.parameter)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="viz-small viz-muted">
-          <ChainLegend n={traces?.chains.length ?? 0} />
-        </span>
-      </div>
-      {traces && <ChainTracesCanvas traces={traces} prior={marginal ? [marginal.low, marginal.high] : undefined} />}
-      <div className="viz-row viz-plot-head" style={{ marginTop: 12 }}>
-        <p className="viz-plot-title">Marginals within the priors (dashed: a flat posterior)</p>
-      </div>
-      <MarginalsGrid marginals={chains.data.marginals} />
+      <PlotBox>
+        <div className="viz-toolbar boxed" style={{ marginTop: 8 }}>
+          <label className="viz-field">
+            Parameter
+            <select value={traces?.parameter ?? ""} onChange={(e) => setParameter(e.target.value)}>
+              {chains.data.traces.map((one) => (
+                <option key={one.parameter} value={one.parameter}>
+                  {parameterLabel(one.parameter)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="viz-small viz-muted">
+            <ChainLegend n={traces?.chains.length ?? 0} />
+          </span>
+          <BoxTools />
+        </div>
+        {traces && <ChainTracesCanvas traces={traces} prior={marginal ? [marginal.low, marginal.high] : undefined} />}
+      </PlotBox>
+      <PlotBox>
+        <div style={{ marginTop: 12 }}>
+          <PlotHead title="Marginals within the priors (dashed: a flat posterior)" />
+        </div>
+        <MarginalsGrid marginals={chains.data.marginals} />
+      </PlotBox>
     </div>
   );
 }
@@ -441,9 +448,11 @@ export function InversionPanel({
           <Card
             className="viz-section"
             icon={<LayersIcon size={17} />}
-            title="Vs, Vs std and interface sections"
+            title="Vs, Vs uncertainty and interface sections"
+            plots
             hint={
-              "Of the kept models\nVs: their median at each depth\nVs std: their spread, % of Vs\n" +
+              "Of the kept models\nVs: their median at each depth, P50\n" +
+              "Vs uncertainty: (P90 − P10) / (2 P50), %\n" +
               "Interfaces: the share placing a layer boundary there"
             }
             aside={
@@ -451,8 +460,8 @@ export function InversionPanel({
                 <div
                   className="viz-field"
                   data-tip={
-                    "Depth informed\nBelow it, veiled: Vs still spreads over half what the curve alone allows\n" +
-                    'One yardstick for every window: "By the data", its bounds left empty'
+                    "Depth informed\nBelow it, veiled: the Vs uncertainty over 25 %\n" +
+                    "From the surface down, on the kept models alone"
                   }
                 >
                   Depth informed
@@ -467,19 +476,7 @@ export function InversionPanel({
                     ]}
                   />
                 </div>
-                <div className="viz-field">
-                  Lateral smoothing
-                  <Segmented
-                    size="sm"
-                    label="Lateral smoothing"
-                    value={smoothing ? "on" : "off"}
-                    onChange={(one) => setSmoothing(one === "on")}
-                    options={[
-                      { value: "off", label: "Off" },
-                      { value: "on", label: "On" },
-                    ]}
-                  />
-                </div>
+                <SmoothingSwitch on={smoothing} onChange={setSmoothing} />
                 <div className="viz-field center">
                   Vs range (m/s)
                   <div className="viz-range">
@@ -509,8 +506,8 @@ export function InversionPanel({
                 <VelocitySectionCanvas
                   positions={section.data.positions}
                   elevations={section.data.elevations}
-                  values={section.data.vs_std_grid}
-                  colorLabel="Vs std (%)"
+                  values={section.data.vs_uncertainty_grid}
+                  colorLabel="Vs uncertainty (%)"
                   colormap={afmhotR}
                   height={200}
                   link={zoomLink}
@@ -548,8 +545,10 @@ export function InversionPanel({
                   </div>
                 )}
               </>
-            ) : section.error ? (
+            ) : section.missing ? (
               <Empty>Needs 2 inverted windows.</Empty>
+            ) : section.error ? (
+              <ErrorBox message={`Not loaded: ${section.error}`} />
             ) : (
               <Skeleton height={640} />
             )}
@@ -559,6 +558,7 @@ export function InversionPanel({
               className="viz-section"
               icon={<StrataIcon size={17} />}
               title="Picked and modelled pseudo-sections"
+              plots
               aside={
                 <Segmented
                   size="sm"
@@ -627,8 +627,10 @@ function ComparedSection({
           marker={marker}
           onPick={onPick}
         />
-      ) : comparison.error ? (
+      ) : comparison.missing ? (
         <p className="faint">Needs 2 windows with a pick and a model.</p>
+      ) : comparison.error ? (
+        <ErrorBox message={`Not loaded: ${comparison.error}`} />
       ) : (
         <Skeleton height={420} />
       )}

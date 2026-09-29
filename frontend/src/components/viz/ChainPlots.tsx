@@ -3,7 +3,7 @@ import { CANVAS_FONT, canvasPalette, useTheme } from "../../theme";
 import { useContainerWidth } from "../useContainerWidth";
 import { TooltipLines } from "../HoverTooltip";
 import { evenTicks, tickDecimals, useZoom, type PlotRect } from "../useZoom";
-import { ZoomReset, ZoomSelection } from "../ZoomOverlay";
+import { ZoomSelection } from "../ZoomOverlay";
 import { num, parameterLabel } from "./format";
 import { vizPalette } from "./palette";
 import type { ChainTraces, Marginal } from "./types";
@@ -81,7 +81,7 @@ export function ChainTracesCanvas({
     return { x: [0, Math.max(1, (n - 1) * traces.step)] as const, y: [lo - pad, hi + pad] as const };
   }, [traces, n]);
   const plots: PlotRect[] = [{ left: ML, top: MT, width: plotW, height: plotH, xAxis: MB, yAxis: ML }];
-  const zoom = useZoom({ extent, plots, width, height, resetKey: traces.parameter });
+  const zoom = useZoom({ extent, plots, width, height, resetKey: traces.parameter, canvas: canvasRef });
   const [x0, x1] = zoom.view.x;
   const [y0, y1] = zoom.view.y;
 
@@ -172,10 +172,8 @@ export function ChainTracesCanvas({
         style={{ display: "block", cursor: zoom.cursorAt(mouse) }}
         {...handlers}
         onMouseDown={zoom.onMouseDown}
-        onDoubleClick={zoom.onDoubleClick}
       />
       <ZoomSelection box={zoom.selection} />
-      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: 0, right: MR }} />
       {hover && mouse && (
         <div
           className="viz-tooltip"
@@ -230,6 +228,7 @@ function MarginalCanvas({ marginal, width }: { marginal: Marginal; width: number
     plots: [{ left: SM_ML, top: SM_MT, width: plotW, height: plotH, xAxis: SM_MB, yAxis: SM_ML }],
     width,
     height,
+    canvas: canvasRef,
   });
   const [x0, x1] = zoom.view.x;
   const [y0, y1] = zoom.view.y;
@@ -321,10 +320,8 @@ function MarginalCanvas({ marginal, width }: { marginal: Marginal; width: number
         style={{ display: "block", cursor: zoom.cursorAt(mouse) }}
         {...handlers}
         onMouseDown={zoom.onMouseDown}
-        onDoubleClick={zoom.onDoubleClick}
       />
       <ZoomSelection box={zoom.selection} />
-      <ZoomReset zoomed={zoom.zoomed} onReset={zoom.reset} style={{ top: 0, right: SM_MR }} />
       {hover && mouse && (
         <div
           className="viz-tooltip"
