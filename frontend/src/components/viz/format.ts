@@ -193,7 +193,10 @@ export function range(r: [number, number] | null | undefined, unit: string, digi
 export function metricValue(metric: Metric, value: number | null = metric.value): string {
   if (value == null) return "—";
   if (BOOLEANS.has(metric.name)) return value ? "yes" : "no";
-  if (SHARES.has(metric.name) && metric.unit === "") return pct(value, value < 0.1 && value > 0 ? 1 : 0);
+  // A share in whole percents; a small one to two significant digits, never 0 when some are
+  // (the fk selection's 1 segment of 2,736: 0.04 %).
+  if (SHARES.has(metric.name) && metric.unit === "")
+    return value > 0 && value < 0.1 ? `${num(100 * value, 2)} %` : pct(value);
   if (metric.unit === "s") return `${num(value * 1000)} ms`;
   if (metric.unit === "%") return `${num(value)} %`;
   return metric.unit ? `${num(value)} ${metric.unit}` : num(value);

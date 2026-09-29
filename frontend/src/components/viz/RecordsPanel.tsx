@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { API, type Acquisition } from "../../api";
 import { PlotBox, Segmented } from "../kit";
-import { SpectrumCanvas } from "../SpectrumCanvas";
+import { SpectrumCanvas, type TraceSpectra } from "../SpectrumCanvas";
 import type { Range } from "../useZoom";
 import { LineGather, type GatherData } from "./LineGather";
 import { StageHead, UnitCard } from "./panel";
@@ -116,7 +116,8 @@ interface RawGather {
   traces: number[][];
 }
 
-/** A profile's record as recorded, along the line (a profile no run has processed yet). */
+/** A profile's record as recorded, along the line (a profile no run has processed yet), and
+ * under it its spectrum, each trace's, at its receiver, zoomed with it: as a run's record. */
 export function Gather({ profile, file }: { profile: string; file: string }) {
   const acquisition = useJson<Acquisition>(`${API}/acquisitions/${encodeURIComponent(profile)}`);
   const [norm, setNorm] = useState<"trace" | "global">("trace");
@@ -127,6 +128,7 @@ export function Gather({ profile, file }: { profile: string; file: string }) {
   const raw = useJson<RawGather>(
     `${API}/gather/${encodeURIComponent(profile)}/${encodeURIComponent(file)}?norm=${norm}`,
   );
+  const spectra = useJson<TraceSpectra>(`${API}/spectrum/${encodeURIComponent(profile)}/${encodeURIComponent(file)}`);
   const data = useMemo((): GatherData | null => {
     if (!raw.data || !acquisition.data) return null;
     const index = acquisition.data.files.indexOf(file);
@@ -152,14 +154,31 @@ export function Gather({ profile, file }: { profile: string; file: string }) {
   if (acquisition.error || raw.error) return <Empty>{acquisition.error ?? raw.error}</Empty>;
   if (!data) return <Skeleton height={440} />;
   return (
-    <PlotBox>
-      <div>
-        <PlotHead>
-          <Normalization value={norm} onChange={setNorm} />
-        </PlotHead>
-        <LineGather key={file} data={data} extent={extent} xZoom={xZoom} onXZoom={setXZoom} />
-      </div>
-    </PlotBox>
+    <>
+      <PlotBox>
+        <div>
+          <PlotHead title={`${file} · as recorded`}>
+            <Normalization value={norm} onChange={setNorm} />
+          </PlotHead>
+          <LineGather key={file} data={data} extent={extent} xZoom={xZoom} onXZoom={setXZoom} />
+        </div>
+      </PlotBox>
+      {spectra.data && (
+        <PlotBox>
+          <div style={{ marginTop: 16 }}>
+            <PlotHead title={`${file} · its spectrum, as recorded`} />
+            <SpectrumCanvas
+              key={file}
+              spectra={spectra.data}
+              positions={data.positions}
+              extent={extent}
+              xZoom={xZoom}
+              onXZoom={setXZoom}
+            />
+          </div>
+        </PlotBox>
+      )}
+    </>
   );
 }
 

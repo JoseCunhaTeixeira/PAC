@@ -5,7 +5,7 @@ import { StrataIcon } from "../icons";
 import { Card, PlotBox, Segmented } from "../kit";
 import { ModeHead, PseudoSectionCanvas, type PseudoSection } from "../PseudoSectionCanvas";
 import type { Range } from "../useZoom";
-import { xmidOf } from "./format";
+import { num, xmidOf } from "./format";
 import { LineGather, type GatherData } from "./LineGather";
 import { LinePlot } from "./LinePlot";
 import { vizPalette } from "./palette";
@@ -84,7 +84,7 @@ function WindowSelection({ folder, xmid }: { folder: string; xmid: number }) {
   return (
     <PlotBox>
       <div style={{ marginTop: 16 }}>
-        <PlotHead title={`FK selection · ${data.kept_count} of ${segments} segments kept`} />
+        <PlotHead title={`fk selection · ${num(data.kept_count)} of ${num(segments)} segments kept`} />
         <LinePlot
           key={xmid}
           series={[
