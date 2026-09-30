@@ -1991,10 +1991,12 @@ table.layers input[type="number"] {
   font-weight: 650;
 }
 
-/* A field's bound on its hover ("≥ 0 s"): yellow, the tooltips' own dark ground under it in
-   both themes (the dark theme's --warn-text). */
+/* A bound on a hover ("≥ 0 s", "> 1 mode"), its unit with it: yellow, never bold (even in a
+   hover's title), the tooltips' own dark ground under it in both themes (the dark theme's
+   --warn-text). */
 .tip-bound {
   color: #f1c15c;
+  font-weight: 400;
 }
 
 [data-theme="dark"] .tip-layer {

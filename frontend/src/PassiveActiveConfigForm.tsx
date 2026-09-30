@@ -83,8 +83,9 @@ function Form({
     `${kept}.dispersion`,
     stage<Dispersion>(preset, "dispersion"),
   );
+  // @2: phase-weighted by default, an earlier session's stored stack is not kept.
   const [stacking, setStacking] = useStoredState(
-    `${kept}.stacking`,
+    `${kept}.stacking@2`,
     stage<StackingState>(preset, "stacking"),
   );
   const [workers, setWorkers] = useStoredState(`${kept}.workers`, 1);

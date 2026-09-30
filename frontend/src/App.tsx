@@ -11,6 +11,7 @@ import VisualizationPage from "./VisualizationPage";
 import ChatPage from "./ChatPage";
 import { API } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { useStayPut } from "./components/stayPut";
 import { TipLayer } from "./components/TipLayer";
 import { runsAt, useRunning } from "./components/running";
 import { applyTheme, getInitialTheme, ThemeContext, type Theme } from "./theme";
@@ -76,6 +77,8 @@ export default function App() {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+  // What a click presses stays where it is on screen while the page changes around it.
+  useStayPut();
 
   useEffect(() => {
     fetch(`${API}/agent/installed`)

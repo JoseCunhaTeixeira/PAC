@@ -138,6 +138,16 @@ export default function DispersionPickingPage() {
   const [error, setError] = useState<string | null>(null);
   // The window's M0 being picked automatically.
   const [autoPicking, setAutoPicking] = useState(false);
+  // The positions ("run|xmid") where the automatic picking found no curve, until one is picked.
+  const [autoFailed, setAutoFailed] = useState<ReadonlySet<string>>(new Set());
+  const failedHere = xmid !== null && autoFailed.has(`${folder}|${xmid}`);
+  function pickedAt(at: string) {
+    setAutoFailed((failed) => {
+      const next = new Set(failed);
+      next.delete(at);
+      return next;
+    });
+  }
   // Starts true so the first render after picking a folder shows "Loading…"
   // instead of flashing "No positions found" before the effect below runs.
   const [loadingXmids, setLoadingXmids] = useState(true);
@@ -271,17 +281,25 @@ export default function DispersionPickingPage() {
   // modes kept.
   function handleAutoPick() {
     if (folder === "" || xmid === null) return;
+    const at = `${folder}|${xmid}`;
     setAutoPicking(true);
     setError(null);
     fetch(`${API}/dispersion_images/${encodeURIComponent(folder)}/${xmid}/pick/auto`, { method: "POST" })
       .then(async (res) => {
+        // No fundamental mode found: said beside the image, to be picked by hand.
+        if (res.status === 422) {
+          setAutoFailed((failed) => new Set(failed).add(at));
+          return null;
+        }
         if (!res.ok) {
           const body = await res.json().catch(() => null);
           throw new Error(body?.detail ?? `HTTP ${res.status}`);
         }
         return res.json();
       })
-      .then((data: DispersionImage) => {
+      .then((data: DispersionImage | null) => {
+        if (data === null) return;
+        pickedAt(at);
         setImage(data);
         setLabel(nextLabel(labelPrefix(label), data.curves));
         refreshLabels(folder);
@@ -294,6 +312,7 @@ export default function DispersionPickingPage() {
 
   function handlePick() {
     if (!pendingPolygon || folder === "" || xmid === null) return;
+    const at = `${folder}|${xmid}`;
     setError(null);
     fetch(
       `${API}/dispersion_images/${encodeURIComponent(folder)}/${xmid}/pick/lasso`,
@@ -311,6 +330,7 @@ export default function DispersionPickingPage() {
         return res.json();
       })
       .then((data: DispersionImage) => {
+        pickedAt(at);
         setImage(data);
         setPendingPolygon(null);
         setLabel(nextLabel(labelPrefix(label), data.curves));
@@ -589,6 +609,12 @@ export default function DispersionPickingPage() {
                     </button>
                   </span>
                 </div>
+                {/* Under the button that failed: nothing above it moves. */}
+                {failedHere && (
+                  <Callout tone="warn" title="Automatic picking failed for this position.">
+                    Please review the dispersion image and pick the dispersion curve manually.
+                  </Callout>
+                )}
               </Card>
               </PlotBox>
 
