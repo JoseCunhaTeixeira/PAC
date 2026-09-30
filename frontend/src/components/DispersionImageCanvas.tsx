@@ -489,6 +489,7 @@ export function DispersionImageCanvas({
           cursor: lasso && !zoom.axisAt(hoverPos) ? "crosshair" : zoom.cursorAt(hoverPos),
           touchAction: "none",
           display: "block",
+          height: TOTAL_H * scale,
         }}
         onMouseDown={lasso ? onMouseDown : zoom.onMouseDown}
         onMouseMove={lasso ? onMouseMove : onHoverMove}

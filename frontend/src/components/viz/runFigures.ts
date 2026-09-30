@@ -23,7 +23,7 @@ function query(place: FigurePlace): string {
  * assistant draw them, Visualization only shows them. */
 export function useRunFigures(folder: string, place: FigurePlace | null = {}): string[] {
   const url = place ? `${API}/quality/run_figures/${encodeURIComponent(folder)}${query(place)}` : null;
-  return useJson<string[]>(url).data ?? [];
+  return useJson<string[]>(url).shown ?? [];
 }
 
 /** Those of the run's `names` starting with `prefix` (one card's, or any of several; "" for

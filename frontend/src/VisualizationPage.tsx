@@ -3,12 +3,14 @@ import { useSearchParams } from "react-router-dom";
 import { API, type Acquisition } from "./api";
 import { DispersionPanel } from "./components/viz/DispersionPanel";
 import { InversionPanel } from "./components/viz/InversionPanel";
-import { neighbours } from "./components/viz/cells";
+import { neighbours, useArrowKeys } from "./components/viz/cells";
 import { PetroPanel } from "./components/viz/PetroPanel";
 import { ProfilePlot } from "./components/viz/ProfilePlot";
 import { Gather, RecordsPanel } from "./components/viz/RecordsPanel";
 import { RECORDS_ONLY, RunPicker } from "./components/viz/RunPicker";
 import { RunSummary } from "./components/viz/RunSummary";
+import { StepArrows } from "./components/viz/panel";
+import { Steady } from "./components/viz/Steady";
 import type {
   Overview,
   PartState,
@@ -68,26 +70,43 @@ const at = (folder: string) => encodeURIComponent(folder);
 // Where the page was: its address's query, for this tab.
 const VIEW_KEY = "pac.visualization.view";
 
-function RecordsOnly({ profile }: { profile: string }) {
+function RecordsOnly({
+  profile,
+  file,
+  onFile,
+}: {
+  profile: string;
+  /** The record shown, the profile's first when none or another's. */
+  file: string | null;
+  onFile: (file: string) => void;
+}) {
   const acquisition = useJson<Acquisition>(
     `${API}/acquisitions/${at(profile)}`,
   );
-  const [file, setFile] = useState<string | null>(null);
+  const files = acquisition.data?.files ?? [];
+  const index = file ? Math.max(0, files.indexOf(file)) : 0;
+  const step = (offset: number) => {
+    const next = files[index + offset];
+    return next ? { key: next, name: next } : null;
+  };
+  useArrowKeys((direction) => {
+    const next = step(direction);
+    if (next) onFile(next.key);
+  });
   if (acquisition.error) return <ErrorBox message={acquisition.error} />;
   if (!acquisition.data) return <Skeleton height={200} />;
-  const files = acquisition.data.files;
   if (files.length === 0)
     return <Empty>The profile's folder holds no record.</Empty>;
-  const shown = file && files.includes(file) ? file : files[0];
+  const shown = files[index];
   return (
     <section className="viz-card">
-      {/* As the computing pages count them, the record shown chosen beside. */}
+      {/* As the computing pages count them, the record shown chosen beside, or stepped to. */}
       <div className="viz-records-head">
         <Stat label="Records" value={files.length} />
         <SelectField
           label="Record"
           value={shown}
-          onChange={setFile}
+          onChange={onFile}
           icon={<PulseIcon size={15} />}
         >
           {files.map((one) => (
@@ -96,6 +115,7 @@ function RecordsOnly({ profile }: { profile: string }) {
             </option>
           ))}
         </SelectField>
+        <StepArrows before={step(-1)} after={step(1)} onSelect={onFile} />
       </div>
       <Gather profile={profile} file={shown} />
     </section>
@@ -258,11 +278,13 @@ export default function VisualizationPage() {
       : (run?.windows[0]?.key ?? null));
   const recordKey =
     params.get("rec") ?? (records && firstResult ? firstResult.key : null);
+  // The selected window's shots and the selected record's card; while the next loads, the
+  // last one's, so that the page does not move.
   const sources = useJson<WindowSources>(
     run && run.run_id !== null && windowKey && !records
       ? `${API}/quality/sources/${at(folder)}/${xmidOf(windowKey)}`
       : null,
-  );
+  ).shown;
   const recordCard = useJson<RecordCard>(
     records && recordKey
       ? `${API}/quality/records/card/${at(folder)}/${encodeURIComponent(recordKey)}`
@@ -290,38 +312,23 @@ export default function VisualizationPage() {
   const setLineX = (x: Range | null) =>
     setZoomed({ folder, rec: records ? recordKey : null, x });
 
-  // ← and → step to the previous and next unit with a result, but in a form's fields.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-      if (e.altKey || e.ctrlKey || e.metaKey) return;
-      const target = e.target as HTMLElement | null;
-      if (target?.closest("input, select, textarea, [contenteditable='true']"))
-        return;
-      const { before, after } = neighbours(
-        cells,
-        records ? recordKey : windowKey,
-      );
-      const next = e.key === "ArrowLeft" ? before : after;
-      if (!next) return;
-      e.preventDefault();
-      setParams(
-        (previous) => {
-          const updated = new URLSearchParams(previous);
-          updated.set(records ? "rec" : "x", next.key);
-          return updated;
-        },
-        { replace: true },
-      );
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [cells, records, recordKey, windowKey, setParams]);
+  // ← and → step to the unit before and after, as the card's arrows.
+  useArrowKeys((direction) => {
+    if (!run) return;
+    const { before, after } = neighbours(
+      cells,
+      records ? recordKey : windowKey,
+    );
+    const next = direction < 0 ? before : after;
+    if (next) select(next.key);
+  });
 
   const panel = !run ? null : tab === "records" ? (
     <RecordsPanel
       folder={folder}
-      card={recordCard.data}
+      selected={recordKey}
+      card={recordCard.shown}
+      loading={recordCard.loading}
       cardError={recordCard.error}
       overview={overview.data}
       overviewError={overview.error}
@@ -336,7 +343,7 @@ export default function VisualizationPage() {
       selected={windowKey}
       overview={overview.data}
       overviewError={overview.error}
-      sources={sources.data}
+      sources={sources}
       onSelect={select}
     />
   ) : tab === "inversion" ? (
@@ -391,7 +398,13 @@ export default function VisualizationPage() {
           </Empty>
         )}
         {runs.data && folder === RECORDS_ONLY && profile && (
-          <RecordsOnly profile={profile} />
+          <Steady reset={profile}>
+            <RecordsOnly
+              profile={profile}
+              file={params.get("rec")}
+              onFile={(file) => update({ rec: file })}
+            />
+          </Steady>
         )}
 
         {folder !== RECORDS_ONLY && card.error && (
@@ -436,8 +449,8 @@ export default function VisualizationPage() {
                   implies={IMPLIES[tab]}
                   mode={records ? "records" : "windows"}
                   selected={records ? recordKey : windowKey}
-                  sources={records ? null : sources.data}
-                  stacking={records ? (recordCard.data?.windows ?? null) : null}
+                  sources={records ? null : sources}
+                  stacking={records ? (recordCard.shown?.windows ?? null) : null}
                   onSelect={select}
                   onShot={
                     run.records
@@ -451,8 +464,8 @@ export default function VisualizationPage() {
                   overview={overview.data}
                   windows={!records}
                   uses={
-                    !records && sources.data?.shots.length
-                      ? new Set(sources.data.shots.map((shot) => shot.use))
+                    !records && sources?.shots.length
+                      ? new Set(sources.shots.map((shot) => shot.use))
                       : null
                   }
                   meanings={Object.fromEntries(
@@ -464,7 +477,10 @@ export default function VisualizationPage() {
                 />
               </section>
             )}
-            <div className="viz-section">{panel}</div>
+            {/* Stepping along the line, the page's end never rises (Steady). */}
+            <div className="viz-section">
+              <Steady reset={`${folder}|${tab}`}>{panel}</Steady>
+            </div>
           </>
         )}
       </Page>

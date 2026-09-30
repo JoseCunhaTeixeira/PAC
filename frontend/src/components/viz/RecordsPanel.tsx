@@ -8,7 +8,7 @@ import { StageHead, UnitCard } from "./panel";
 import type { Overview, RecordCard } from "./types";
 import { runFigures, useRunFigures } from "./runFigures";
 import { Details, Empty, GateTables, PlotHead, SavedFigures, Skeleton } from "./ui";
-import { useJson } from "./useJson";
+import { useJson, useShownUnit } from "./useJson";
 
 // The records: the selected record's card (its signal, what the checks said and redid, the
 // windows that stack it) and its traces along the line, under the line plot and aligned with it.
@@ -31,14 +31,15 @@ function RunGather({
   const gather = useJson<GatherData>(
     `${API}/quality/records/gather/${encodeURIComponent(folder)}/${encodeURIComponent(name)}?norm=${norm}`,
   );
+  const shown = useShownUnit(name, gather.loading);
   return (
     <PlotBox>
-      <div>
-        <PlotHead title={`${name} · preprocessed, as the windows used it`}>
+      <div style={{ marginTop: 16 }} className={gather.loading ? "viz-stale" : undefined}>
+        <PlotHead title={`${shown} · preprocessed, as the windows used it`}>
           <Normalization value={norm} onChange={setNorm} />
         </PlotHead>
-        {gather.data ? (
-          <LineGather key={name} data={gather.data} extent={extent} xZoom={xZoom} onXZoom={onXZoom} />
+        {gather.shown ? (
+          <LineGather key={shown} data={gather.shown} extent={extent} xZoom={xZoom} onXZoom={onXZoom} />
         ) : gather.error ? (
           <Empty>{gather.error}</Empty>
         ) : (
@@ -75,16 +76,17 @@ export function SavedSpectrum({
   onXZoom: (x: Range | null) => void;
 }) {
   const spectra = useJson<Spectra>(url);
-  if (!spectra.data) return null;
+  const shown = useShownUnit(url, spectra.loading);
+  if (!spectra.shown) return null;
   return (
     <PlotBox>
-      <div style={{ marginTop: 16 }}>
+      <div style={{ marginTop: 16 }} className={spectra.loading ? "viz-stale" : undefined}>
         <PlotHead title={title} />
         <SpectrumCanvas
-          key={url}
-          spectra={spectra.data}
-          positions={spectra.data.positions}
-          band={spectra.data.band_hz}
+          key={shown}
+          spectra={spectra.shown}
+          positions={spectra.shown.positions}
+          band={spectra.shown.band_hz}
           outside={outside}
           extent={extent}
           xZoom={xZoom}
@@ -129,20 +131,23 @@ export function Gather({ profile, file }: { profile: string; file: string }) {
     `${API}/gather/${encodeURIComponent(profile)}/${encodeURIComponent(file)}?norm=${norm}`,
   );
   const spectra = useJson<TraceSpectra>(`${API}/spectrum/${encodeURIComponent(profile)}/${encodeURIComponent(file)}`);
+  // While the next record loads, the last one's traces and spectrum, with its own shot.
+  const traced = useShownUnit(file, raw.loading);
+  const spectral = useShownUnit(file, spectra.loading);
   const data = useMemo((): GatherData | null => {
-    if (!raw.data || !acquisition.data) return null;
-    const index = acquisition.data.files.indexOf(file);
+    if (!raw.shown || !acquisition.data) return null;
+    const index = acquisition.data.files.indexOf(traced);
     const source = acquisition.data.kind === "active" ? acquisition.data.source_positions[index]?.[0] ?? null : null;
     // At most about 1,200 samples a trace: the plot shows no more.
-    const stride = Math.max(1, Math.ceil(raw.data.n_samples / 1200));
+    const stride = Math.max(1, Math.ceil(raw.shown.n_samples / 1200));
     return {
       positions: acquisition.data.receiver_positions.map((position) => position[0]),
       source,
-      dt: raw.data.dt * stride,
-      traces: raw.data.traces.map((trace) => trace.filter((_, i) => i % stride === 0)),
+      dt: raw.shown.dt * stride,
+      traces: raw.shown.traces.map((trace) => trace.filter((_, i) => i % stride === 0)),
       excluded: [],
     };
-  }, [raw.data, acquisition.data, file]);
+  }, [raw.shown, acquisition.data, traced]);
   const extent = useMemo((): Range => {
     const xs = [...(data?.positions ?? []), ...(data?.source !== null && data?.source !== undefined ? [data.source] : [])];
     if (xs.length === 0) return [0, 1];
@@ -156,20 +161,20 @@ export function Gather({ profile, file }: { profile: string; file: string }) {
   return (
     <>
       <PlotBox>
-        <div>
-          <PlotHead title={`${file} · as recorded`}>
+        <div className={raw.loading ? "viz-stale" : undefined}>
+          <PlotHead title={`${traced} · as recorded`}>
             <Normalization value={norm} onChange={setNorm} />
           </PlotHead>
-          <LineGather key={file} data={data} extent={extent} xZoom={xZoom} onXZoom={setXZoom} />
+          <LineGather key={traced} data={data} extent={extent} xZoom={xZoom} onXZoom={setXZoom} />
         </div>
       </PlotBox>
-      {spectra.data && (
+      {spectra.shown && (
         <PlotBox>
-          <div style={{ marginTop: 16 }}>
-            <PlotHead title={`${file} · its spectrum, as recorded`} />
+          <div style={{ marginTop: 16 }} className={spectra.loading ? "viz-stale" : undefined}>
+            <PlotHead title={`${spectral} · its spectrum, as recorded`} />
             <SpectrumCanvas
-              key={file}
-              spectra={spectra.data}
+              key={spectral}
+              spectra={spectra.shown}
               positions={data.positions}
               extent={extent}
               xZoom={xZoom}
@@ -184,7 +189,9 @@ export function Gather({ profile, file }: { profile: string; file: string }) {
 
 export function RecordsPanel({
   folder,
+  selected,
   card,
+  loading,
   cardError,
   overview,
   overviewError,
@@ -194,7 +201,10 @@ export function RecordsPanel({
   onXZoom,
 }: {
   folder: string;
+  /** The record selected; its card, or while it loads the last one's (`loading`). */
+  selected: string | null;
   card: RecordCard | null;
+  loading: boolean;
   cardError: string | null;
   overview: Overview | null;
   overviewError: string | null;
@@ -216,6 +226,8 @@ export function RecordsPanel({
           bare={passive}
           card={card}
           error={cardError}
+          selected={selected}
+          loading={loading}
           cells={overview?.cells ?? []}
           onSelect={onSelect}
           details={
@@ -231,7 +243,7 @@ export function RecordsPanel({
           }
         >
           {card && (
-            <div style={{ marginTop: 16 }}>
+            <>
               <RunGather folder={folder} name={card.key} extent={extent} xZoom={xZoom} onXZoom={onXZoom} />
               <SavedSpectrum
                 url={`${API}/quality/records/spectrum/${encodeURIComponent(folder)}/${encodeURIComponent(card.key)}`}
@@ -241,7 +253,7 @@ export function RecordsPanel({
                 xZoom={xZoom}
                 onXZoom={onXZoom}
               />
-            </div>
+            </>
           )}
         </UnitCard>
       </div>

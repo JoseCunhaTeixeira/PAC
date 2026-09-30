@@ -81,7 +81,11 @@ export function PetroPanel({
     const cell = nearestCell(overview?.cells ?? [], position);
     if (cell) onSelect(cell.key);
   };
-  const petroCard = card.data;
+  const petroCard = card.shown;
+  // Smoothed or not, the last sections stay until the next are made.
+  const soils = section.shown;
+  const moduli = modulus.shown;
+  const velocities = vs.shown;
 
   return (
     <>
@@ -101,6 +105,8 @@ export function PetroPanel({
                 stage="petro"
                 card={petroCard}
                 error={card.error}
+                selected={selected}
+                loading={card.loading}
                 cells={overview?.cells ?? []}
                 onSelect={onSelect}
                 details={
@@ -151,8 +157,8 @@ export function PetroPanel({
             hint={"N (SPT)\nBlow count: the soil's resistance to a driven sampler"}
             aside={<SmoothingSwitch on={soilSmoothing} onChange={setSoilSmoothing} />}
           >
-            {section.data ? (
-              <PetroSectionCanvas section={section.data} marker={xmid ?? undefined} onPick={pick} />
+            {soils ? (
+              <PetroSectionCanvas section={soils} marker={xmid ?? undefined} onPick={pick} />
             ) : !line || section.missing ? (
               <Empty>Needs 2 windows with a soil column.</Empty>
             ) : section.error ? (
@@ -162,7 +168,7 @@ export function PetroPanel({
             )}
             <SavedFigures figures={runFigures(folder, saved, "PetroInversion_Section")} />
           </Card>
-          {(modulus.data || vs.data || failed(modulus) || failed(vs)) && (
+          {(moduli || velocities || failed(modulus) || failed(vs)) && (
             <Card
               className="viz-section"
               icon={<LayersIcon size={17} />}
@@ -173,11 +179,11 @@ export function PetroPanel({
             >
               {failed(modulus) && <ErrorBox message={`Shear modulus not loaded: ${modulus.error}`} />}
               {failed(vs) && <ErrorBox message={`Vs not loaded: ${vs.error}`} />}
-              {modulus.data && (
+              {moduli && (
                 <VelocitySectionCanvas
-                  positions={modulus.data.positions}
-                  elevations={modulus.data.elevations}
-                  values={modulus.data.values}
+                  positions={moduli.positions}
+                  elevations={moduli.elevations}
+                  values={moduli.values}
                   colorLabel="Shear modulus (GPa)"
                   colormap={viridis}
                   height={180}
@@ -187,11 +193,11 @@ export function PetroPanel({
                   onPick={pick}
                 />
               )}
-              {vs.data && (
+              {velocities && (
                 <VelocitySectionCanvas
-                  positions={vs.data.positions}
-                  elevations={vs.data.elevations}
-                  values={vs.data.values}
+                  positions={velocities.positions}
+                  elevations={velocities.elevations}
+                  values={velocities.values}
                   colorLabel="Vs (m/s)"
                   colormap={terrain}
                   height={180}

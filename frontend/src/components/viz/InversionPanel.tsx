@@ -262,18 +262,19 @@ function FitsTable({ card }: { card: InversionCard }) {
 function ChainsView({ folder, xmid }: { folder: string; xmid: number }) {
   const chains = useJson<Chains>(`${API}/quality/inversion/chains/${at(folder)}/${xmid}`);
   const [parameter, setParameter] = useState<string | null>(null);
+  const data = chains.shown;
   if (chains.error) return <Empty>{chains.error}</Empty>;
-  if (!chains.data) return <Skeleton height={200} />;
-  const traces = chains.data.traces.find((one) => one.parameter === parameter) ?? chains.data.traces[0];
-  const marginal = chains.data.marginals.find((one) => one.parameter === traces?.parameter);
+  if (!data) return <Skeleton height={200} />;
+  const traces = data.traces.find((one) => one.parameter === parameter) ?? data.traces[0];
+  const marginal = data.marginals.find((one) => one.parameter === traces?.parameter);
   return (
-    <div>
+    <div className={chains.loading ? "viz-stale" : undefined}>
       <PlotBox>
         <div className="viz-toolbar boxed" style={{ marginTop: 8 }}>
           <label className="viz-field">
             Parameter
             <select value={traces?.parameter ?? ""} onChange={(e) => setParameter(e.target.value)}>
-              {chains.data.traces.map((one) => (
+              {data.traces.map((one) => (
                 <option key={one.parameter} value={one.parameter}>
                   {parameterLabel(one.parameter)}
                 </option>
@@ -291,7 +292,7 @@ function ChainsView({ folder, xmid }: { folder: string; xmid: number }) {
         <div style={{ marginTop: 12 }}>
           <PlotHead title="Marginals within the priors (dashed: a flat posterior)" />
         </div>
-        <MarginalsGrid marginals={chains.data.marginals} />
+        <MarginalsGrid marginals={data.marginals} />
       </PlotBox>
     </div>
   );
@@ -329,9 +330,11 @@ export function InversionPanel({
   const section = useJson<VelocitySection>(
     `${API}/inversion/velocity_section/${at(folder)}?model=${model}&lateral_smoothing=${smoothing}`,
   );
+  // Smoothed or not, the last section stays until the next is made.
+  const sectioned = section.shown;
   const overlay: InformedOverlay | undefined =
-    informed && section.data
-      ? { levels: section.data.informed_levels, windows: section.data.windows, floors: section.data.floors }
+    informed && sectioned
+      ? { levels: sectioned.informed_levels, windows: sectioned.windows, floors: sectioned.floors }
       : undefined;
   const labels = useJson<Record<string, number>>(`${API}/dispersion_image_labels/${at(folder)}`);
   const modes = Object.keys(labels.data ?? {});
@@ -347,7 +350,7 @@ export function InversionPanel({
     max: vsMax === "" ? undefined : Number(vsMax),
   };
 
-  const inversionCard = card.data;
+  const inversionCard = card.shown;
   return (
     <>
       <StageHead overview={overview} error={overviewError} />
@@ -363,6 +366,8 @@ export function InversionPanel({
                 stage="inversion"
                 card={inversionCard}
                 error={card.error}
+                selected={selected}
+                loading={card.loading}
                 cells={overview?.cells ?? []}
                 onSelect={onSelect}
                 details={
@@ -468,12 +473,12 @@ export function InversionPanel({
               </div>
             }
           >
-            {section.data ? (
+            {sectioned ? (
               <>
                 <VelocitySectionCanvas
-                  positions={section.data.positions}
-                  elevations={section.data.elevations}
-                  values={section.data.vs_grid}
+                  positions={sectioned.positions}
+                  elevations={sectioned.elevations}
+                  values={sectioned.vs_grid}
                   colorLabel="Vs (m/s)"
                   colormap={terrain}
                   height={200}
@@ -484,9 +489,9 @@ export function InversionPanel({
                   informed={overlay}
                 />
                 <VelocitySectionCanvas
-                  positions={section.data.positions}
-                  elevations={section.data.elevations}
-                  values={section.data.vs_uncertainty_grid}
+                  positions={sectioned.positions}
+                  elevations={sectioned.elevations}
+                  values={sectioned.vs_uncertainty_grid}
                   colorLabel="Vs uncertainty (%)"
                   colormap={afmhotR}
                   height={200}
@@ -495,11 +500,11 @@ export function InversionPanel({
                   onPick={pick}
                   informed={overlay}
                 />
-                {section.data.interface_grid?.some((row) => row.some((value) => value !== null)) ? (
+                {sectioned.interface_grid?.some((row) => row.some((value) => value !== null)) ? (
                   <VelocitySectionCanvas
-                    positions={section.data.positions}
-                    elevations={section.data.elevations}
-                    values={section.data.interface_grid}
+                    positions={sectioned.positions}
+                    elevations={sectioned.elevations}
+                    values={sectioned.interface_grid}
                     colorLabel="Interfaces (%)"
                     colormap={interfaceColours}
                     colorRange={{ min: 0 }}

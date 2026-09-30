@@ -318,7 +318,7 @@ export function SpectrumCanvas({
     <div ref={containerRef} style={{ width: "100%", position: "relative" }}>
       <canvas
         ref={canvasRef}
-        style={{ cursor: zoom.cursorAt(hoverPos), touchAction: "none", display: "block" }}
+        style={{ cursor: zoom.cursorAt(hoverPos), touchAction: "none", display: "block", height: TOTAL_H }}
         onMouseDown={zoom.onMouseDown}
         onMouseMove={onMouseMove}
         onMouseLeave={onMouseLeave}

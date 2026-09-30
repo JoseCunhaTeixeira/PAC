@@ -458,6 +458,16 @@
   gap: 4px;
 }
 
+/* A card showing the last unit while the next loads (its own data, or one of its plots'):
+   faded in its place, its arrows as they are. */
+.viz-card.viz-stale > :not(.viz-unit-head, .viz-records-head),
+.viz-card:has(.viz-stale) > :not(.viz-unit-head, .viz-records-head),
+.viz-card.viz-stale > .viz-unit-head > :not(.viz-nav),
+.viz-card:has(.viz-stale) > .viz-unit-head > :not(.viz-nav) {
+  opacity: 0.45;
+  transition: opacity 0.2s ease 0.15s;
+}
+
 .viz-badge {
   display: inline-flex;
   align-items: center;

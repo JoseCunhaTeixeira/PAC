@@ -84,9 +84,56 @@ const STAGE_ICONS: Record<StageKey, ReactNode> = {
   petro: <OutcropIcon size={17} />,
 };
 
+/** A unit before and after the one shown, a click away: its key, and its name on the arrow's
+ * hover. */
+export interface Step {
+  key: string;
+  name: string;
+}
+
+/** The arrows to the units before and after (← and → too, as the page steps them). */
+export function StepArrows({
+  before,
+  after,
+  onSelect,
+}: {
+  before: Step | null;
+  after: Step | null;
+  onSelect: (key: string) => void;
+}) {
+  return (
+    <span className="viz-nav">
+      <button
+        type="button"
+        className="secondary icon"
+        aria-label="Previous"
+        disabled={!before}
+        data-tip={before ? `Previous (←)\n${before.name}` : undefined}
+        onClick={() => before && onSelect(before.key)}
+      >
+        <ArrowLeftIcon size={16} />
+      </button>
+      <button
+        type="button"
+        className="secondary icon"
+        aria-label="Next"
+        disabled={!after}
+        data-tip={after ? `Next (→)\n${after.name}` : undefined}
+        onClick={() => after && onSelect(after.key)}
+      >
+        <ArrowRightIcon size={16} />
+      </button>
+    </span>
+  );
+}
+
+const step = (cell: Cell | null): Step | null => (cell ? { key: cell.key, name: cell.hover[0] } : null);
+
 export function UnitCard({
   card,
   error,
+  selected,
+  loading = false,
   lead = [],
   cells,
   onSelect,
@@ -97,6 +144,10 @@ export function UnitCard({
 }: {
   card: Card | null;
   error: string | null;
+  /** The unit selected, which the arrows step from: while its card loads, the last one shown
+   * stays in its place, faded (`loading`), so the page does not move. */
+  selected: string | null;
+  loading?: boolean;
   /** Sentences said before the card's own (the window's shots). */
   lead?: Sentence[];
   cells: Cell[];
@@ -109,7 +160,16 @@ export function UnitCard({
    * signal and spectrum, and its measures). */
   bare?: boolean;
 }) {
-  if (error) return <ErrorBox message={error} />;
+  const { before, after } = neighbours(cells, selected ?? card?.key ?? null);
+  const arrows = <StepArrows before={step(before)} after={step(after)} onSelect={onSelect} />;
+  if (error) {
+    return (
+      <section className="viz-card">
+        <div className="viz-unit-head">{arrows}</div>
+        <ErrorBox message={error} />
+      </section>
+    );
+  }
   if (!card) {
     return (
       <section className="viz-card">
@@ -120,7 +180,6 @@ export function UnitCard({
       </section>
     );
   }
-  const { before, after } = neighbours(cells, card.key);
   const said = [...lead, ...card.sentences];
   // The verdict and the warnings at once, the rest folded; with neither, the first line shown.
   // The measures in their tables, the sentences say what they do not.
@@ -132,7 +191,7 @@ export function UnitCard({
   const folded = quiet.slice(opener.length);
   const gates = card.gates.filter((gate) => gate.verdict !== null || gate.by_hand);
   return (
-    <section className="viz-card">
+    <section className={`viz-card${loading ? " viz-stale" : ""}`}>
       <div className="viz-unit-head">
         {stage && <span className="card-icon">{STAGE_ICONS[stage]}</span>}
         <strong>{card.title}</strong>
@@ -151,28 +210,7 @@ export function UnitCard({
             ))}
           </span>
         )}
-        <span className="viz-nav">
-          <button
-            type="button"
-            className="secondary icon"
-            aria-label="Previous"
-            disabled={!before}
-            data-tip={before ? `Previous (←)\n${before.hover[0]}` : undefined}
-            onClick={() => before && onSelect(before.key)}
-          >
-            <ArrowLeftIcon size={16} />
-          </button>
-          <button
-            type="button"
-            className="secondary icon"
-            aria-label="Next"
-            disabled={!after}
-            data-tip={after ? `Next (→)\n${after.hover[0]}` : undefined}
-            onClick={() => after && onSelect(after.key)}
-          >
-            <ArrowRightIcon size={16} />
-          </button>
-        </span>
+        {arrows}
       </div>
       {!bare && <Sentences sentences={shown} />}
       {!bare && folded.length > 0 && (
