@@ -3,7 +3,8 @@ import type { Range, View, ZoomLink } from "../useZoom";
 import type { RunCard } from "./types";
 
 // What the plots along the line share: their extent (every receiver, shot and window of the
-// line, a margin around) and one zoom along it, so that they stay aligned.
+// line, a margin around), and the line plot and a record's traces one zoom along it, so that
+// they stay aligned; a spectrum under them zooms on its own.
 
 /** The line's extent along x: every receiver, shot and window, a margin around (lineDraw's, as
  * every page's). */

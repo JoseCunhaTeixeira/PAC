@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { bone, boneR } from "./colormaps";
 import { HoverTooltip } from "./HoverTooltip";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
@@ -8,15 +8,15 @@ import { niceTicks, tickDecimals, useZoom, type PlotRect, type Range } from "./u
 import { ZoomSelection } from "./ZoomOverlay";
 import type { Tip } from "./tips";
 import { num } from "./viz/format";
-import { alongLine } from "./viz/line";
 import { vizPalette } from "./viz/palette";
 
 // A record's spectra as its saved figure draws them (sigpipe's plot_trace_spectra): each trace's
 // amplitude spectrum at its receiver along the line, frequency up, in bone (reversed on a light
 // page, white nothing and black the trace's largest, as the figure; on a dark one, black
 // nothing), the whole of it, 0 to Nyquist; a band's bounds dashed.
-// The wheel zooms; a drag does what its box's tools say. Given a zoom along the line, it follows
-// the plots above it (a gather's), its margins theirs: its colour bar above it.
+// The wheel zooms; a drag does what its box's tools say. Its zoom is its own, along the line as
+// in frequency: under a gather, it starts on the gather's extent, its margins the gather's (its
+// colour bar above it), and zooms apart from it.
 
 export interface TraceSpectra {
   freqs: number[];
@@ -122,8 +122,6 @@ export function SpectrumCanvas({
   band = null,
   outside = "cut by the filter",
   extent,
-  xZoom = null,
-  onXZoom,
 }: {
   spectra: TraceSpectra;
   /** Each trace's receiver along the line, m, in the record's order. */
@@ -132,11 +130,8 @@ export function SpectrumCanvas({
   band?: [number, number] | null;
   /** What the hover says outside the band. */
   outside?: string;
-  /** The line's extent along x, as the plots it follows have it; else its traces'. */
+  /** Its whole view along x: the line's, as the gather above it has it; else its traces'. */
   extent?: Range;
-  /** The zoom along the line it shares with them; null for the whole line. */
-  xZoom?: Range | null;
-  onXZoom?: (x: Range | null) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
@@ -173,15 +168,11 @@ export function SpectrumCanvas({
     () => ({ x: extent ?? ([xMin, xMax] as Range), y: [fMin, fMax] as Range }),
     [extent, xMin, xMax, fMin, fMax],
   );
-  // The frequencies, its own zoom; along the line, the plots' it follows when given.
-  const [ownF, setOwnF] = useState<Range | null>(null);
-
   const zoom = useZoom({
     extent: full,
     plots: PLOTS,
     width: TOTAL_W,
     height: TOTAL_H,
-    link: onXZoom ? alongLine(xZoom, onXZoom, ownF, setOwnF, full) : undefined,
     canvas: canvasRef,
   });
   const [x0, x1] = zoom.view.x;

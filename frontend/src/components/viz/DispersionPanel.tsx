@@ -52,8 +52,6 @@ function WindowGather({ folder, xmid }: { folder: string; xmid: number }) {
           title="Stacked correlations · their spectrum"
           outside="outside the band"
           extent={extent}
-          xZoom={xZoom}
-          onXZoom={setXZoom}
         />
       </div>
     </PlotBox>

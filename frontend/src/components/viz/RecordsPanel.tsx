@@ -58,22 +58,19 @@ interface Spectra {
 }
 
 /** The spectra a job saved beside a record or a window's stacked correlations, under their
- * gather and along the line with it; nothing when none were saved (a run from before). */
+ * gather, on its extent, zoomed apart from it; nothing when none were saved (a run from
+ * before). */
 export function SavedSpectrum({
   url,
   title,
   outside,
   extent,
-  xZoom,
-  onXZoom,
 }: {
   url: string;
   title: string;
   /** What the hover says outside the band drawn. */
   outside: string;
   extent: Range;
-  xZoom: Range | null;
-  onXZoom: (x: Range | null) => void;
 }) {
   const spectra = useJson<Spectra>(url);
   const shown = useShownUnit(url, spectra.loading);
@@ -89,8 +86,6 @@ export function SavedSpectrum({
           band={spectra.shown.band_hz}
           outside={outside}
           extent={extent}
-          xZoom={xZoom}
-          onXZoom={onXZoom}
         />
       </div>
     </PlotBox>
@@ -119,7 +114,8 @@ interface RawGather {
 }
 
 /** A profile's record as recorded, along the line (a profile no run has processed yet), and
- * under it its spectrum, each trace's, at its receiver, zoomed with it: as a run's record. */
+ * under it its spectrum, each trace's, at its receiver, each zoomed on its own: as a run's
+ * record. */
 export function Gather({ profile, file }: { profile: string; file: string }) {
   const acquisition = useJson<Acquisition>(`${API}/acquisitions/${encodeURIComponent(profile)}`);
   const [norm, setNorm] = useState<"trace" | "global">("trace");
@@ -177,8 +173,6 @@ export function Gather({ profile, file }: { profile: string; file: string }) {
               spectra={spectra.shown}
               positions={data.positions}
               extent={extent}
-              xZoom={xZoom}
-              onXZoom={setXZoom}
             />
           </div>
         </PlotBox>
@@ -250,8 +244,6 @@ export function RecordsPanel({
                 title={`${card.key} · its spectrum, preprocessed`}
                 outside="outside its usable band"
                 extent={extent}
-                xZoom={xZoom}
-                onXZoom={onXZoom}
               />
             </>
           )}
