@@ -277,6 +277,7 @@ export function RunPanel({
               type="button"
               className="run-issue wrong"
               onClick={toFirstWrong}
+              data-moves-page
               data-tip="Go to the first"
             >
               <AlertCircleIcon size={14} />

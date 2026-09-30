@@ -97,8 +97,9 @@ function Form({
   // frequency step, 1/segment.
   const data = shortestRecord(acquisition);
   const segment = bound(slicing.segment_duration);
+  // @3: the selection always on, an earlier session's stored "off" is not kept.
   const [selection, setSelection] = useStoredState(
-    `${kept}.selection@2`,
+    `${kept}.selection@3`,
     stage<SelectionState>(preset, "selection"),
   );
   const [whitening, setWhitening] = useStoredState(
@@ -117,8 +118,9 @@ function Form({
     `${kept}.dispersion`,
     stage<Dispersion>(preset, "dispersion"),
   );
+  // @2: phase-weighted by default, an earlier session's stored stack is not kept.
   const [stacking, setStacking] = useStoredState(
-    `${kept}.stacking`,
+    `${kept}.stacking@2`,
     stage<StackingState>(preset, "stacking"),
   );
   const [workers, setWorkers] = useStoredState(`${kept}.workers`, 1);
@@ -139,7 +141,7 @@ function Form({
         segment_duration: slicing.segment_duration,
         segment_step: bound(slicing.segment_step) ?? slicing.segment_duration,
       },
-      selection: buildSelectionParams(selection),
+      selection: buildSelectionParams({ ...selection, method: "fk" }),
       whitening: buildWhiteningParams(whitening),
       normalization: buildNormalizationParams(normalization),
       stacking: buildStackingParams(stacking),
@@ -213,51 +215,37 @@ function Form({
             <Row
               icon={<SlidersIcon size={16} />}
               title="Segment selection"
-              hint="Keeps the segments whose energy travels along the line."
-              control={
-                <Segmented
-                  size="sm"
-                  label="Selection"
-                  value={selection.method}
-                  onChange={(method) => setSelection({ ...selection, method })}
-                  options={[
-                    { value: "none", label: "Off" },
-                    { value: "fk", label: "FK" },
-                  ]}
-                />
-              }
+              hint="Keeps the segments whose energy travels along the line (FK, always on)."
             >
-              {selection.method === "fk" && (
-                <Fields>
-                  <NumberField
-                    label="Threshold"
-                    value={selection.threshold}
-                    onChange={(v) =>
-                      setSelection({ ...selection, threshold: v })
-                    }
-                    min={0}
-                    max={1}
-                    step={0.1}
-                  />
-                  {/* The band's velocities: empty, the band open on that side (0, ∞). */}
-                  <NumberField
-                    label="Slowest"
-                    unit="m/s"
-                    value={selection.vmin ?? Number.NaN}
-                    optional="0"
-                    onChange={(v) => setSelection({ ...selection, vmin: v })}
-                    min={0}
-                  />
-                  <NumberField
-                    label="Fastest"
-                    unit="m/s"
-                    value={selection.vmax ?? Number.NaN}
-                    optional="∞"
-                    onChange={(v) => setSelection({ ...selection, vmax: v })}
-                    gt={bound(selection.vmin) ?? 0}
-                  />
-                </Fields>
-              )}
+              <Fields>
+                <NumberField
+                  label="Threshold"
+                  value={selection.threshold}
+                  onChange={(v) =>
+                    setSelection({ ...selection, threshold: v })
+                  }
+                  min={0}
+                  max={1}
+                  step={0.1}
+                />
+                {/* The band's velocities: empty, the band open on that side (0, ∞). */}
+                <NumberField
+                  label="Slowest"
+                  unit="m/s"
+                  value={selection.vmin ?? Number.NaN}
+                  optional="0"
+                  onChange={(v) => setSelection({ ...selection, vmin: v })}
+                  min={0}
+                />
+                <NumberField
+                  label="Fastest"
+                  unit="m/s"
+                  value={selection.vmax ?? Number.NaN}
+                  optional="∞"
+                  onChange={(v) => setSelection({ ...selection, vmax: v })}
+                  gt={bound(selection.vmin) ?? 0}
+                />
+              </Fields>
             </Row>
             <Row
               icon={<SpectrumIcon size={16} />}
