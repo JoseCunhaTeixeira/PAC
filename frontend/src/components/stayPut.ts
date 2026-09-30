@@ -3,8 +3,10 @@ import { useEffect } from "react";
 // What was clicked stays where it is on screen while the page around it changes (a card
 // reloading above it, a message appearing): for HOLD_MS after the press, each frame scrolls its
 // drift back, which the browser's own anchoring does not always do. Scrolling on purpose (the
-// wheel, a touch, a key, the scrollbar) lets it go.
+// wheel, a touch, a key that scrolls, the scrollbar) lets it go.
 const HOLD_MS = 2500;
+// The keys that scroll the page, or move the focus, which scrolls to it.
+const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Tab"]);
 let held: { element: Element; top: number; until: number } | null = null;
 let frame = 0;
 
@@ -44,11 +46,16 @@ export function useStayPut() {
       if (target.closest("[data-moves-page]")) return;
       holdInPlace(target);
     }
-    const inputs = ["wheel", "touchstart", "keydown"];
+    function key(event: KeyboardEvent) {
+      if (SCROLL_KEYS.has(event.key)) release();
+    }
+    const inputs = ["wheel", "touchstart"];
     document.addEventListener("pointerdown", down, true);
+    window.addEventListener("keydown", key);
     for (const input of inputs) window.addEventListener(input, release, { passive: true });
     return () => {
       document.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("keydown", key);
       for (const input of inputs) window.removeEventListener(input, release);
       release();
     };

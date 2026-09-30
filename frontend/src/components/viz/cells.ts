@@ -1,6 +1,8 @@
+import { useEffect, useEffectEvent } from "react";
 import type { Cell } from "./types";
 
-// Moving along a stage's units: the one before and after the selected, every unit of the line.
+// Moving along a stage's units: the one before and after the selected, every unit of the line,
+// an arrow's click or ← and → away.
 
 /** The cells before and after `key` along the line. */
 export function neighbours(cells: Cell[], key: string | null): { before: Cell | null; after: Cell | null } {
@@ -12,6 +14,23 @@ export function neighbours(cells: Cell[], key: string | null): { before: Cell | 
   const index = placed.findIndex((cell) => cell.key === key);
   if (index < 0) return { before: null, after: placed[0] ?? null };
   return { before: placed[index - 1] ?? null, after: placed[index + 1] ?? null };
+}
+
+/** ← and → call `step` with -1 and 1, but in a form's fields or with a modifier held. */
+export function useArrowKeys(step: (direction: -1 | 1) => void) {
+  const onStep = useEffectEvent(step);
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, select, textarea, [contenteditable='true']")) return;
+      event.preventDefault();
+      onStep(event.key === "ArrowLeft" ? -1 : 1);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 }
 
 /** The cell a click on a line's plot at `position` selects: the nearest holding a result (a

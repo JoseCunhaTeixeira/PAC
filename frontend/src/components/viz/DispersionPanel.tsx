@@ -15,7 +15,7 @@ import { runFigures, useRunFigures } from "./runFigures";
 import type { DispersionCard, Overview, WindowSources } from "./types";
 import { Details, Empty, ErrorBox, PlotHead, SavedFigures, Skeleton } from "./ui";
 import { nearestCell } from "./cells";
-import { useJson } from "./useJson";
+import { useJson, useShownUnit } from "./useJson";
 import { useTheme } from "../../theme";
 
 // The dispersion stage: the selected window's card (the shots its image stacks, its image and
@@ -30,7 +30,8 @@ function WindowGather({ folder, xmid }: { folder: string; xmid: number }) {
   const [norm, setNorm] = useState<"trace" | "global">("trace");
   const [xZoom, setXZoom] = useState<Range | null>(null);
   const gather = useJson<GatherData>(`${API}/quality/dispersion/gather/${at(folder)}/${xmid}?norm=${norm}`);
-  const positions = gather.data?.positions;
+  const shown = useShownUnit(xmid, gather.loading);
+  const positions = gather.shown?.positions;
   const extent = useMemo((): Range => {
     const xs = positions && positions.length > 0 ? positions : [0, 1];
     const low = Math.min(...xs);
@@ -38,14 +39,14 @@ function WindowGather({ folder, xmid }: { folder: string; xmid: number }) {
     const pad = Math.max((high - low) / Math.max(xs.length - 1, 1), 0.5);
     return [low - pad, high + pad];
   }, [positions]);
-  if (!gather.data) return null;
+  if (!gather.shown) return null;
   return (
     <PlotBox>
-      <div style={{ marginTop: 16 }}>
+      <div style={{ marginTop: 16 }} className={gather.loading ? "viz-stale" : undefined}>
         <PlotHead title="Stacked correlations · the image's signal">
           <Normalization value={norm} onChange={setNorm} />
         </PlotHead>
-        <LineGather key={xmid} data={gather.data} extent={extent} xZoom={xZoom} onXZoom={setXZoom} height={320} />
+        <LineGather key={shown} data={gather.shown} extent={extent} xZoom={xZoom} onXZoom={setXZoom} height={320} />
         <SavedSpectrum
           url={`${API}/quality/dispersion/spectrum/${at(folder)}/${xmid}`}
           title="Stacked correlations · their spectrum"
@@ -75,7 +76,8 @@ interface SelectionScores {
 function WindowSelection({ folder, xmid }: { folder: string; xmid: number }) {
   const palette = vizPalette(useTheme());
   const selection = useJson<SelectionScores>(`${API}/quality/dispersion/selection/${at(folder)}/${xmid}`);
-  const data = selection.data;
+  const shown = useShownUnit(xmid, selection.loading);
+  const data = selection.shown;
   if (!data) return null;
   const points = (take: (ratio: number, kept: boolean) => boolean) =>
     data.ratios.flatMap((ratio, i): [number, number][] => (take(ratio, data.kept[i]) ? [[i + 1, ratio]] : []));
@@ -83,10 +85,10 @@ function WindowSelection({ folder, xmid }: { folder: string; xmid: number }) {
   const { threshold, segments } = data;
   return (
     <PlotBox>
-      <div style={{ marginTop: 16 }}>
+      <div style={{ marginTop: 16 }} className={selection.loading ? "viz-stale" : undefined}>
         <PlotHead title={`fk selection · ${num(data.kept_count)} of ${num(segments)} segments kept`} />
         <LinePlot
-          key={xmid}
+          key={shown}
           series={[
             { label: "left out", color: palette.use.inside, points: points((_, kept) => !kept), line: false, dots: true },
             { label: "kept", color: palette.series, points: points((ratio, kept) => kept && !flipped(ratio)), line: false, dots: true },
@@ -162,6 +164,9 @@ export function DispersionPanel({
   const xmid = selected ? xmidOf(selected) : null;
   const card = useJson<DispersionCard>(xmid !== null ? `${API}/quality/dispersion/card/${at(folder)}/${xmid}` : null);
   const image = useJson<DispersionImage>(xmid !== null ? `${API}/dispersion_images/${at(folder)}/${xmid}` : null);
+  const shown = card.shown;
+  // The image's own zoom, back to the whole image with the next window's.
+  const imaged = useShownUnit(xmid, image.loading);
   const labels = useJson<Record<string, number>>(`${API}/dispersion_image_labels/${at(folder)}`);
   const modes = Object.entries(labels.data ?? {});
   const windows = overview?.cells.length ?? 0;
@@ -181,15 +186,17 @@ export function DispersionPanel({
         <div className="viz-section">
           <UnitCard
             stage="dispersion"
-            card={card.data}
+            card={shown}
             error={card.error}
-            lead={sources && sources.key === selected ? sources.sentences : []}
+            selected={selected}
+            loading={card.loading}
+            lead={sources && shown && sources.key === shown.key ? sources.sentences : []}
             cells={overview?.cells ?? []}
             onSelect={onSelect}
             details={
-              card.data && (
+              shown && (
                 <>
-                  <Details gates={card.data.gates} attempts={card.data.attempts} />
+                  <Details gates={shown.gates} attempts={shown.attempts} />
                   <SavedFigures
                     figures={runFigures(
                       folder,
@@ -203,12 +210,12 @@ export function DispersionPanel({
             }
           >
             <PlotBox>
-              <div style={{ marginTop: 16 }}>
+              <div style={{ marginTop: 16 }} className={image.loading ? "viz-stale" : undefined}>
                 <PlotHead
-                  title={`Dispersion image${card.data?.picked_by === "auto" ? " · picked automatically" : card.data?.picked_by === "hand" ? " · picked by hand" : ""}`}
+                  title={`Dispersion image${shown?.picked_by === "auto" ? " · picked automatically" : shown?.picked_by === "hand" ? " · picked by hand" : ""}`}
                 />
-                {image.data ? (
-                  <DispersionImageCanvas image={image.data} />
+                {image.shown ? (
+                  <DispersionImageCanvas key={imaged} image={image.shown} />
                 ) : image.error ? (
                   <Empty>No dispersion image for this window.</Empty>
                 ) : (

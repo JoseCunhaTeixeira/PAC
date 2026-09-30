@@ -286,7 +286,7 @@ export function LinePlot({
     <div ref={containerRef} style={{ position: "relative", width: "100%" }}>
       <canvas
         ref={canvasRef}
-        style={{ display: "block", cursor: zoom.cursorAt(mouse) }}
+        style={{ display: "block", height, cursor: zoom.cursorAt(mouse) }}
         onMouseMove={(e) => {
           const box = e.currentTarget.getBoundingClientRect();
           setMouse({ x: ((e.clientX - box.left) / box.width) * width, y: ((e.clientY - box.top) / box.height) * height });
