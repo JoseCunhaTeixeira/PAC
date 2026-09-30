@@ -293,8 +293,9 @@ export default function VisualizationPage() {
 
   const select = (key: string) => update(records ? { rec: key } : { x: key });
 
-  // One zoom along the line for the line plot and the plots aligned under it, back to the
-  // whole line with another run, and on the records' stage with another shot.
+  // One zoom along the line for the line plot and the record's traces under it (their
+  // spectrum zooms on its own), back to the whole line with another run, and on the records'
+  // stage with another shot.
   const extent = useMemo((): Range => (run ? lineExtent(run) : [0, 1]), [run]);
   const [zoomed, setZoomed] = useState<{
     folder: string;
