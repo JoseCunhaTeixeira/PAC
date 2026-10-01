@@ -286,7 +286,7 @@ class Session:
         from mcp import Client
         from openai import AsyncOpenAI
         from paco import server, stopping
-        from paco.agent import Agent, OpenAIChat, save_transcript
+        from paco.agent import Agent, Limits, OpenAIChat, save_transcript
         from paco.agent.record import ToolStep
 
         agent: Agent | None = None
@@ -313,7 +313,8 @@ class Session:
                 self._signal = signal
                 self._loop = anyio.lowlevel.current_token()
             async with Client(server.server) as tools:
-                agent = await Agent.start(tools, model, on_event=self._on_event)
+                limits = Limits.of(settings) if settings is not None else None
+                agent = await Agent.start(tools, model, on_event=self._on_event, limits=limits)
                 while (question := await anyio.to_thread.run_sync(self._questions.get)) is not None:
                     signal.renew()
                     answer: str | None = None

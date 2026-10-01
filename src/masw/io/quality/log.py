@@ -12,6 +12,8 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from sigpipe.masw.runs.history import log_entries
+
 LOG_FILE = "qc_log.jsonl"
 CONFIG_FILE = "qc_config.json"
 COHERENCE_FILE = "coherence.json"
@@ -180,18 +182,19 @@ def summarize(attempt: Attempt) -> AttemptSummary:
 
 
 def read_log(run_folder: Path) -> QCLog | None:
-    """The run's QC log; None for a run PACo never judged."""
-    path = run_folder / LOG_FILE
-    if not path.exists():
+    """The run's QC log; None for a run PACo never judged. The attempts as the run stands:
+    those of a window's stage done afresh since (sigpipe's `log_entries`: a reset in the log)
+    left out, as are the log's other events."""
+    if not (run_folder / LOG_FILE).exists():
         return None
     current: dict[tuple[str, str, int], Attempt] = {}
     history: list[Attempt] = []
-    for line in path.read_text().splitlines():
-        if not line.strip():
+    for entry in log_entries(run_folder):
+        if "attempt" not in entry:
             continue
         try:
-            attempt = Attempt.model_validate_json(line)
-        except ValidationError:  # the last line, while PACo writes it
+            attempt = Attempt.model_validate(entry)
+        except ValidationError:
             continue
         current[attempt.unit, attempt.stage, attempt.attempt] = attempt
         history.append(attempt)

@@ -3,7 +3,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from masw.io.folders import get_xmid_folders
-from masw.io.history import curve_changed
+from masw.io.history import curve_changed, writing
 from masw.io.paths import output_folder
 from masw.io.pick_origin import pick_origin
 from masw.io.quality.log import read_log
@@ -46,8 +46,9 @@ def pick_lasso(
     image = load_dispersion_image(folder, xmid)
     mode = Mode.from_label(label)
     updated = lasso(image, polygon, mode)
-    save_curves(xmid_folder(folder, xmid), image, updated.dispersion_curves)
-    _edited(xmid_folder(folder, xmid), mode)
+    with writing(output_folder(folder)):
+        save_curves(xmid_folder(folder, xmid), image, updated.dispersion_curves)
+        _edited(xmid_folder(folder, xmid), mode)
     return updated
 
 
@@ -77,16 +78,18 @@ def pick_box(
         modes=[mode.number],
         resample_over_wavelength=True,
     )
-    save_curves(xmid_folder(folder, xmid), image, updated.dispersion_curves)
-    _edited(xmid_folder(folder, xmid), mode)
+    with writing(output_folder(folder)):
+        save_curves(xmid_folder(folder, xmid), image, updated.dispersion_curves)
+        _edited(xmid_folder(folder, xmid), mode)
     return updated
 
 
 def delete_curve(folder: str, xmid: float, label: str) -> DispersionImage:
     image = load_dispersion_image(folder, xmid)
     mode = Mode.from_label(label)
-    remaining = remove_pick(xmid_folder(folder, xmid), image, mode)
-    _edited(xmid_folder(folder, xmid), mode)
+    with writing(output_folder(folder)):
+        remaining = remove_pick(xmid_folder(folder, xmid), image, mode)
+        _edited(xmid_folder(folder, xmid), mode)
     return replace(image, dispersion_curves=remaining)
 
 
@@ -154,7 +157,8 @@ def auto_pick_m0(folder: str, xmid: float) -> DispersionImage:
     curve = modes[0].curve if modes else None
     if curve is None:
         raise NoCurveFound(f"The automatic picking found no fundamental mode at xmid {xmid:g} m.")
-    save_pick(window, image, curve)
-    curve_changed(window, curve.mode)
-    mark_auto(window)
+    with writing(output_folder(folder)):
+        save_pick(window, image, curve)
+        curve_changed(window, curve.mode)
+        mark_auto(window)
     return load_dispersion_image(folder, xmid)

@@ -12,6 +12,7 @@ from sigpipe.algorithms.picking.dispersion.curve import (
 )
 from sigpipe.base.dispersion_image import DispersionImage
 from sigpipe.masw.runs.origin import Origin
+from sigpipe.masw.runs.writing import RunBusy
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +147,8 @@ def get_dispersion_image(folder: str, xmid: float) -> DispersionImageOut:
 def pick_lasso(folder: str, xmid: float, request: LassoPickRequest) -> DispersionImageOut:
     try:
         return _to_image_out(io.pick_lasso(folder, xmid, request.polygon, request.label))
+    except RunBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -166,6 +169,8 @@ def pick_box(folder: str, xmid: float, request: BoxPickRequest) -> DispersionIma
                 label=request.label,
             )
         )
+    except RunBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -175,6 +180,8 @@ def pick_auto(folder: str, xmid: float) -> DispersionImageOut:
     """The window's M0 picked automatically, replacing its M0."""
     try:
         return _to_image_out(io.auto_pick_m0(folder, xmid))
+    except RunBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except io.NoCurveFound as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ValueError as exc:
@@ -185,6 +192,8 @@ def pick_auto(folder: str, xmid: float) -> DispersionImageOut:
 def delete_pick(folder: str, xmid: float, label: str) -> DispersionImageOut:
     try:
         return _to_image_out(io.delete_curve(folder, xmid, label))
+    except RunBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

@@ -7,6 +7,7 @@ fundamental mode's, the soil column."""
 
 import logging
 import threading
+from contextlib import AbstractContextManager
 from pathlib import Path
 
 from sigpipe.base.dispersion_curve import Mode
@@ -14,6 +15,7 @@ from sigpipe.dataio.dispersion.loading import load_dispersion_curves
 from sigpipe.masw.picks import save_picks_figures
 from sigpipe.masw.runs import window_folders
 from sigpipe.masw.runs.history import Stage, forget
+from sigpipe.masw.runs.writing import RunBusy, run_lock
 
 logger = logging.getLogger(__name__)
 
@@ -39,16 +41,29 @@ def curve_changed(window: Path, mode: Mode) -> None:
 
 # One redraw of a run's picks figures at a time.
 _PICKS_FIGURES = threading.Lock()
+# How long a page waits for a run the assistant writes, before it is refused.
+WAIT_S = 5.0
+
+
+def writing(run_folder: Path) -> AbstractContextManager[None]:
+    """`run_folder` held while PAC writes it: shared with PAC's other pages and jobs, the
+    assistant kept out meanwhile (sigpipe's run_lock). Raises RunBusy, saying so, while the
+    assistant writes it."""
+    return run_lock(run_folder, "PAC", shared=True, wait_s=WAIT_S)
 
 
 def redraw_picks(run_folder: Path, mode: Mode) -> threading.Thread:
     """The run's pseudo-sections of `mode`'s picked curves drawn again (sigpipe's
-    save_picks_figures), in a thread: the pick's answer does not wait for them."""
+    save_picks_figures), in a thread: the pick's answer does not wait for them. Not while the
+    assistant writes the run: it draws them again itself."""
 
     def draw() -> None:
         with _PICKS_FIGURES:
             try:
-                save_picks_figures(run_folder, window_folders(run_folder), [mode])
+                with writing(run_folder):
+                    save_picks_figures(run_folder, window_folders(run_folder), [mode])
+            except RunBusy:
+                logger.info("The picks' figures of %s left to the assistant", run_folder)
             except Exception:
                 logger.exception("Could not draw the picks' figures of %s", run_folder)
 

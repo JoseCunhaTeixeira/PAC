@@ -182,9 +182,9 @@ const LABELS: Record<string, [string, string, string]> = {
   redo: ["Redid the {stage}", "Redoing the {stage}", "Redo the {stage}"],
 };
 
-// PACo's host lists the parameters the stages ran with, then the settings the gates changed,
-// after each answer, each under its title line.
-const LISTS = ["Parameters used", "Settings the gates changed"];
+// PACo's answer lists, last, the parameters the stages ran with, the settings the gates changed
+// and the user's settings kept as given, each under its title line.
+const LISTS = ["Parameters used", "Settings the gates changed", "Settings kept as you gave them"];
 
 async function detail(res: Response): Promise<string> {
   const body = await res.json().catch(() => null);
