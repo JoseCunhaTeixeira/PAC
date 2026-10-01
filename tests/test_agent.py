@@ -20,6 +20,8 @@ from openai.types.chat import (
     ChatCompletionMessageParam,
 )
 from paco.agent import Filled, Reply, ToolCall
+from paco.agent.answer import SCHEMA as ANSWER_SCHEMA
+from paco.agent.loop import from_data
 
 from masw import agent
 from masw.api.main import app
@@ -35,6 +37,10 @@ EVERYTHING = {
     "profile": None,
     "run_id": None,
     "positions_m": [],
+    "length_receivers": None,
+    "length_m": None,
+    "step_receivers": None,
+    "step_m": None,
     "redo": False,
     "replace_hand_work": False,
     "option": None,
@@ -46,13 +52,16 @@ SCOPE_LINE = "Scope: process, pick, invert, soils."
 
 
 class FillsEverything:
-    """A stand-in's forms: every message asks every stage."""
+    """A stand-in's forms: every message asks every stage; every answer is its draft."""
 
     async def fill(
         self,
-        messages: list[ChatCompletionMessageParam],  # noqa: ARG002
-        schema: dict[str, Any],  # noqa: ARG002
+        messages: list[ChatCompletionMessageParam],
+        schema: dict[str, Any],
     ) -> Filled:
+        if schema == ANSWER_SCHEMA:
+            draft = str(messages[-1].get("content")).split("\nAnswer: ", 1)[1]
+            return Filled(content=json.dumps({"said": draft, "question": None}))
         return Filled(content=json.dumps(EVERYTHING))
 
 
@@ -74,13 +83,14 @@ class ScriptedModel(FillsEverything):
         if last["role"] == "user":
             asked = ToolCall("call_0", "inspect", '{"what": "profiles"}')
             return Reply(content="", tool_calls=(asked,))
-        # A line per profile: "noise: 0 run(s)".
-        profiles = [line.split(":")[0] for line in last["content"].splitlines()]
+        # A line per profile: "noise: a profile to process, no run yet", in PACo's data block.
+        profiles = [line.split(":")[0] for line in from_data(last["content"]).splitlines()]
         return Reply(content=f"Your profiles: {', '.join(profiles)}.", tool_calls=())
 
 
 def _events(session: str, after: int = 0) -> dict[str, Any]:
-    for _ in range(200):
+    # A minute at most: processing runs its trials (the window lengths, the mutes) first.
+    for _ in range(600):
         body = client.get(f"/agent/sessions/{session}/events", params={"after": after}).json()
         if not body["busy"]:
             return body

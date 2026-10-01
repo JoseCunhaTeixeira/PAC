@@ -8,7 +8,7 @@ from typing import cast
 
 from masw.io.dispersion_images import xmid_folder
 from masw.io.folders import get_xmid_folders
-from masw.io.history import redone
+from masw.io.history import redone, writing
 from masw.io.paths import output_folder
 from masw.io.quality.petro import MEASURES_FILE, thresholds_of
 from masw.models.petro_inversion import PetroInversionRunConfig
@@ -29,7 +29,18 @@ def run_petro_inversion(
 ) -> list[WindowError]:
     """sigpipe's petrophysical inversion of the selected positions (sigpipe.masw.petro), with
     PAC's config and outcome files, then the line's sections. Stopped once `stop` is set: the
-    positions that finished kept, the others as they were, the sections left as they were."""
+    positions that finished kept, the others as they were, the sections left as they were. The
+    job holds the run while it writes it, shared with PAC's pages (the assistant kept out
+    meanwhile); one the assistant writes fails the job, saying so."""
+    with writing(output_folder(config.folder)):
+        return _run_petro_inversion(config, on_progress, stop)
+
+
+def _run_petro_inversion(
+    config: PetroInversionRunConfig,
+    on_progress: ProgressCallback | None,
+    stop: threading.Event | None,
+) -> list[WindowError]:
     total = len(config.positions)
     logger.info(
         "Starting petro inversion: %d positions, model=%s, %d workers",

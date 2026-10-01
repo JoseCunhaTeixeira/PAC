@@ -4,6 +4,7 @@ computes; these tests check what PAC asks of it and what the pages read back."""
 
 import json
 import shutil
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -13,10 +14,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from masw.api.main import app
+from masw.io import history
 from masw.io.paths import output_folder
 from sigpipe.algorithms.picking.dispersion.tracking import PickingParameters, pick_modes
 from sigpipe.masw.inversion import InversionParameters, ThicknessLayer, VsLayer
 from sigpipe.masw.runs import load_image
+from sigpipe.masw.runs.history import REPLACED_FOLDER, log_entries
+from sigpipe.masw.runs.writing import run_lock
 
 from .synthetic import N_RECEIVERS, SAMPLING, SOURCES
 
@@ -164,6 +168,34 @@ def test_the_picks_replace_their_modes_curve(run: str) -> None:
     assert section["positions"] == [2.5, 5.5, 8.5]
 
 
+def test_a_run_the_assistant_writes_is_refused_saying_so(
+    run: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(history, "WAIT_S", 0.0)
+    box = {"fmin": 10, "fmax": 60, "vmin": 100, "vmax": 400, "label": "M2"}
+    held, release = threading.Event(), threading.Event()
+
+    def assistant() -> None:
+        with run_lock(output_folder(run), "PACo (pick)"):
+            held.set()
+            release.wait(timeout=60)
+
+    thread = threading.Thread(target=assistant)
+    thread.start()
+    assert held.wait(timeout=10)
+    try:
+        refused = client.post(f"/dispersion_images/{run}/8.5/pick/box", json=box)
+    finally:
+        release.set()
+        thread.join(timeout=10)
+
+    # Nothing saved; the page told who writes the run.
+    assert refused.status_code == 409
+    assert "being written by PACo (pick)" in refused.json()["detail"]
+    image = client.get(f"/dispersion_images/{run}/8.5").json()
+    assert "M2" not in [one["label"] for one in image["curves"]]
+
+
 def test_a_windows_m0_is_picked_automatically(run: str) -> None:
     # A copy of the run, not to change the others' windows; its window 5.5 given an M0 and an M1
     # by hand.
@@ -299,7 +331,11 @@ def test_a_window_done_again_by_hand_keeps_nothing_older(run: str) -> None:
     assert not (window / "attempts").exists()
     assert not (window / "SeismicInversion_Model_0000_old.csv").exists()
     assert (window / "SeismicInversion_Samples_0000.npz").exists()
-    assert [json.loads(one)["unit"] for one in log.read_text().splitlines()] == ["xmid_5.50"]
+    assert [one["unit"] for one in log_entries(run_folder) if "attempt" in one] == ["xmid_5.50"]
+    # Set aside, not deleted: the earlier attempt's models, and its lines behind a reset.
+    (aside,) = (window / REPLACED_FOLDER).iterdir()
+    assert (aside / "attempts" / "1_inversion" / "SeismicInversion_Samples_0000.npz").exists()
+    assert len(log.read_text().splitlines()) == len(lines) + 1
     card = client.get(f"/quality/inversion/card/{run}/2.5").json()
     assert card["attempts"] == [] and any(
         one["text"].startswith("Inverted by hand") for one in card["sentences"]
