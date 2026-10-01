@@ -11,13 +11,16 @@ from __future__ import annotations
 
 import contextlib
 import importlib.util
+import json
 import logging
 import os
 import queue
 import threading
+import time
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 import anyio
 import anyio.from_thread
@@ -40,9 +43,28 @@ LOG_DIR = OUTPUT_DIR / "agent_logs"
 MAX_SESSIONS = 8
 
 type EventKind = Literal["user", "step", "answer", "error", "stopped"]
+# What an answer did on a run: PAC's pages show each.
+type RunStage = Literal["processing", "picking", "inversion", "petro"]
 
 # What a stopped answer says, in the conversation.
 STOPPED = "Stopped. What had finished is kept; the rest is as it was."
+# The tools that work on a run, and what each does there (redo: by the stage it goes back to).
+RUN_STAGES: dict[str, RunStage] = {
+    "run_processing": "processing",
+    "pick": "picking",
+    "judge": "picking",
+    "invert": "inversion",
+    "job_status": "inversion",
+    "invert_petro": "petro",
+}
+
+
+class RunResult(BaseModel):
+    """A run an answer worked on, and what it did there, in order."""
+
+    run_id: str
+    folder: str  # <profile>/<run_id>, as PAC's pages name a run
+    stages: tuple[RunStage, ...]
 
 
 class Event(BaseModel):
@@ -50,6 +72,9 @@ class Event(BaseModel):
     # The user's message, a tool call (or its failure), the answer, an error, a stop.
     kind: EventKind
     text: str
+    # An answer's: the runs it worked on, and how long it took.
+    results: tuple[RunResult, ...] = ()
+    seconds: float | None = None
 
 
 class SessionInfo(BaseModel):
@@ -61,6 +86,10 @@ class SessionInfo(BaseModel):
     closed: bool
     started_at: datetime
     updated_at: datetime
+    # The answers ended so far (failed or stopped ones too), for the menu to show a new one,
+    # and whether the last asks the user to choose among the options a tool offered.
+    answers: int = 0
+    asks: bool = False
 
 
 class AgentStatus(BaseModel):
@@ -149,6 +178,8 @@ class Session:
         self.stopping = False  # a stop was asked, and the answer has not ended yet
         self.progress: str | None = None  # the running tool's latest progress, while busy
         self.closed = False
+        self.answers = 0  # the answers ended so far
+        self.asks = False  # the last one asks the user to choose
         self.started_at = self.updated_at = datetime.now(UTC)
         self._model = model
         self._questions: queue.Queue[str | None] = queue.Queue()
@@ -184,6 +215,8 @@ class Session:
                 closed=self.closed,
                 started_at=self.started_at,
                 updated_at=self.updated_at,
+                answers=self.answers,
+                asks=self.asks,
             )
 
     def stop(self) -> bool:
@@ -206,8 +239,16 @@ class Session:
     def close(self) -> None:
         self._questions.put(None)
 
-    def _add(self, kind: EventKind, text: str) -> None:
-        self.events.append(Event(index=len(self.events), kind=kind, text=text))
+    def _add(
+        self,
+        kind: EventKind,
+        text: str,
+        results: tuple[RunResult, ...] = (),
+        seconds: float | None = None,
+    ) -> None:
+        self.events.append(
+            Event(index=len(self.events), kind=kind, text=text, results=results, seconds=seconds)
+        )
         self.updated_at = datetime.now(UTC)
 
     def _on_event(self, line: str) -> None:
@@ -220,9 +261,20 @@ class Session:
             else:
                 self._add("step", text)
 
-    def _finish(self, kind: EventKind, text: str) -> None:
+    def _finish(
+        self,
+        kind: EventKind,
+        text: str,
+        results: tuple[RunResult, ...] = (),
+        seconds: float | None = None,
+        asks: bool = False,
+    ) -> None:
+        """The answer ended (`kind`: answered, failed or stopped); `asks` when it asks the user
+        to choose among the options a tool offered."""
         with self._lock:
-            self._add(kind, text)
+            self._add(kind, text, results, seconds)
+            self.answers += 1
+            self.asks = asks
             self.busy = False
             self.stopping = False
             self.progress = None
@@ -235,6 +287,7 @@ class Session:
         from openai import AsyncOpenAI
         from paco import server, stopping
         from paco.agent import Agent, OpenAIChat, save_transcript
+        from paco.agent.record import ToolStep
 
         agent: Agent | None = None
         name = "scripted"
@@ -245,7 +298,9 @@ class Session:
                 client = AsyncOpenAI(
                     base_url=settings.llm_base_url, api_key=settings.llm_api_key.get_secret_value()
                 )
-                model: ChatModel = OpenAIChat(client, settings.llm_model)
+                model: ChatModel = OpenAIChat(
+                    client, settings.llm_model, settings.llm_temperature, settings.llm_seed
+                )
             else:
                 assert self._model is not None
                 model = self._model
@@ -263,6 +318,7 @@ class Session:
                     signal.renew()
                     answer: str | None = None
                     failed: Exception | None = None
+                    first, started = len(agent.steps), time.monotonic()
                     with anyio.CancelScope() as scope:
                         with self._lock:
                             self._scope = scope
@@ -281,7 +337,18 @@ class Session:
                     elif answer is None:
                         self._finish("stopped", STOPPED)
                     else:
-                        self._finish("answer", answer)
+                        done = [
+                            (step.name, step.arguments, step.result)
+                            for step in agent.steps[first:]
+                            if isinstance(step, ToolStep) and step.called and not step.is_error
+                        ]
+                        self._finish(
+                            "answer",
+                            answer,
+                            run_results(done),
+                            time.monotonic() - started,
+                            asks=bool(agent.offers),
+                        )
         except Exception as error:
             logger.exception("The agent's session %s stopped", self.id)
             self._finish("error", f"{type(error).__name__}: {error}")
@@ -337,3 +404,36 @@ class Sessions:
 
 
 sessions = Sessions()
+
+
+def run_results(calls: Sequence[tuple[str, str, str]]) -> tuple[RunResult, ...]:
+    """The runs the tool calls of an answer worked on, each call its name, arguments and
+    result: those of a tool that works on a run, its result naming it; with what each did."""
+    done: dict[str, list[RunStage]] = {}
+    for name, arguments, result in calls:
+        stage = RUN_STAGES.get(name)
+        if name == "redo":
+            asked = _json(arguments)
+            stage = "inversion" if asked.get("stage") == "inversion" else "picking"
+        run_id = _json(result).get("run_id")
+        if stage is None or not isinstance(run_id, str):
+            continue
+        stages = done.setdefault(run_id, [])
+        if stage not in stages:
+            stages.append(stage)
+    results: list[RunResult] = []
+    for run_id, stages in done.items():
+        found = sorted(OUTPUT_DIR.glob(f"*/{run_id}/run.json"))
+        if found:
+            folder = f"{found[0].parent.parent.name}/{run_id}"
+            results.append(RunResult(run_id=run_id, folder=folder, stages=tuple(stages)))
+    return tuple(results)
+
+
+def _json(text: str) -> dict[str, object]:
+    """`text` as a JSON object; empty when it is none."""
+    try:
+        value: object = json.loads(text or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return cast(dict[str, object], value) if isinstance(value, dict) else {}

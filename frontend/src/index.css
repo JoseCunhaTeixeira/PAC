@@ -436,6 +436,47 @@ th {
   animation: spin 0.8s linear infinite;
 }
 
+/* The assistant's news while its page is not open: its row tinted, a dot at the row's end. A
+   new answer in the accent; one that asks the user to choose in amber, the dot pulsing. */
+.sidebar-link.news-answer {
+  color: var(--accent-fg);
+}
+
+.sidebar-link.news-asks {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+.sidebar-news {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.sidebar-news.asks {
+  background: var(--warn);
+  animation: news-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes news-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--warn) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-news.asks {
+    animation: none;
+  }
+}
+
 .sidebar-footer {
   margin-top: 16px;
   padding: 12px 0 0 10px;
@@ -504,6 +545,14 @@ th {
     right: 8px;
     width: 9px;
     height: 9px;
+  }
+
+  .sidebar-news {
+    position: absolute;
+    top: 5px;
+    right: 8px;
+    width: 8px;
+    height: 8px;
   }
 
   .sidebar-footer {

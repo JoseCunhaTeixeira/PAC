@@ -34,6 +34,7 @@ import { RunPanel } from "./components/RunPanel";
 import { runningJob } from "./components/jobs";
 import { readStored, useStoredState, writeStored } from "./components/stored";
 import { RunSelect } from "./components/RunSelect";
+import { useRunFromAddress } from "./components/runAddress";
 
 // Seismic inversion: which picked curves to invert, the layers (chosen by the data within
 // bounds, or given in a table), the Vs drop allowed and the chains' effort, then the run. Its
@@ -122,6 +123,8 @@ async function json<T>(res: Response): Promise<T> {
 export default function InversionPage() {
   // The run, kept when the page is left.
   const [folder, setFolder] = useStoredState("pac.inversion.folder", "");
+  // A run named in the address, as the assistant's answers link it.
+  useRunFromAddress(setFolder);
   // Back on the page while its job runs: its run, so that its run bar shows the job.
   useEffect(() => {
     let cancelled = false;

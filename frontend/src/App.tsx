@@ -14,6 +14,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useStayPut } from "./components/stayPut";
 import { TipLayer } from "./components/TipLayer";
 import { runsAt, useRunning } from "./components/running";
+import { useAssistantNews, type News } from "./components/assistantNews";
 import { applyTheme, getInitialTheme, ThemeContext, type Theme } from "./theme";
 import {
   ActiveIcon,
@@ -66,6 +67,16 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   },
 ];
 
+// The assistant's news on its menu row: a new answer, or one that asks the user to choose.
+const NEWS_SAID: Record<Exclude<News, null>, string> = {
+  answer: "New answer",
+  asks: "Asks you to choose",
+};
+
+function NewsMark({ news }: { news: Exclude<News, null> }) {
+  return <i className={`sidebar-news ${news}`} aria-label={NEWS_SAID[news]} data-tip={NEWS_SAID[news]} />;
+}
+
 export default function App() {
   const location = useLocation();
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme());
@@ -73,6 +84,8 @@ export default function App() {
   const [assistant, setAssistant] = useState(false);
   // What runs, beside each page in the menu.
   const running = useRunning(assistant);
+  // What the assistant said while its page was not open: its menu row says so.
+  const news = useAssistantNews(running.conversations, location.pathname === "/assistant");
 
   useEffect(() => {
     applyTheme(theme);
@@ -106,25 +119,32 @@ export default function App() {
               return (
                 <div key={group.label ?? "top"} className="sidebar-group">
                   {group.label && <div className="sidebar-group-label">{group.label}</div>}
-                  {items.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      end={item.to === "/"}
-                      title={item.label}
-                      className={({ isActive }) => "sidebar-link" + (isActive ? " active" : "")}
-                    >
-                      {item.icon}
-                      <span>{item.label}</span>
-                      {runsAt(item.to, running) && (
-                        <i
-                          className="sidebar-running"
-                          aria-label="Running"
-                          data-tip={item.to === "/assistant" ? "Answering" : "Running"}
-                        />
-                      )}
-                    </NavLink>
-                  ))}
+                  {items.map((item) => {
+                    const runs = runsAt(item.to, running);
+                    const told = item.to === "/assistant" && !runs ? news : null;
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.to === "/"}
+                        title={item.label}
+                        className={({ isActive }) =>
+                          "sidebar-link" + (isActive ? " active" : "") + (told ? ` news-${told}` : "")
+                        }
+                      >
+                        {item.icon}
+                        <span>{item.label}</span>
+                        {runs && (
+                          <i
+                            className="sidebar-running"
+                            aria-label="Running"
+                            data-tip={item.to === "/assistant" ? "Answering" : "Running"}
+                          />
+                        )}
+                        {told && <NewsMark news={told} />}
+                      </NavLink>
+                    );
+                  })}
                 </div>
               );
             })}

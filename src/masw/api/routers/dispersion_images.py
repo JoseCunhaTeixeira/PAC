@@ -6,12 +6,12 @@ from pydantic import BaseModel, Field
 
 from masw.io import dispersion_images as io
 from masw.io.folders import get_output_folders, get_xmid_folders
-from masw.io.pick_origin import Origin
 from sigpipe.algorithms.picking.dispersion.curve import (
     longest_reached_wavelength,
     min_resolvable_wavelength,
 )
 from sigpipe.base.dispersion_image import DispersionImage
+from sigpipe.masw.runs.origin import Origin
 
 logger = logging.getLogger(__name__)
 

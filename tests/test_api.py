@@ -187,8 +187,11 @@ def test_a_windows_m0_is_picked_automatically(run: str) -> None:
     assert m1 == hand["curves"][1]
     by_position = client.get(f"/dispersion_picks_by_position/{folder}").json()
     assert by_position[1] == {"xmid": 5.5, "labels": ["M0", "M1"], "picked_by": "auto"}
-    # A curve edited by hand afterwards is the user's.
+    # Each mode apart: M1 deleted by hand leaves the automatic M0 as it was; M0 changed by hand
+    # afterwards is the user's.
     client.delete(f"/dispersion_images/{folder}/5.5/pick/M1")
+    assert client.get(f"/dispersion_picks_by_position/{folder}").json()[1]["picked_by"] == "auto"
+    client.post(f"/dispersion_images/{folder}/5.5/pick/box", json=box)
     assert client.get(f"/dispersion_picks_by_position/{folder}").json()[1]["picked_by"] == "hand"
     assert client.post(f"/dispersion_images/{folder}/9.5/pick/auto").status_code == 404
 

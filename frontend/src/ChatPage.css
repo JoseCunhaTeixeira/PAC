@@ -223,6 +223,33 @@
   margin: 0.15rem 0;
 }
 
+/* The runs an answer worked on: each named, the time the answer took, and where PAC shows
+   them, as the computing pages link a run once done. */
+.chat-runs {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+
+.chat-run-name {
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  color: var(--text);
+}
+
+.chat-run-time {
+  font-size: var(--fs-small);
+  color: var(--text-faint);
+}
+
 /* The steps: folded behind a toggle once the answer is in, shown live while the agent works. */
 .chat-steps-toggle {
   display: inline-flex;

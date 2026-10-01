@@ -969,6 +969,32 @@ def test_a_pick_changed_by_hand_leaves_the_assistants_curve_checks_behind(
     assert cells["xmid_2.50"]["parts"] == ["pass", "hand"]
 
 
+def test_a_mode_picked_in_pac_keeps_the_assistants_history_of_the_window(judged: str) -> None:
+    folder = f"{judged}-m1"
+    shutil.copytree(OUTPUT_DIR / judged, OUTPUT_DIR / folder)
+    log = OUTPUT_DIR / folder / "qc_log.jsonl"
+    box = {"fmin": 10, "fmax": 60, "vmin": 300, "vmax": 800, "label": "M1"}
+
+    client.post(f"/dispersion_images/{folder}/2.5/pick/box", json=box)
+
+    # M1 is the user's; M0, as the assistant picked it, keeps its checks and its attempts.
+    card = client.get(f"/quality/dispersion/card/{folder}/2.5").json()
+    assert card["picked_by"] == "auto"
+    gates = {gate["gate"]: (gate["verdict"], gate["by_hand"]) for gate in card["gates"]}
+    assert gates == {"G2": ("pass", False), "G3": ("pass", False), "G4": ("pass", False)}
+    assert [attempt["stage"] for attempt in card["attempts"]] == ["phase_shift", "picking"]
+
+    # M0 picked again by PAC's own automatic picking: the assistant's checks were of another
+    # curve, not shown; its history stays in the log.
+    assert client.post(f"/dispersion_images/{folder}/2.5/pick/auto").status_code == 200
+    card = client.get(f"/quality/dispersion/card/{folder}/2.5").json()
+    gates = {gate["gate"]: gate["verdict"] for gate in card["gates"]}
+    assert card["picked_by"] == "auto" and "G4" not in gates
+    assert [attempt["stage"] for attempt in card["attempts"]] == ["phase_shift"]
+    picking = [line for line in log.read_text().splitlines() if '"stage": "picking"' in line]
+    assert any('"unit": "xmid_2.50"' in line for line in picking)
+
+
 def test_an_assistant_run_shows_g5_and_what_each_attempt_changed(judged: str) -> None:
     overview = client.get(f"/quality/inversion/overview/{judged}").json()
 

@@ -195,6 +195,8 @@ To process your own data, simply drop a profile folder like the above into `data
 
 The assistant is an AI agent, **PACo**, that works PAC for you. You ask it in plain words — *"Process active_p1 and give me its dispersion curves"* — and it runs PAC's processing, checks the quality of every step (and retries what it can), picks the dispersion curves, inverts them into velocity models if you asked for them (or into soils and a water table, if you asked for those), then tells you what it did and which settings it changed. Its results are ordinary PAC runs: you open them in the other pages, to review or correct them.
 
+You can work in the other pages while it answers. Its row in the menu shows a spinner while it works. Afterwards it is tinted with a dot until you open the assistant again: in the accent colour for a new answer, and in amber, pulsing, when the answer asks you to choose between options.
+
 It runs a language model (Qwen3-8B), which needs a **graphics card (GPU) with at least 16 GB of memory**. Everything stays on your own machines: the model does not run on the internet, and it never sees your seismic records, only short summaries of PAC's results. (A larger model, or one from an online service, is possible too: see [Another model](#another-model).)
 
 The assistant is optional. Without it, the rest of PAC works the same, and its menu has no Assistant page.

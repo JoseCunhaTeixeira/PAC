@@ -2,6 +2,7 @@
 process, on PAC's own folders, and the page reads the conversation as events."""
 
 import json
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -18,17 +19,45 @@ from openai.types.chat import (
     ChatCompletionFunctionToolParam,
     ChatCompletionMessageParam,
 )
-from paco.agent import Reply, ToolCall
+from paco.agent import Filled, Reply, ToolCall
 
 from masw import agent
 from masw.api.main import app
 from masw.io.paths import OUTPUT_DIR
 
 client = TestClient(app)
+# A message's scope asking every stage: PACo's tools behave as without a scope.
+EVERYTHING = {
+    "process": True,
+    "pick": True,
+    "invert": True,
+    "soils": True,
+    "profile": None,
+    "run_id": None,
+    "positions_m": [],
+    "redo": False,
+    "replace_hand_work": False,
+    "option": None,
+}
 
 
-class ScriptedModel:
-    """Asks for list_profiles, then answers with what the tool returned."""
+# How an answer to such a message starts.
+SCOPE_LINE = "Scope: process, pick, invert, soils."
+
+
+class FillsEverything:
+    """A stand-in's forms: every message asks every stage."""
+
+    async def fill(
+        self,
+        messages: list[ChatCompletionMessageParam],  # noqa: ARG002
+        schema: dict[str, Any],  # noqa: ARG002
+    ) -> Filled:
+        return Filled(content=json.dumps(EVERYTHING))
+
+
+class ScriptedModel(FillsEverything):
+    """Asks for the profiles (inspect), then answers with what the tool returned."""
 
     def __init__(self) -> None:
         self.seen: list[list[ChatCompletionMessageParam]] = []
@@ -43,8 +72,10 @@ class ScriptedModel:
         self.tools = tools
         last: Any = messages[-1]
         if last["role"] == "user":
-            return Reply(content="", tool_calls=(ToolCall("call_0", "list_profiles", "{}"),))
-        profiles = json.loads(last["content"])["result"]  # a list comes wrapped
+            asked = ToolCall("call_0", "inspect", '{"what": "profiles"}')
+            return Reply(content="", tool_calls=(asked,))
+        # A line per profile: "noise: 0 run(s)".
+        profiles = [line.split(":")[0] for line in last["content"].splitlines()]
         return Reply(content=f"Your profiles: {', '.join(profiles)}.", tool_calls=())
 
 
@@ -94,13 +125,19 @@ def test_a_conversation_runs_pacos_tools_on_pacs_folders() -> None:
 
     kinds = [event["kind"] for event in body["events"]]
     assert kinds == ["user", "step", "answer"]
-    assert body["events"][1]["text"] == "-> list_profiles({})"
+    assert body["events"][1]["text"] == '-> inspect({"what": "profiles"})'
     # PACo's tool listed PAC's own profiles (the tests' synthetic ones).
-    assert body["events"][2]["text"] == "Your profiles: noise, shots."
+    # The answer, after the scope PACo read from the message.
+    assert body["events"][2]["text"] == f"{SCOPE_LINE}\n\nYour profiles: noise, shots."
     assert not body["closed"] and body["progress"] is None
+    # The menu learns of the answer: one ended, asking nothing.
+    listed = {one["id"]: one for one in client.get("/agent/sessions").json()}
+    assert (listed[session]["answers"], listed[session]["asks"]) == (1, False)
     # The model was offered PACo's tools.
     names = {tool["function"]["name"] for tool in model.tools}
-    assert {"list_profiles", "run_processing", "pick", "invert"} <= names
+    assert {"inspect", "run_processing", "pick", "judge", "invert"} <= names
+    # Nothing done on a run: nothing to show of one.
+    assert body["events"][2]["results"] == []
     # The page asks for what it has not seen yet.
     later = client.get(f"/agent/sessions/{session}/events", params={"after": 2}).json()
     assert [event["kind"] for event in later["events"]] == ["answer"]
@@ -126,7 +163,7 @@ def _shots_runs() -> set[Path]:
     return set(runs.iterdir()) if runs.exists() else set()
 
 
-class Stopped:
+class Stopped(FillsEverything):
     """Asks to process the shots finely, long enough to be stopped, then answers plainly."""
 
     def __init__(self) -> None:
@@ -188,10 +225,17 @@ def test_an_answer_stopped_undoes_its_work_and_the_conversation_goes_on(
     # The conversation goes on, from a history the model can read.
     client.post(f"/agent/sessions/{session}/messages", json={"text": "Are you there?"})
     body = _events(session, 4)
-    assert [event["text"] for event in body["events"]] == ["Are you there?", "Still here."]
+    assert [event["text"] for event in body["events"]] == [
+        "Are you there?",
+        f"{SCOPE_LINE}\n\nStill here.",
+    ]
+    from paco.agent.scope import Scope
+
+    # The new message, with the scope PACo read from it.
+    read = Scope.model_validate(EVERYTHING).for_model(None)
     assert model.seen[1][-2:] == [
         {"role": "assistant", "content": NOTED},
-        {"role": "user", "content": "Are you there?"},
+        {"role": "user", "content": f"Are you there?\n\n{read}"},
     ]
     assert client.post("/agent/sessions/nope/stop").status_code == 404
     agent.sessions.close(session)
@@ -242,3 +286,52 @@ def test_the_conversations_are_listed_the_latest_first() -> None:
     ]
     agent.sessions.close(first)
     agent.sessions.close(second)
+
+
+def test_an_answer_says_the_runs_it_worked_on_and_what_it_did() -> None:
+    run = OUTPUT_DIR / "shots" / "20260930-120000-abcd"
+    run.mkdir(parents=True, exist_ok=True)
+    (run / "run.json").write_text("{}")
+    calls = [
+        ("inspect", '{"what": "runs"}', "Run 20260930-120000-abcd: shots"),
+        ("run_processing", '{"profile": "shots"}', '{"run_id": "20260930-120000-abcd"}'),
+        ("pick", '{"run_id": "20260930-120000-abcd"}', '{"run_id": "20260930-120000-abcd"}'),
+        ("redo", '{"stage": "inversion"}', '{"run_id": "20260930-120000-abcd"}'),
+        ("job_status", '{"job_id": "j"}', '{"run_id": "20260930-120000-abcd"}'),
+        ("pick", '{"run_id": "gone"}', '{"run_id": "gone"}'),  # no such run: nothing to show
+    ]
+
+    try:
+        (result,) = agent.run_results(calls)
+    finally:
+        shutil.rmtree(run)  # a run without a manifest, which the other tests would meet
+
+    assert result.folder == "shots/20260930-120000-abcd"
+    assert result.stages == ("processing", "picking", "inversion")
+
+
+class ProcessesShots(FillsEverything):
+    """Asks to process the shots, then answers plainly."""
+
+    async def __call__(
+        self,
+        messages: list[ChatCompletionMessageParam],
+        tools: list[ChatCompletionFunctionToolParam],  # noqa: ARG002
+    ) -> Reply:
+        if messages[-1]["role"] == "user":
+            asked = ToolCall("call_0", "run_processing", '{"profile": "shots"}')
+            return Reply(content="", tool_calls=(asked,))
+        return Reply(content="Done.", tool_calls=())
+
+
+def test_an_answer_that_asks_to_choose_is_said_to_the_menu() -> None:
+    # A second conversation asked to process the shots meets the first one's run: the tool
+    # offers the options (process again, or go on), and the answer asks the user to choose.
+    said: list[str] = []
+    for _ in range(2):
+        session = agent.sessions.create(ProcessesShots()).id
+        client.post(f"/agent/sessions/{session}/messages", json={"text": "Process the shots."})
+        said += [event["text"][:300] for event in _events(session)["events"]]
+
+    listed = {one["id"]: one for one in client.get("/agent/sessions").json()}
+    assert (listed[session]["answers"], listed[session]["asks"]) == (1, True), said
