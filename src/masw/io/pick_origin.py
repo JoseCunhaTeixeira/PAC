@@ -1,72 +1,55 @@
-"""Who picked a window's curves: a picker, automatically, or a person in PAC, by hand. PAC records
-every edit of a window's picks (picks_edited.json in its folder, with the time), and each pick of
-its own automatic picking (picks_auto.json); a window is automatic when PACo's QC log holds a
-picking attempt for it, or PAC picked it automatically, and no edit came after."""
+"""Who picked a window's curves, by sigpipe's rule (masw.runs.origin): a picker, automatically
+(the assistant, from its QC log, or PAC's own automatic picking), or a person in PAC, by hand.
+PAC records each change a person makes to a mode's curve and each of its own automatic picks;
+the assistant's picks and checks are its QC log's picking attempts."""
 
-import json
-from datetime import UTC, datetime
+from collections.abc import Collection
+from datetime import datetime
 from pathlib import Path
-from typing import Literal
 
-from masw.io.quality.log import QCLog
-
-EDITS_FILE = "picks_edited.json"
-AUTO_FILE = "picks_auto.json"
-
-type Origin = Literal["auto", "hand"]
+from masw.io.quality.log import Attempt, QCLog
+from sigpipe.base.dispersion_curve import Mode
+from sigpipe.masw.runs.origin import JUDGED, M0, Origin, auto_at, checks_current, curve_origin
 
 
-def mark_edited(window: Path) -> None:
-    """Record that PAC changed the picks of window folder `window`, now."""
-    (window / EDITS_FILE).write_text(json.dumps({"edited_at": datetime.now(UTC).isoformat()}))
+def _done(window: Path, log: QCLog | None) -> list[Attempt]:
+    attempts = log.of(window.name, "picking") if log is not None else ()
+    return [attempt for attempt in attempts if attempt.status == "succeeded"]
 
 
-def mark_auto(window: Path) -> None:
-    """Record that PAC's automatic picking picked window folder `window`, now."""
-    (window / AUTO_FILE).write_text(json.dumps({"picked_at": datetime.now(UTC).isoformat()}))
+def _ended(attempt: Attempt) -> datetime:
+    return attempt.finished_at or attempt.started_at
 
 
-def _time(window: Path, name: str, key: str) -> datetime | None:
-    path = window / name
-    if not path.exists():
-        return None
-    value: object = json.loads(path.read_text()).get(key)
-    return datetime.fromisoformat(value) if isinstance(value, str) else None
+def picked_at(window: Path, log: QCLog | None) -> datetime | None:
+    """When the assistant last picked window folder `window`'s M0 (not a judgement of a curve
+    it did not pick); None when it never did."""
+    picks = [attempt for attempt in _done(window, log) if attempt.triggered_by != JUDGED]
+    return _ended(picks[-1]) if picks else None
 
 
-def edited_at(window: Path) -> datetime | None:
-    """When PAC last changed the window's picks; None when it never did."""
-    return _time(window, EDITS_FILE, "edited_at")
-
-
-def auto_at(window: Path) -> datetime | None:
-    """When PAC's automatic picking last picked the window; None when it never did."""
-    return _time(window, AUTO_FILE, "picked_at")
+def checks_current_in(window: Path, log: QCLog | None) -> bool:
+    """Whether the assistant's latest checks of window folder `window`'s M0 (G3, G4) are of the
+    curve it holds now: made after the curve's last change in PAC."""
+    done = _done(window, log)
+    return checks_current(window, _ended(done[-1]) if done else None)
 
 
 def assistant_picked(window: Path, log: QCLog | None) -> bool:
     """Whether window folder `window`'s last automatic pick is the assistant's, not PAC's own
     automatic picking."""
-    attempts = log.of(window.name, "picking") if log is not None else ()
-    done = [attempt for attempt in attempts if attempt.status == "succeeded"]
-    if not done:
+    at = picked_at(window, log)
+    if at is None:
         return False
     own = auto_at(window)
-    return own is None or (done[-1].finished_at or done[-1].started_at) >= own
+    return own is None or at >= own
 
 
-def pick_origin(window: Path, log: QCLog | None, picked: bool) -> Origin | None:
-    """Who picked the curves of window folder `window` (`picked`: it holds some); None when it
-    holds none."""
-    if not picked:
+def pick_origin(window: Path, log: QCLog | None, modes: Collection[Mode]) -> Origin | None:
+    """Who made the curves of window folder `window`, holding `modes` (none: None): its M0's
+    maker, whose curve the checks judge; a person's when it holds higher modes alone."""
+    if not modes:
         return None
-    attempts = log.of(window.name, "picking") if log is not None else ()
-    done = [attempt for attempt in attempts if attempt.status == "succeeded"]
-    # The last automatic pick: PACo's, or PAC's own.
-    picks = [done[-1].finished_at or done[-1].started_at] if done else []
-    if (own := auto_at(window)) is not None:
-        picks.append(own)
-    if not picks:
+    if M0 not in modes:
         return "hand"
-    edited = edited_at(window)
-    return "hand" if edited is not None and edited > max(picks) else "auto"
+    return curve_origin(window, M0, picked_at(window, log))

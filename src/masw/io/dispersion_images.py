@@ -5,7 +5,7 @@ from pathlib import Path
 from masw.io.folders import get_xmid_folders
 from masw.io.history import curve_changed
 from masw.io.paths import output_folder
-from masw.io.pick_origin import Origin, mark_auto, mark_edited, pick_origin
+from masw.io.pick_origin import pick_origin
 from masw.io.quality.log import read_log
 from sigpipe.algorithms.picking.dispersion.curve import pick_curves
 from sigpipe.algorithms.picking.dispersion.lasso import pick_lasso as lasso
@@ -22,6 +22,7 @@ from sigpipe.masw.picks import (
 )
 from sigpipe.masw.runs import load_image
 from sigpipe.masw.runs.finding import IMAGE_FILE
+from sigpipe.masw.runs.origin import Origin, mark_auto, mark_edited
 
 
 def xmid_folder(folder: str, xmid: float) -> Path:
@@ -90,9 +91,9 @@ def delete_curve(folder: str, xmid: float, label: str) -> DispersionImage:
 
 
 def _edited(window: Path, mode: Mode) -> None:
-    """`window`'s curve of `mode` changed by hand: said so, and nothing older left of it (see
-    masw.io.history)."""
-    mark_edited(window)
+    """`window`'s curve of `mode` changed by hand: said so, and what was made of the older curve
+    forgotten (see masw.io.history)."""
+    mark_edited(window, mode)
     curve_changed(window, mode)
 
 
@@ -113,7 +114,9 @@ def list_labels_by_position(folder: str) -> list[tuple[float, list[str], Origin 
         labels = sorted(
             (curve.mode.label for curve in load_curves(window) or ()), key=Mode.from_label
         )
-        found.append((xmid, labels, pick_origin(window, log, bool(labels))))
+        found.append(
+            (xmid, labels, pick_origin(window, log, [Mode.from_label(one) for one in labels]))
+        )
     return found
 
 

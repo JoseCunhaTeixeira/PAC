@@ -1,7 +1,9 @@
-"""A window's stage done again by hand in PAC replaces all it had of it: the assistant's earlier
-attempts (their archived results, the QC log's lines of them) are erased with sigpipe's `forget`,
-and so is what was made of an old result the new one makes wrong: changing a curve erases the
-seismic inversion that inverted it and, the fundamental mode's, the soil column."""
+"""A window's seismic or petrophysical inversion done again by hand in PAC replaces all it had
+of it: the assistant's earlier attempts (their archived results, the QC log's lines of them) are
+erased with sigpipe's `forget`. A curve changed in PAC keeps the assistant's picks and checks of the window, its
+history (sigpipe's masw.runs.origin tells whose each curve is now), and erases what was made of
+the older curve, which the new one makes wrong: the seismic inversion that inverted it and, the
+fundamental mode's, the soil column."""
 
 import logging
 import threading
@@ -9,7 +11,7 @@ from pathlib import Path
 
 from sigpipe.base.dispersion_curve import Mode
 from sigpipe.dataio.dispersion.loading import load_dispersion_curves
-from sigpipe.masw.picks import CURVES_FILE, save_picks_figures
+from sigpipe.masw.picks import save_picks_figures
 from sigpipe.masw.runs import window_folders
 from sigpipe.masw.runs.history import Stage, forget
 
@@ -23,12 +25,11 @@ def redone(window: Path, stage: Stage) -> None:
 
 
 def curve_changed(window: Path, mode: Mode) -> None:
-    """`window`'s curve of `mode` picked again or deleted by hand: its earlier picks forgotten,
-    with the picking's other results (the assistant's check of its pick), and what was made of
-    the old curve: the seismic inversion that inverted that mode, the soil column (made of the
-    fundamental mode)."""
+    """`window`'s curve of `mode` picked again or deleted in PAC (by hand, or by PAC's automatic
+    picking): what was made of the older curve forgotten, the seismic inversion that inverted
+    that mode and the soil column (made of the fundamental mode); the assistant's picks and
+    checks of the window kept, its history."""
     run_folder, unit = window.parent, window.name
-    forget(run_folder, unit, "picking", later=False, keep=(CURVES_FILE,))
     if _inverted(window, mode):
         forget(run_folder, unit, "inversion", later=False)
     if mode.number == 0 and any(window.glob("PetroInversion_*")):

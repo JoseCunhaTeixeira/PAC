@@ -34,6 +34,7 @@ import {
 } from "./components/kit";
 import type { DragTool } from "./components/plotBox";
 import { RunSelect } from "./components/RunSelect";
+import { useRunFromAddress } from "./components/runAddress";
 import {
   PositionRail,
   RailLegend,
@@ -453,6 +454,10 @@ export default function DispersionPickingPage() {
     },
     [setFolder, setXmid],
   );
+  // A run named in the address, as the assistant's answers link it.
+  useRunFromAddress((run) => {
+    if (run !== folder) chooseRun(run);
+  });
 
   return (
     <Page

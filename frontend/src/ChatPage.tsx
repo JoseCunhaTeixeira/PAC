@@ -6,8 +6,10 @@ import {
   useRef,
   useState,
 } from "react";
+import { Link } from "react-router-dom";
 import { API } from "./api";
 import {
+  ArrowRightIcon,
   CheckIcon,
   ChevronIcon,
   CrossIcon,
@@ -28,10 +30,20 @@ interface AgentStatus {
   model: string | null;
 }
 
+// A run an answer worked on, and what it did there, in order.
+interface RunResult {
+  run_id: string;
+  folder: string; // <profile>/<run_id>, as PAC's pages name a run
+  stages: ("processing" | "picking" | "inversion" | "petro")[];
+}
+
 interface ChatEvent {
   index: number;
   kind: "user" | "step" | "answer" | "error" | "stopped";
   text: string;
+  // An answer's: the runs it worked on, and how long it took.
+  results?: RunResult[];
+  seconds?: number | null;
 }
 
 interface EventsOut {
@@ -96,6 +108,8 @@ interface Turn {
   question: string | null;
   steps: Step[];
   answer: string | null;
+  results: RunResult[];
+  seconds: number | null;
   error: string | null;
   stopped: string | null;
 }
@@ -759,6 +773,7 @@ function TurnView({
               </ul>
             </div>
           ))}
+          <RunLinks results={turn.results} seconds={turn.seconds} />
         </div>
       )}
       {turn.error !== null && (
@@ -772,6 +787,64 @@ function TurnView({
         </p>
       )}
     </section>
+  );
+}
+
+/** How long an answer took: "3 min 12 s". */
+function took(seconds: number): string {
+  const whole = Math.round(seconds);
+  const minutes = Math.floor(whole / 60);
+  return minutes ? `${minutes} min ${whole % 60} s` : `${whole} s`;
+}
+
+/** The runs an answer worked on, each where PAC shows what was done, as the computing and
+ * inversion pages link it; and how long the answer took. */
+function RunLinks({
+  results,
+  seconds,
+}: {
+  results: RunResult[];
+  seconds: number | null;
+}) {
+  if (results.length === 0) return null;
+  return (
+    <div className="chat-runs">
+      {results.map((result, i) => {
+        const run = encodeURIComponent(result.folder);
+        const did = new Set(result.stages);
+        const curves = did.has("processing") || did.has("picking");
+        return (
+          <div key={result.folder} className="chat-run">
+            <span className="chat-run-name">{result.folder}</span>
+            {i === 0 && seconds !== null && (
+              <span className="chat-run-time">{took(seconds)}</span>
+            )}
+            <span className="run-next">
+              {curves && (
+                <Link to={`/dispersion_picking?run=${run}`}>
+                  Pick the curves <ArrowRightIcon size={13} />
+                </Link>
+              )}
+              {curves && (
+                <Link to={`/visualization?run=${run}&tab=dispersion`}>
+                  Review <ArrowRightIcon size={13} />
+                </Link>
+              )}
+              {did.has("inversion") && (
+                <Link to={`/visualization?run=${run}&tab=inversion`}>
+                  See the models <ArrowRightIcon size={13} />
+                </Link>
+              )}
+              {did.has("petro") && (
+                <Link to={`/visualization?run=${run}&tab=petro`}>
+                  See the soils <ArrowRightIcon size={13} />
+                </Link>
+              )}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -828,6 +901,8 @@ function turnsOf(events: ChatEvent[]): Turn[] {
         question: event.kind === "user" ? event.text : null,
         steps: [],
         answer: null,
+        results: [],
+        seconds: null,
         error: null,
         stopped: null,
       });
@@ -850,6 +925,8 @@ function turnsOf(events: ChatEvent[]): Turn[] {
       }
     } else if (event.kind === "answer") {
       turn.answer = event.text;
+      turn.results = event.results ?? [];
+      turn.seconds = event.seconds ?? null;
     } else if (event.kind === "stopped") {
       turn.stopped = event.text;
     } else {

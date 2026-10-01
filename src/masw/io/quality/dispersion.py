@@ -18,7 +18,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from masw.io.paths import workspace
-from masw.io.pick_origin import Origin, assistant_picked, pick_origin
+from masw.io.pick_origin import assistant_picked, checks_current_in, pick_origin
 from masw.io.quality.done import (
     most_common,
     record_ranges,
@@ -79,7 +79,7 @@ from sigpipe.algorithms.picking.dispersion.curve import (
     longest_reached_wavelength,
     min_resolvable_wavelength,
 )
-from sigpipe.base.dispersion_curve import DispersionCurve
+from sigpipe.base.dispersion_curve import DispersionCurve, Mode
 from sigpipe.base.dispersion_image import DispersionImage
 from sigpipe.base.stream import Stream
 from sigpipe.dataio.selection_plotting import SelectionScores, load_selection
@@ -92,6 +92,7 @@ from sigpipe.masw.quality.image import ImageLimits, coherent_columns, measure_im
 from sigpipe.masw.quality.measures import SignalLimits, measure_signal, selection_measures
 from sigpipe.masw.runs import RunManifest, load_image, window_folders, xmid_of
 from sigpipe.masw.runs.finding import IMAGE_FILE
+from sigpipe.masw.runs.origin import Origin
 from sigpipe.masw.windows import MASWWindow, nearest_offset
 
 logger = logging.getLogger(__name__)
@@ -163,10 +164,12 @@ def dispersion_overview(folder: str) -> Overview:
                 key=lambda one: (one.mode.number, one.mode.label),
             )
         )
-        picked_by = pick_origin(window, log, curve is not None)
+        picked_by = pick_origin(
+            window, log, [one.mode for one in saved.dispersion_curves] if saved is not None else ()
+        )
         if picked_by is not None:
             origins[picked_by] += 1
-        g2, g3, g4 = _results(log, unit, picked_by)
+        g2, g3, g4 = _results(log, window, picked_by)
         stats = curve_stats(curve) if curve is not None else None
         image, picks = _states(
             g2,
@@ -356,8 +359,8 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
     saved = load_curves(window)
     curves = saved.dispersion_curves if saved is not None else ()
     m0 = fundamental(window)
-    picked_by = pick_origin(window, log, bool(curves))
-    g2, g3, g4 = _results(log, unit, picked_by)
+    picked_by = pick_origin(window, log, [one.mode for one in curves])
+    g2, g3, g4 = _results(log, window, picked_by)
     lambda_min = min_resolvable_wavelength(image.acquisition) if image is not None else None
     lambda_max = longest_reached_wavelength(image.acquisition) if image is not None else None
     measured_image = (
@@ -381,8 +384,10 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
     )
     said: list[Sentence] = []
     # A pick changed by hand leaves the assistant's curve checks and picking attempts behind:
-    # none of them is of the pick now in the window.
+    # none of them is of the pick now in the window; nor after PAC picked it again itself, until
+    # the assistant judges that pick.
     judged = log is not None and picked_by != "hand"
+    current = judged and checks_current_in(window, log)
     by_hand = picked_by == "hand" and m0 is not None
     verdict = (
         Sentence(mark="pass", text="Picked by hand.")
@@ -412,7 +417,7 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         )
     if log is not None:
         said += _again(log.of(unit, "phase_shift"), "Imaged again")
-        if judged:
+        if current:
             said += _again(log.of(unit, "picking"), "Picked again")
     said += warnings(g2, g3, g4)
     # The image's measures; a passive or passive-active window's, its stacked correlations' and
@@ -455,7 +460,7 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         gates=tuple(gates),
         parts=(*parts, Part(label="curve", state=curve_state)),
         attempts=(
-            log.summaries(unit, "phase_shift") + (log.summaries(unit, "picking") if judged else ())
+            log.summaries(unit, "phase_shift") + (log.summaries(unit, "picking") if current else ())
             if log is not None
             else ()
         ),
@@ -476,16 +481,23 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
 
 
 def _results(
-    log: QCLog | None, unit: str, picked_by: Origin | None
+    log: QCLog | None, window: Path, picked_by: Origin | None
 ) -> tuple[GateResult | None, GateResult | None, GateResult | None]:
-    """G2's, G3's and G4's latest results on the window; G3's and G4's none once its pick was
-    changed by hand after them."""
+    """G2's, G3's and G4's latest results on the window; G3's and G4's none when they are not of
+    its pick now: picked by hand, or picked again in PAC after them."""
     if log is None:
         return None, None, None
+    unit = window.name
     g2 = log.result(unit, "phase_shift", "G2")
-    if picked_by == "hand":
+    if picked_by == "hand" or not checks_current_in(window, log):
         return g2, None, None
     return g2, log.result(unit, "picking", "G3"), log.result(unit, "picking", "G4")
+
+
+def _modes(window: Path) -> list[Mode]:
+    """The modes window folder `window` holds a curve of."""
+    saved = load_curves(window)
+    return [one.mode for one in saved.dispersion_curves] if saved is not None else []
 
 
 def _picks(
@@ -533,7 +545,8 @@ def _picks(
         said.append(
             Sentence(
                 mark="info",
-                text="Also picked: "
+                # Higher modes: a person's alone, the assistant picking M0.
+                text="Also picked by hand: "
                 + ", ".join(f"{one.label} ({one.n_points} points)" for one in others)
                 + ".",
             )
@@ -661,7 +674,7 @@ def _line_settings(
             _picking_setting(
                 log,
                 unit,
-                pick_origin(run_folder / unit, log, fundamental(run_folder / unit) is not None),
+                pick_origin(run_folder / unit, log, _modes(run_folder / unit)),
                 assistant_picked(run_folder / unit, log),
             ),
         )
