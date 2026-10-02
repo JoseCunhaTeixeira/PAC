@@ -117,13 +117,23 @@ def test_without_a_model_the_page_says_what_to_set(monkeypatch: pytest.MonkeyPat
     assert refused.status_code == 503 and "PACO_LLM_BASE_URL" in refused.json()["detail"]
 
 
-def test_a_model_server_that_does_not_answer_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PACO_LLM_BASE_URL", "http://127.0.0.1:9/v1")  # nothing listens there
-    monkeypatch.setenv("PACO_LLM_MODEL", "Qwen/Qwen3-8B")
+def test_an_empty_model_is_one_not_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    # As compose passes it when .env names none: the model is the user's choice, no default.
+    monkeypatch.setenv("PACO_LLM_BASE_URL", "http://model:8000/v1")
+    monkeypatch.setenv("PACO_LLM_MODEL", "")
 
     found = client.get("/agent/status").json()
 
-    assert not found["available"] and found["model"] == "Qwen/Qwen3-8B"
+    assert not found["available"] and "set PACO_LLM_MODEL" in found["reason"]
+
+
+def test_a_model_server_that_does_not_answer_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PACO_LLM_BASE_URL", "http://127.0.0.1:9/v1")  # nothing listens there
+    monkeypatch.setenv("PACO_LLM_MODEL", "Qwen/Qwen3-14B-FP8")
+
+    found = client.get("/agent/status").json()
+
+    assert not found["available"] and found["model"] == "Qwen/Qwen3-14B-FP8"
     assert "http://127.0.0.1:9/v1 does not answer" in found["reason"]
 
 

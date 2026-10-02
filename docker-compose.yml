@@ -33,7 +33,8 @@ services:
       # The assistant's model: the `model` service, the `tunnel` service
       # (http://tunnel:8001/v1), or a server elsewhere.
       PACO_LLM_BASE_URL: ${PACO_LLM_BASE_URL:-http://model:8000/v1}
-      PACO_LLM_MODEL: ${PACO_LLM_MODEL:-Qwen/Qwen3-8B}
+      # The model install_assistant.py writes in .env, the user's choice: no default.
+      PACO_LLM_MODEL: ${PACO_LLM_MODEL:-}
       PACO_LLM_API_KEY: ${PACO_LLM_API_KEY:-EMPTY}
       # Worker processes of the assistant's runs.
       PACO_WORKERS: ${PACO_WORKERS:-4}
@@ -54,12 +55,13 @@ services:
       - backend
     restart: unless-stopped
 
-  # The assistant's model (Qwen3-8B, about 17 GB on the GPU; set PACO_LLM_MODEL=Qwen/Qwen3-8B-FP8
-  # or Qwen/Qwen3-4B for a smaller card). The first start downloads it.
+  # The assistant's model, PACO_LLM_MODEL in .env (no default: install_assistant.py asks):
+  # Qwen/Qwen3-14B-FP8 on a 24 GB GPU, or Qwen/Qwen3-8B-FP8 on 16 GB, less performant, with
+  # VLLM_MAX_MODEL_LEN=12288. The first start downloads it.
   model:
     image: vllm/vllm-openai:v0.30.0
     command:
-      - --model=${PACO_LLM_MODEL:-Qwen/Qwen3-8B}
+      - --model=${PACO_LLM_MODEL:-}
       - --max-model-len=${VLLM_MAX_MODEL_LEN:-16384}
       # A model larger than one GPU, spread over several: their number.
       - --tensor-parallel-size=${VLLM_TENSOR_PARALLEL_SIZE:-1}
