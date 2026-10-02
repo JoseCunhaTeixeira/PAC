@@ -405,7 +405,7 @@ export PACO_LLM_BASE_URL=http://127.0.0.1:8001/v1    # the model server
 export PACO_LLM_MODEL=Qwen/Qwen3-8B-FP8              # the model it serves
 uv run uvicorn masw.api.main:app --host 127.0.0.1 --port 8000
 ```
-and the web app with `npm install && npm run dev` in `frontend/`. The assistant's processing uses half of the computer's cores by default: set `PACO_WORKERS` to change it.
+and the web app with `npm install && npm run dev` in `frontend/`. The assistant's processing uses half of the computer's cores by default: set `PACO_WORKERS` to change it. It keeps the windows' images it makes in `data/output/.cache` (2 GB at most, those used longest ago removed first), to take them again when a run makes the same ones: `PACO_CACHE_GB=0` keeps none, `PACO_CACHE_DIR` puts them elsewhere.
 
 ## License
 This project is under Creative Commons Attribution 4.0 International license, allowing re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited.
