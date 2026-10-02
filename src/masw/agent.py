@@ -1,6 +1,6 @@
 """PACo's agent in PAC: the chat page's conversations, each an agent in this process whose tools
 are PACo's, called in-process on PAC's own folders, so that its runs are PAC's runs. The model is
-served elsewhere, behind an OpenAI-compatible API (vLLM serving Qwen3-8B): PACo's settings
+served elsewhere, behind an OpenAI-compatible API (vLLM serving Qwen3-14B): PACo's settings
 PACO_LLM_BASE_URL and PACO_LLM_MODEL.
 
 PACo is optional (PAC's `agent` extra): without it, without a model, or with a model server that

@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 import matplotlib
+import pytest
 
 _ROOT = Path(tempfile.mkdtemp(prefix="pac-tests-"))
 # Removed when the session ends: every session writes about 120 MB there.
@@ -23,3 +24,17 @@ write_profiles(_ROOT / "input")
 
 # The API saves figures from worker threads: never a GUI backend.
 matplotlib.use("Agg")
+
+
+@pytest.fixture(autouse=True)
+def no_env_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The assistant's settings from the environment alone, never from a `.env` in the folder the
+    tests run from: a developer's own (their model, its context) would make the tests pass where
+    CI, which has none, fails."""
+    try:
+        from paco.agent.settings import AgentSettings
+        from paco.settings import Settings
+    except ImportError:  # PAC without its assistant
+        return
+    for settings in (AgentSettings, Settings):
+        monkeypatch.setitem(settings.model_config, "env_file", None)

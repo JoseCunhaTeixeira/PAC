@@ -14,7 +14,7 @@ PAC runs entirely **on your own computer**. You start it once, then use it throu
 - **Seismic inversion:** turns dispersion curves into shear-wave velocity profiles by Bayesian inversion (sigpipe). The number of layers is chosen by the data, or set by you; each model's dispersion curve is computed with [Disba](https://github.com/keurfonluu/disba).
 - **Petrophysical inversion:** computes soil profiles from dispersion data using the AI inverison model from [silex](https://github.com/JoseCunhaTeixeira/silex).
 - **User-friendly interface:** streamlined workflow with visualization capabilities.
-- **Assistant (optional):** an AI agent, PACo, that processes profiles for you when you ask it in plain words, checking the quality of every step. It needs a graphics card with 16 GB of memory, on your computer or on another machine: see [The assistant](#the-assistant-optional).
+- **Assistant (optional):** an AI agent, PACo, that processes profiles for you when you ask it in plain words, checking the quality of every step. It runs a language model, Qwen3-14B, on a graphics card with 24 GB of memory (on your computer or on another machine) or from an online service: see [The assistant](#the-assistant-optional).
 - **Python-based:** lightweight and extensible for custom modifications.
 
 ## Overview
@@ -197,7 +197,11 @@ The assistant is an AI agent, **PACo**, that works PAC for you. You ask it in pl
 
 You can work in the other pages while it answers, on other runs: while it writes a run, PAC's pages do not change that run (a pick there says the assistant is writing it; try again when it ends), and the assistant is refused a run one of PAC's pages or jobs writes (an inversion you started, say), and says so. Nothing is deleted: the results a step done again replaces are kept in the window's `replaced` folder. Its row in the menu shows a spinner while it works. Afterwards it is tinted with a dot until you open the assistant again: in the accent colour for a new answer, and in amber, pulsing, when the answer asks you to choose between options.
 
-It runs a language model (Qwen3-8B), which needs a **graphics card (GPU) with at least 16 GB of memory**. Everything stays on your own machines: the model does not run on the internet, and it never sees your seismic records, only short summaries of PAC's results. (A larger model, or one from an online service, is possible too: see [Another model](#another-model).)
+It runs a language model, which you choose when you install it:
+- **Qwen3-14B** (in FP8), the one to use: it needs a **graphics card (GPU) with 24 GB of memory**.
+- **Qwen3-8B** (in FP8) also works, on a GPU with 16 GB, but it follows your requests less reliably.
+
+On PACo's test scenarios, the 14B passed 74 of 75 plays, the 8B 68. Run on your own machines, everything stays there: the model never sees your seismic records, only short summaries of PAC's results. An online service can serve the model too: see [Another model](#another-model).
 
 The assistant is optional. Without it, the rest of PAC works the same, and its menu has no Assistant page.
 
@@ -209,13 +213,12 @@ The assistant is optional. Without it, the rest of PAC works the same, and its m
 | Your computer has no compatible GPU, but you can use a machine that has one (a lab workstation, a GPU server rented in the cloud) | [B: the model on a GPU machine](#b-the-model-on-a-gpu-machine) |
 | PAC runs on a server without a GPU, and you open it from your own computer | [C: PAC on a server](#c-pac-on-a-server) |
 | No compatible GPU anywhere | Nothing to do: PAC runs without the assistant, or use an online service ([Another model](#another-model)) |
-| You want a more powerful model than Qwen3-8B | [Another model](#another-model), after setup A or B |
+| You want another model, or an online service | [Another model](#another-model) |
 
 **Compatible GPUs** — you don't need to work this out yourself: in every setup, the command `install_assistant.py` reads the GPU and tells you.
-- **NVIDIA**, with 16 GB of memory or more, from the RTX 30 series on (compute capability 8.0 or newer): for example RTX 3090, 4080, 4090, 5080, RTX A4000, A5000, A6000, L4, A10, A100. On Linux, or on Windows with Docker Desktop.
-- **AMD**, with 16 GB of memory or more, on Linux: for example Radeon RX 7900 XT, 7900 XTX, 9070, 9070 XT.
-- With 24 GB or more, the model runs in full precision (Qwen3-8B); from 16 to 24 GB, in FP8 (Qwen3-8B-FP8), whose answers are nearly as good.
-- **Not compatible**: GPUs with less than 16 GB, and Macs (Docker cannot use their GPU). On such a computer, use setup B.
+- **NVIDIA**, from the RTX 30 series on (compute capability 8.0 or newer, for FP8), on Linux, or on Windows with Docker Desktop. With 24 GB, for Qwen3-14B: for example RTX 3090, 4090, 5090, RTX A5000, A6000, L4, A10, A100. With 16 GB, Qwen3-8B only: for example RTX 4080, 5080, RTX A4000.
+- **AMD**, on Linux. With 24 GB, for Qwen3-14B: for example Radeon RX 7900 XTX. With 16 to 20 GB, Qwen3-8B only: for example Radeon RX 7900 XT.
+- **Not compatible**: GPUs with less than 16 GB, and Macs (Docker cannot use their GPU). On such a computer, use setup B, or an online service.
 
 **What every setup needs:**
 - PAC installed from its source code ([Option 2](#option-2-build-and-run-from-the-source-code)): the published images of Option 1 don't include the assistant.
@@ -224,7 +227,7 @@ The assistant is optional. Without it, the rest of PAC works the same, and its m
   - **NVIDIA on Linux**: NVIDIA's driver (the command `nvidia-smi` then prints your card) and NVIDIA's [Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html), which lets Docker use the card.
   - **NVIDIA on Windows**: NVIDIA's Windows driver and Docker Desktop with its WSL 2 backend (the default).
   - **AMD on Linux**: the amdgpu driver with ROCm support, which recent distributions include: the command `ls /dev/kfd` then prints `/dev/kfd`.
-  - Disk space for the model: about 9 GB (FP8) or 17 GB (full precision), downloaded on the first start.
+  - Disk space for the model: about 16 GB for Qwen3-14B, 9 GB for Qwen3-8B, downloaded on the first start.
 
 ### A: everything on your computer
 
@@ -238,19 +241,23 @@ cd PAC/
 ```sh
 python3 install_assistant.py
 ```
-It asks whether you want the assistant: type `y` and press Enter. It then reads your GPU and prints its verdict, for example:
+It asks whether you want the assistant: type `y` and press Enter. It then asks which model to run (type `1` for Qwen3-14B, `2` for Qwen3-8B), reads your GPU and prints its verdict, for example:
 ```
-Advanced Micro Devices, Inc. [AMD/ATI] Navi 48 [Radeon RX 9070/9070 XT/9070 GRE] (rev c0) (15.9 GiB): compatible, the assistant will run Qwen/Qwen3-8B-FP8.
-Written to .env: PAC_EXTRAS=agent, COMPOSE_PROFILES=agent, PACO_LLM_MODEL=Qwen/Qwen3-8B-FP8, ...
+Which model should the assistant run?
+  1. Qwen/Qwen3-14B-FP8, recommended: 74 of PACo's 75 test plays, a GPU of 24 GB
+  2. Qwen/Qwen3-8B-FP8, less performant: 68 of PACo's 75 test plays, a GPU of 16 GB
+Type 1 or 2: 1
+NVIDIA GeForce RTX 4090 (24.0 GiB): compatible, the assistant will run Qwen/Qwen3-14B-FP8.
+Written to .env: PAC_EXTRAS=agent, COMPOSE_PROFILES=agent, PACO_LLM_MODEL=Qwen/Qwen3-14B-FP8, VLLM_MAX_MODEL_LEN=16384
 Next: docker compose up -d --build (the first start downloads the model)
 ```
-It writes your choice into a file named `.env`, in the `PAC` folder, which Docker reads in the next step. If your GPU is not compatible, it says why, and PAC is set up without the assistant.
+It writes your choice into a file named `.env`, in the `PAC` folder, which Docker reads in the next step. If your GPU cannot run the model you chose, it says why (and whether it runs the other one), and PAC is set up without the assistant. To choose without the question: `python3 install_assistant.py --with --model Qwen/Qwen3-14B-FP8`.
 
 **Step 3 — Build and start PAC:**
 ```sh
 docker compose up -d --build
 ```
-It is the same command as in Option 2: with the `.env` file, it also builds the assistant into PAC, and starts the model. The first time, Docker downloads the model (about 9 GB): count 10 to 30 minutes, depending on your connection.
+It is the same command as in Option 2: with the `.env` file, it also builds the assistant into PAC, and starts the model. The first time, Docker downloads the model (about 16 GB for Qwen3-14B, 9 GB for Qwen3-8B): count 10 to 30 minutes, depending on your connection.
 
 **Step 4 — Wait until the model is ready:**
 ```sh
@@ -285,11 +292,11 @@ git clone https://github.com/JoseCunhaTeixeira/PAC.git
 cd PAC/
 ```
 
-**Step 2 — Check its GPU:**
+**Step 2 — Choose the model, and check its GPU:**
 ```sh
 python3 install_assistant.py --with
 ```
-It must answer *compatible*.
+It asks which model to run, as in setup A, and must answer *compatible*.
 
 **Step 3 — Start the model, and only the model:**
 ```sh
@@ -316,7 +323,7 @@ python3 install_assistant.py --tunnel user@gpu-machine
 ```
 It logs into the GPU machine with the key, checks that the model answers, and writes `.env`:
 ```
-The model answers: the assistant will ask Qwen/Qwen3-8B-FP8 on user@gpu-machine, through SSH.
+The model answers: the assistant will ask Qwen/Qwen3-14B-FP8 on user@gpu-machine, through SSH.
 Next: docker compose up -d --build
 ```
 If something is missing, it says what to do: log in once, copy the key (Step 4), or start the model (Step 3).
@@ -344,32 +351,28 @@ Then start PAC with `docker compose up -d --build`, and open http://server:5173 
 
 ### Another model
 
-The assistant works with any language model served behind an **OpenAI-compatible chat API** that supports **tool calling** (also called "function calling"). Qwen3-8B is the smallest that does the job well, so that a 16 GB GPU is enough; a larger model follows your requests more reliably and writes clearer answers. There are two ways to get one: a larger Qwen3 on your own GPU, or an online service.
+The assistant works with any language model served behind an **OpenAI-compatible chat API** that supports **tool calling** (also called "function calling"). Qwen3-14B is the one to use: on PACo's test scenarios (75 plays), it passed 74, Qwen3-8B 68, and a 27B model of the same family 69, for twice the 14B's memory.
 
-**A larger Qwen3 on your GPU** (setups A and B). After `install_assistant.py`, open the `.env` file in the `PAC` folder (on the GPU machine, for setup B), change the model's line, and restart:
+**Change the model on your GPU** (setups A and B): run `python3 install_assistant.py` again and choose the other one, or open the `.env` file in the `PAC` folder (on the GPU machine, for setup B), change the model's lines, and restart:
 ```sh
 PACO_LLM_MODEL=Qwen/Qwen3-14B-FP8
+VLLM_MAX_MODEL_LEN=16384
 ```
 ```sh
 docker compose up -d
 ```
-The first start downloads the model (the "Weights" column below), which takes a while. Pick the largest model your GPU holds: it needs the model's weights plus 4 to 8 GB for the conversation.
+The first start downloads the model, which takes a while.
 
-| Model | Weights | GPU memory, about |
-|---|---|---|
-| `Qwen/Qwen3-8B-FP8` (what 16 GB cards run) | 9.4 GB | 16 GB |
-| `Qwen/Qwen3-8B` (what 24 GB cards run) | 16.4 GB | 24 GB |
-| `Qwen/Qwen3-14B-FP8` | 16.3 GB | 24 GB |
-| `Qwen/Qwen3-14B` | 29.5 GB | 40 GB |
-| `Qwen/Qwen3-30B-A3B-FP8` (fast: it computes with 3B of its parameters at a time) | 32.5 GB | 48 GB, or two 24 GB GPUs |
-| `Qwen/Qwen3-32B-FP8` | 34.3 GB | 48 GB, or two 24 GB GPUs |
-| `Qwen/Qwen3-32B` | 65.5 GB | 80 GB, or two 48 GB GPUs |
+| Model | Plays passed (of 75) | Weights | GPU memory |
+|---|---|---|---|
+| `Qwen/Qwen3-14B-FP8` | 74 | 16.3 GB | 24 GB |
+| `Qwen/Qwen3-8B-FP8` | 68 | 9.4 GB | 16 GB, with `VLLM_MAX_MODEL_LEN=12288` |
 
 - **Several GPUs:** add `VLLM_TENSOR_PARALLEL_SIZE=2` to `.env` (the number of GPUs), and the model is spread over them.
-- **The model does not start** and `docker compose logs model` says the memory is too small: add `VLLM_MAX_MODEL_LEN=12288` to `.env` (the conversation's length, 16384 by default; below 12288, long requests may not fit), or choose a smaller model.
-- **Other model families** (Llama, Mistral, Gemma…) also run in vLLM, but each writes its tool calls its own way: in `docker-compose.yml`'s `model` service, replace `--tool-call-parser=hermes` with the family's parser, and remove `--reasoning-parser=qwen3` (see vLLM's documentation on tool calling).
+- **The model does not start** and `docker compose logs model` says the memory is too small: lower `VLLM_MAX_MODEL_LEN` in `.env` (the conversation's length; below 12288, long requests may not fit), or choose a model your GPU holds.
+- **Other model families** (Llama, Mistral, Gemma…) also run in vLLM, but each writes its tool calls its own way: in `docker-compose.yml`'s `model` service, replace `--tool-call-parser=hermes` with the family's parser, and remove `--reasoning-parser=qwen3` (see vLLM's documentation on tool calling). Measure such a model before relying on it (below).
 
-**An online service** (no GPU needed). Several companies serve large models behind an OpenAI-compatible API. From the service, you need three things: the API's address (it ends in `/v1`), the model's name, and an API key. Then, in the `PAC` folder:
+**An online service** (no GPU needed). Several companies serve models behind an OpenAI-compatible API; choose one that serves Qwen3-14B. From the service, you need three things: the API's address (it ends in `/v1`), the model's name, and an API key. Then, in the `PAC` folder:
 ```sh
 python3 install_assistant.py --remote https://api.example.com/v1 --model <the model's name> --api-key <your key>
 docker compose up -d --build
@@ -383,7 +386,7 @@ What the service then receives: your messages to the assistant, the descriptions
 PACO_LLM_BASE_URL=https://api.example.com/v1 PACO_LLM_MODEL=<the model's name> PACO_LLM_API_KEY=<your key> uv run --extra agent uvicorn masw.api.main:app --host 127.0.0.1 --port 8000
 ```
 
-**Try a model before relying on it.** Ask it a few requests from the Assistant page, and review its runs in the other pages. For a measure, PACo's repository has an evaluation that plays the assistant's test scenarios with a model and scores them: `uv run paco-evaluate --repeat 3`, with the model's three settings in PACo's `.env` (see [PACo's README](https://github.com/JoseCunhaTeixeira/PACo#run)). Compare its score with Qwen3-8B's.
+**Try a model before relying on it.** Ask it a few requests from the Assistant page, and review its runs in the other pages. For a measure, PACo's repository has an evaluation that plays the assistant's test scenarios with a model and scores them: `uv run paco-evaluate`, with the model's settings in PACo's `.env` (see [PACo's README](https://github.com/JoseCunhaTeixeira/PACo#the-model)). Compare its score with Qwen3-14B's, 74 of 75.
 
 ### If something goes wrong
 
@@ -398,13 +401,15 @@ PACO_LLM_BASE_URL=https://api.example.com/v1 PACO_LLM_MODEL=<the model's name> P
 | The assistant made a choice you disagree with | Tell it, in the same conversation: *use windows of 24 receivers*, *invert with 3 layers*. **New conversation** starts afresh. |
 
 ### For developers (without Docker)
-With the source code and [uv](https://docs.astral.sh/uv/), and a model server at hand (for example vLLM):
+With the source code and [uv](https://docs.astral.sh/uv/), and a model server at hand (for example vLLM, serving Qwen3-14B):
 ```sh
 uv sync --extra agent                                # PAC with PACo, the assistant
 export PACO_LLM_BASE_URL=http://127.0.0.1:8001/v1    # the model server
-export PACO_LLM_MODEL=Qwen/Qwen3-8B-FP8              # the model it serves
+export PACO_LLM_MODEL=Qwen/Qwen3-14B-FP8             # the model it serves
+export PACO_LLM_CONTEXT=16384                        # its context (vLLM's --max-model-len)
 uv run uvicorn masw.api.main:app --host 127.0.0.1 --port 8000
 ```
+The three settings can also go in a `.env` file in the `PAC` folder, which the backend reads when started from there (Docker reads it too: with Docker, let `install_assistant.py` write it).
 and the web app with `npm install && npm run dev` in `frontend/`. The assistant's processing uses half of the computer's cores by default: set `PACO_WORKERS` to change it. It keeps the windows' images it makes in `data/output/.cache` (2 GB at most, those used longest ago removed first), to take them again when a run makes the same ones: `PACO_CACHE_GB=0` keeps none, `PACO_CACHE_DIR` puts them elsewhere.
 
 ## License
