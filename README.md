@@ -12,10 +12,9 @@ PAC runs entirely **on your own computer**. You start it once, then use it throu
 - **Signal processing tools:** uses an automatic source detection algorithm combined with seismic interferometry.
 - **Automated dispersion analysis:** extracts and visualizes dispersion images and curves.
 - **Seismic inversion:** turns dispersion curves into shear-wave velocity profiles by Bayesian inversion (sigpipe). The number of layers is chosen by the data, or set by you; each model's dispersion curve is computed with [Disba](https://github.com/keurfonluu/disba).
-- **Petrophysical inversion:** computes soil profiles from dispersion data using the AI inverison model from [silex](https://github.com/JoseCunhaTeixeira/silex).
+- **Petrophysical inversion:** computes soil profiles from dispersion data using the AI inversion model from [silex](https://github.com/JoseCunhaTeixeira/silex).
 - **User-friendly interface:** streamlined workflow with visualization capabilities.
 - **Assistant (optional):** an AI agent, PACo, that processes profiles for you when you ask it in plain words, checking the quality of every step. It runs a language model, Qwen3-14B, on a graphics card with 24 GB of memory (on your computer or on another machine) or from an online service: see [The assistant](#the-assistant-optional).
-- **Python-based:** lightweight and extensible for custom modifications.
 
 ## Overview
 <img width="1643" height="1738" alt="pac-home" src="https://github.com/user-attachments/assets/c060f45f-52aa-4c34-a6b5-7689c2f9b046" />
@@ -41,7 +40,7 @@ If a version number is printed, you're good to go. On Windows and macOS, keep th
 Both options give you the exact same app at http://localhost:5173.
 
 ### Option 1: Run the published docker images (recommended, no clone needed)
-A backend image and a frontend image are built and published to GitHub Container Registry on every push to `main` ([`ghcr.io/josecunhateixeira/pac-backend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-backend), [`ghcr.io/josecunhateixeira/pac-frontend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-frontend)). Docker downloads and runs them for you — no source code needed. (Advanced: besides `latest`, every commit is also tagged `sha-<short-sha>`, so you can pin to or roll back to a specific version instead of always tracking the newest one.)
+A backend image and a frontend image are built and published to GitHub Container Registry on every push to `main` ([`ghcr.io/josecunhateixeira/pac-backend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-backend), [`ghcr.io/josecunhateixeira/pac-frontend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-frontend)). Docker downloads and runs them for you — no source code needed. (Every commit is also tagged `sha-<short-sha>`, to pin a version.)
 
 **Step 1 — Create a folder for PAC.** Pick any location you like (home folder, Documents, …). Inside it, PAC needs two data subfolders: `data/input` (where you'll put your seismic records) and `data/output` (where PAC writes its results).
 
@@ -176,13 +175,13 @@ PAC looks for your recordings in `data/input/` and writes its results to `data/o
 
 The Dispersion Picking, Seismic Inversion, Petrophysical Inversion and Visualization pages list the runs, the most recent first, and open on it. Results computed by earlier versions of PAC, straight in `output/<profile>/`, are listed too.
 
-The **Visualization** page shows one run at a time. First, what it was made with: who made it (you, or the assistant), the length and step of its windows, the shots they stack, the phase shift's band, and each setting with where it comes from and why. Then the line from above: the shots (stars), the receivers (inverted triangles) and the windows, coloured by their quality at the stage you choose (records, dispersion, seismic inversion, petrophysics). Click a window, or step with the ← and → keys, to see the shots its dispersion image stacks and why it leaves out the others, its image and picks, its velocity model against depth down to the depth its data inform, the model's fit to the picked curve, and every check's measures. The line's sections, below, mark the window you selected; a click on them selects another.
+The **Visualization** page shows one run: how it was made (by you or the assistant, each setting with where it comes from), the line with its windows coloured by quality at each stage, and for the window you select its image, picks, velocity model and checks.
 
 To process your own data, simply drop a profile folder like the above into `data/input/` — no restart needed.
 
 **About the demo profiles:** an empty `data/input` (a freshly created folder, as in Option 1) gets seeded on first start with two demo profiles, `active_p1` and `passive_p1`, so there's something to try immediately. A `data/input` that already has content — your own profile folders, or the demo data committed with the source code in Option 2 — is left untouched; add your own profile folders alongside or instead of the demo ones.
 
-**About your results:** results survive stopping/removing the containers only because `data/output` is shared with your computer (bind-mounted). Removing that mount — or running the image directly without `-v` — would lose the results when the container is removed.
+**About your results:** they are written to `data/output` on your computer, so stopping or removing the containers keeps them.
 
 ### Troubleshooting
 - **`'docker' is not recognized` / `docker: command not found`** — Docker isn't installed, or the terminal was opened before installing it. Install [Docker](https://docs.docker.com/get-docker/), then open a **new** terminal and try again.
@@ -195,7 +194,7 @@ To process your own data, simply drop a profile folder like the above into `data
 
 The assistant is an AI agent, **PACo**, that works PAC for you. You ask it in plain words — *"Process active_p1 and give me its dispersion curves"* — and it runs PAC's processing, checks the quality of every step (and retries what it can), picks the dispersion curves, inverts them into velocity models if you asked for them (or into soils and a water table, if you asked for those), then tells you what it did and which settings it changed. Its results are ordinary PAC runs: you open them in the other pages, to review or correct them.
 
-You can work in the other pages while it answers, on other runs: while it writes a run, PAC's pages do not change that run (a pick there says the assistant is writing it; try again when it ends), and the assistant is refused a run one of PAC's pages or jobs writes (an inversion you started, say), and says so. Nothing is deleted: the results a step done again replaces are kept in the window's `replaced` folder. Its row in the menu shows a spinner while it works. Afterwards it is tinted with a dot until you open the assistant again: in the accent colour for a new answer, and in amber, pulsing, when the answer asks you to choose between options.
+You can keep working in PAC's other pages while it answers: a run one side is writing is refused to the other until it ends. Nothing is deleted: results a step replaces are kept in the window's `replaced` folder. The Assistant entry of the menu shows when it is working, and when an answer waits for your choice.
 
 It runs a language model, **Qwen3-14B** (in FP8), which needs a **graphics card (GPU) with 24 GB of memory**. Run on your own machines, everything stays there: the model never sees your seismic records, only short summaries of PAC's results. An online service can serve the model too: see [The model](#the-model).
 
@@ -366,11 +365,6 @@ The command checks that the service answers and serves that model, then writes t
 
 What the service then receives: your messages to the assistant, the descriptions of PACo's tools, and what the tools return, that is the quality gates' summaries (profile and run names, settings, verdicts, velocities and depths). Your records, dispersion images and models stay on your computer. Check that this suits your data's rules before using an online service. Services charge by use: one request, such as processing and picking a profile, takes a few tens of thousands of tokens.
 
-**Without Docker** (developers): give the backend the three settings when you start it:
-```sh
-PACO_LLM_BASE_URL=https://api.example.com/v1 PACO_LLM_MODEL=<the model's name> PACO_LLM_API_KEY=<your key> uv run --extra agent uvicorn masw.api.main:app --host 127.0.0.1 --port 8000
-```
-
 ### If something goes wrong
 
 | What you see | What to do |
@@ -392,8 +386,9 @@ export PACO_LLM_MODEL=Qwen/Qwen3-14B-FP8             # the model it serves
 export PACO_LLM_CONTEXT=16384                        # its context (vLLM's --max-model-len)
 uv run uvicorn masw.api.main:app --host 127.0.0.1 --port 8000
 ```
-The three settings can also go in a `.env` file in the `PAC` folder, which the backend reads when started from there (Docker reads it too: with Docker, let `install_assistant.py` write it).
-and the web app with `npm install && npm run dev` in `frontend/`. The assistant's processing uses half of the computer's cores by default: set `PACO_WORKERS` to change it. It keeps the windows' images it makes in `data/output/.cache` (2 GB at most, those used longest ago removed first), to take them again when a run makes the same ones: `PACO_CACHE_GB=0` keeps none, `PACO_CACHE_DIR` puts them elsewhere.
+and the web app with `npm install && npm run dev` in `frontend/`. With an online service, also set `PACO_LLM_API_KEY`. These settings can instead go in a `.env` file in the `PAC` folder, which the backend reads when started from there.
+
+The assistant's processing uses half of the computer's cores (`PACO_WORKERS` to change it), and keeps the windows' images it makes in `data/output/.cache`, at most 2 GB, to take them again when a run makes the same ones (`PACO_CACHE_GB=0` keeps none).
 
 ## License
 This project is under Creative Commons Attribution 4.0 International license, allowing re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited.
