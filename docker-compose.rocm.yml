@@ -4,9 +4,8 @@
 #   PAC_EXTRAS=agent docker compose -f docker-compose.yml -f docker-compose.rocm.yml \
 #     --profile agent up -d --build
 #
-# vLLM's 4-bit formats (AWQ, GPTQ) do not run on AMD GPUs: the models run in FP8.
-# Qwen/Qwen3-14B-FP8 needs a 24 GB card; on a 16 GB card, Qwen/Qwen3-8B-FP8 runs with
-# VLLM_MAX_MODEL_LEN=12288, less performant.
+# vLLM's 4-bit formats (AWQ, GPTQ) do not run on AMD GPUs: Qwen/Qwen3-14B-FP8 runs in FP8, on a
+# 24 GB card.
 
 services:
   model:

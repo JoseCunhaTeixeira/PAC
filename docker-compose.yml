@@ -33,7 +33,7 @@ services:
       # The assistant's model: the `model` service, the `tunnel` service
       # (http://tunnel:8001/v1), or a server elsewhere.
       PACO_LLM_BASE_URL: ${PACO_LLM_BASE_URL:-http://model:8000/v1}
-      # The model install_assistant.py writes in .env, the user's choice: no default.
+      # Qwen/Qwen3-14B-FP8, as install_assistant.py writes it in .env.
       PACO_LLM_MODEL: ${PACO_LLM_MODEL:-}
       PACO_LLM_API_KEY: ${PACO_LLM_API_KEY:-EMPTY}
       # Worker processes of the assistant's runs.
@@ -55,9 +55,8 @@ services:
       - backend
     restart: unless-stopped
 
-  # The assistant's model, PACO_LLM_MODEL in .env (no default: install_assistant.py asks):
-  # Qwen/Qwen3-14B-FP8 on a 24 GB GPU, or Qwen/Qwen3-8B-FP8 on 16 GB, less performant, with
-  # VLLM_MAX_MODEL_LEN=12288. The first start downloads it.
+  # The assistant's model, Qwen/Qwen3-14B-FP8 (PACO_LLM_MODEL in .env, which install_assistant.py
+  # writes), on a 24 GB GPU. The first start downloads it.
   model:
     image: vllm/vllm-openai:v0.30.0
     command:

@@ -2,11 +2,9 @@
 PAC's install step (install_assistant.py) checks before it installs the assistant. The standard
 library only: it runs on the host, before PAC is installed.
 
-The model is the user's choice, among those PACo was measured with (MODELS): Qwen3-14B in FP8,
-recommended, on a GPU of 24 GB or more; Qwen3-8B in FP8, less performant, on 16 GB or more.
-Compatible: an NVIDIA GPU (CUDA, compute capability 8.0 or newer, for FP8) or an AMD one (ROCm,
-Linux) with the memory the model needs, which Docker can reach. The smaller models that fit
-below 16 GB, such as Qwen3-4B, are too weak for PACo.
+The assistant's model is Qwen3-14B in FP8 (MODEL). Compatible: an NVIDIA GPU (CUDA, compute
+capability 8.0 or newer, for FP8) or an AMD one (ROCm, Linux) with 24 GB or more, which Docker
+can reach.
 
 Python 3.9 or newer: the host's python3, not PAC's."""
 
@@ -31,29 +29,11 @@ from typing import Optional
 GIB = 2**30
 
 
-@dataclass(frozen=True)
-class Model:
-    """A model the assistant runs on this machine's GPU, as PACo's scenarios measured it."""
-
-    name: str
-    card_gb: int  # the GPU's memory it needs
-    # The same, as the card reports it: a little less (a 16 GB card, 15.9 GiB).
-    min_vram_gib: float
-    context: int  # the conversation's tokens that fit beside its weights on that card
-    standing: str
-    passed: int  # of PACo's 75 test plays
-
-    @property
-    def said(self) -> str:
-        return f"{self.standing}: {self.passed} of PACo's 75 test plays, a GPU of {self.card_gb} GB"
-
-
-RECOMMENDED = "Qwen/Qwen3-14B-FP8"
-SMALLER = "Qwen/Qwen3-8B-FP8"
-MODELS = {
-    RECOMMENDED: Model(RECOMMENDED, 24, 23.0, 16_384, "recommended", 74),
-    SMALLER: Model(SMALLER, 16, 15.0, 12_288, "less performant", 68),
-}
+MODEL = "Qwen/Qwen3-14B-FP8"
+# The GPU memory it needs, as a card reports it: a little less than its size (24 GB, 23.99 GiB).
+MIN_VRAM_GIB = 23.0
+# The conversation's tokens that fit beside its weights on that card.
+CONTEXT = 16_384
 # vLLM's FP8 kernels on NVIDIA start with Ampere.
 MIN_CUDA_CAPABILITY = 8.0
 # The .env lines the assistant owns: set when it is installed, removed when it is not.
@@ -149,15 +129,14 @@ def amd_gpus(drm: Path = Path("/sys/class/drm"), runner: Runner = run) -> list[G
 
 
 def check(
-    model: Model,
     system: str | None = None,
     runner: Runner = run,
     drm: Path = Path("/sys/class/drm"),
     dev: Path = Path("/dev"),
 ) -> Verdict:
-    """Whether `model` can run on this machine's GPU, through Docker."""
+    """Whether the assistant's model can run on this machine's GPU, through Docker."""
     system = system or platform.system()
-    size = f"{model.card_gb} GB"
+    size = "24 GB"
     if system == "Darwin":
         return Verdict(
             False,
@@ -173,14 +152,8 @@ def check(
         )
     gpu = max(gpus, key=lambda one: one.vram_gib)
     about = f"{gpu.name} ({gpu.vram_gib:.1f} GiB)"
-    if gpu.vram_gib < model.min_vram_gib:
-        fits = [
-            other.name
-            for other in MODELS.values()
-            if other.name != model.name and gpu.vram_gib >= other.min_vram_gib
-        ]
-        also = f" It runs {fits[0]} ({MODELS[fits[0]].standing})." if fits else ""
-        return Verdict(False, f"{about}: {model.name} needs a GPU of {size} or more.{also}", gpu)
+    if gpu.vram_gib < MIN_VRAM_GIB:
+        return Verdict(False, f"{about}: {MODEL} needs a GPU of {size} or more.", gpu)
     capability = gpu.compute_capability
     if gpu.vendor == "nvidia" and (capability or 0) < MIN_CUDA_CAPABILITY:
         return Verdict(
@@ -194,28 +167,12 @@ def check(
     settings = {
         "PAC_EXTRAS": "agent",
         "COMPOSE_PROFILES": "agent",
-        "PACO_LLM_MODEL": model.name,
-        "VLLM_MAX_MODEL_LEN": str(model.context),
+        "PACO_LLM_MODEL": MODEL,
+        "VLLM_MAX_MODEL_LEN": str(CONTEXT),
     }
     if gpu.vendor == "amd":
         settings["COMPOSE_FILE"] = "docker-compose.yml:docker-compose.rocm.yml"
-    return Verdict(
-        True, f"{about}: compatible, the assistant will run {model.name}.", gpu, settings
-    )
-
-
-def chosen_model(named: str | None, ask: Callable[[str], str] = input) -> Model | None:
-    """The model the user names (--model), else the one they choose when asked; None for an
-    answer that chooses none. No model is chosen for them."""
-    if named is None:
-        listed = "\n".join(
-            f"  {number}. {model.name}, {model.said}"
-            for number, model in enumerate(MODELS.values(), start=1)
-        )
-        reply = ask(f"Which model should the assistant run?\n{listed}\nType 1 or 2: ").strip()
-        by_number = dict(enumerate(MODELS, start=1))
-        named = by_number.get(int(reply)) if reply.isdigit() else None
-    return MODELS.get(named) if named is not None else None
+    return Verdict(True, f"{about}: compatible, the assistant will run {MODEL}.", gpu, settings)
 
 
 def _docker_misses(gpu: Gpu, runner: Runner, dev: Path, system: str) -> str | None:
@@ -411,10 +368,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="the assistant with a model served at URL (behind HTTPS, with --api-key)",
     )
     parser.add_argument(
-        "--model",
-        help=f"the model: on this machine's GPU, {RECOMMENDED} (recommended, 24 GB) or "
-        f"{SMALLER} (less performant, 16 GB), asked when left out; with --tunnel or --remote, "
-        "the one the server serves (its only one when left out)",
+        "--model", help="the model a remote server serves (its only one by default)"
     )
     parser.add_argument("--api-key", help="the key a remote server asks for (its VLLM_API_KEY)")
     parser.add_argument("--env", type=Path, default=Path(".env"), help="compose's .env file")
@@ -464,9 +418,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     answer = args.answer
     if answer is None:
         reply = input(
-            "Install PAC's assistant, an AI agent that processes profiles for you? On this "
-            "machine, it needs an NVIDIA or AMD GPU of 24 GB (16 GB for a less performant "
-            "model). [y/N] "
+            "Install PAC's assistant, an AI agent that processes profiles for you? It needs an "
+            "NVIDIA or AMD GPU of 24 GB or more. [y/N] "
         )
         answer = "yes" if reply.strip().lower() in ("y", "yes") else "no"
     if answer == "no":
@@ -475,11 +428,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Next: docker compose up -d --build")
         return 0
 
-    model = chosen_model(args.model)
-    if model is None:
-        print(f"Not installed: choose a model, 1 or 2 (or --model {RECOMMENDED}).")
-        return 1
-    verdict = check(model)
+    verdict = check()
     print(verdict.reason)
     write_env(args.env, verdict.settings)
     if not verdict.compatible:
