@@ -3,7 +3,7 @@ machine's GPU and writes compose's .env, before `docker compose up -d --build`.
 
     python3 install_assistant.py            # asks, then checks the GPU
     python3 install_assistant.py --without  # PAC alone
-    python3 install_assistant.py --remote http://gpu-host:8001/v1 --model Qwen/Qwen3-8B-FP8
+    python3 install_assistant.py --remote http://gpu-host:8001/v1 --model Qwen/Qwen3-14B-FP8
 """
 
 import sys

@@ -234,9 +234,9 @@ cd PAC/
 
 **Step 2 — Check the GPU.** In the `PAC` folder:
 ```sh
-python3 install_assistant.py --with --model Qwen/Qwen3-14B-FP8
+python3 install_assistant.py
 ```
-It reads your GPU and prints its verdict, for example:
+It asks whether you want the assistant: type `y` and press Enter. It then reads your GPU and prints its verdict, for example:
 ```
 NVIDIA GeForce RTX 4090 (24.0 GiB): compatible, the assistant will run Qwen/Qwen3-14B-FP8.
 Written to .env: PAC_EXTRAS=agent, COMPOSE_PROFILES=agent, PACO_LLM_MODEL=Qwen/Qwen3-14B-FP8, VLLM_MAX_MODEL_LEN=16384
@@ -285,7 +285,7 @@ cd PAC/
 
 **Step 2 — Check its GPU:**
 ```sh
-python3 install_assistant.py --with --model Qwen/Qwen3-14B-FP8
+python3 install_assistant.py --with
 ```
 It must answer *compatible*.
 
@@ -346,6 +346,16 @@ The assistant runs Qwen3-14B (`Qwen/Qwen3-14B-FP8`), served by vLLM behind an Op
 
 - **Several GPUs:** add `VLLM_TENSOR_PARALLEL_SIZE=2` to `.env` (the number of GPUs), and the model is spread over them.
 - **The model does not start** and `docker compose logs model` says the memory is too small: lower `VLLM_MAX_MODEL_LEN` in `.env` (the conversation's length, 16384 by default; below 12288, long requests may not fit).
+
+**Another model.** The assistant works with any model served behind an OpenAI-compatible chat API that supports tool calling: set `PACO_LLM_MODEL` (and `VLLM_MAX_MODEL_LEN`, its context) in `.env`, then `docker compose up -d`. A model of another family also needs its own tool-call parser in `docker-compose.yml`'s `model` service, in place of `--tool-call-parser=hermes`, and no `--reasoning-parser=qwen3`. PACo's tests (15 scenarios of the assistant's rules, played 5 times each) gave:
+
+| Model | GPU memory | PACo's tests (75 plays) |
+|---|---|---|
+| `Qwen/Qwen3-14B-FP8` (the one PACo runs) | 24 GB | 74 passed |
+| `Qwen/Qwen3-8B-FP8` | 16 GB, with a 12,288-token context | 68 passed |
+| `Qwen/Qwen3.8-27B` | 40 to 48 GB (FP8) | 69 passed |
+| `Qwen/Qwen3-30B-A3B-FP8` | 48 GB, or two 24 GB GPUs | not tested |
+| `Qwen/Qwen3-32B-FP8` | 48 GB, or two 24 GB GPUs | not tested |
 
 **An online service** (no GPU needed). Several companies serve models behind an OpenAI-compatible API; choose one that serves Qwen3-14B. From the service, you need three things: the API's address (it ends in `/v1`), the model's name, and an API key. Then, in the `PAC` folder:
 ```sh
