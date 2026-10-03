@@ -28,12 +28,12 @@ from masw.api.main import app
 from masw.io.paths import OUTPUT_DIR
 
 client = TestClient(app)
-# A message's scope asking every stage: PACo's tools behave as without a scope.
-EVERYTHING = {
+# The scope of a request to process: that stage asked, nothing named.
+PROCESS = {
     "process": True,
-    "pick": True,
-    "invert": True,
-    "soils": True,
+    "pick": False,
+    "invert": False,
+    "soils": False,
     "profile": None,
     "run_id": None,
     "positions_m": [],
@@ -47,14 +47,20 @@ EVERYTHING = {
     "replace_hand_work": False,
     "option": None,
 }
+# A message asking no stage (what exists, a greeting): a look.
+LOOK = {**PROCESS, "process": False}
 
 
-# How an answer to such a message starts.
-SCOPE_LINE = "Scope: process, pick, invert, soils."
+# How an answer to a look starts.
+LOOK_LINE = "Scope: look only."
 
 
-class FillsEverything:
-    """A stand-in's forms: every message asks every stage; every answer is its draft."""
+class FillsForms:
+    """A stand-in's forms: each message's scope from `scopes`, in order (the last one again
+    once they run out); every answer is its draft."""
+
+    def __init__(self, *scopes: dict[str, Any]) -> None:
+        self._scopes = list(scopes)
 
     async def fill(
         self,
@@ -64,13 +70,15 @@ class FillsEverything:
         if schema == ANSWER_SCHEMA:
             draft = str(messages[-1].get("content")).split("\nAnswer: ", 1)[1]
             return Filled(content=json.dumps({"said": draft, "question": None}))
-        return Filled(content=json.dumps(EVERYTHING))
+        scope = self._scopes.pop(0) if len(self._scopes) > 1 else self._scopes[0]
+        return Filled(content=json.dumps(scope))
 
 
-class ScriptedModel(FillsEverything):
+class ScriptedModel(FillsForms):
     """Asks for the profiles (inspect), then answers with what the tool returned."""
 
     def __init__(self) -> None:
+        super().__init__(LOOK)  # its messages ask what there is
         self.seen: list[list[ChatCompletionMessageParam]] = []
         self.tools: list[ChatCompletionFunctionToolParam] = []
 
@@ -150,7 +158,7 @@ def test_a_conversation_runs_pacos_tools_on_pacs_folders() -> None:
     assert body["events"][1]["text"] == '-> inspect({"what": "profiles"})'
     # PACo's tool listed PAC's own profiles (the tests' synthetic ones).
     # The answer, after the scope PACo read from the message.
-    assert body["events"][2]["text"] == f"{SCOPE_LINE}\n\nYour profiles: noise, shots."
+    assert body["events"][2]["text"] == f"{LOOK_LINE}\n\nYour profiles: noise, shots."
     assert not body["closed"] and body["progress"] is None
     # The menu learns of the answer: one ended, asking nothing.
     listed = {one["id"]: one for one in client.get("/agent/sessions").json()}
@@ -185,10 +193,11 @@ def _shots_runs() -> set[Path]:
     return set(runs.iterdir()) if runs.exists() else set()
 
 
-class Stopped(FillsEverything):
+class Stopped(FillsForms):
     """Asks to process the shots finely, long enough to be stopped, then answers plainly."""
 
     def __init__(self) -> None:
+        super().__init__(PROCESS, LOOK)  # the request, then messages asking nothing
         self.seen: list[list[ChatCompletionMessageParam]] = []
 
     async def __call__(
@@ -249,12 +258,12 @@ def test_an_answer_stopped_undoes_its_work_and_the_conversation_goes_on(
     body = _events(session, 4)
     assert [event["text"] for event in body["events"]] == [
         "Are you there?",
-        f"{SCOPE_LINE}\n\nStill here.",
+        f"{LOOK_LINE}\n\nStill here.",
     ]
     from paco.agent.scope import Scope
 
     # The new message, with the scope PACo read from it.
-    read = Scope.model_validate(EVERYTHING).for_model(None)
+    read = Scope.model_validate(LOOK).for_model(None)
     assert model.seen[1][-2:] == [
         {"role": "assistant", "content": NOTED},
         {"role": "user", "content": f"Are you there?\n\n{read}"},
@@ -332,8 +341,11 @@ def test_an_answer_says_the_runs_it_worked_on_and_what_it_did() -> None:
     assert result.stages == ("processing", "picking", "inversion")
 
 
-class ProcessesShots(FillsEverything):
+class ProcessesShots(FillsForms):
     """Asks to process the shots, then answers plainly."""
+
+    def __init__(self) -> None:
+        super().__init__(PROCESS)
 
     async def __call__(
         self,

@@ -350,7 +350,7 @@ The assistant runs Qwen3-14B (`Qwen/Qwen3-14B-FP8`), served by vLLM behind an Op
 
 | Model | GPU memory | PACo's tests (75 plays) |
 |---|---|---|
-| `Qwen/Qwen3-14B-FP8` (the one PACo runs) | 24 GB | 74 passed |
+| `Qwen/Qwen3-14B-FP8` (the one PACo runs) | 24 GB | 75 passed |
 | `Qwen/Qwen3-8B-FP8` | 16 GB, with a 12,288-token context | 68 passed |
 | `Qwen/Qwen3.8-27B` | 40 to 48 GB (FP8) | 69 passed |
 | `Qwen/Qwen3-30B-A3B-FP8` | 48 GB, or two 24 GB GPUs | not tested |
