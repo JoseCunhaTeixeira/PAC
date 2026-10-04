@@ -229,19 +229,34 @@ export function triggerLabel(triggeredBy: string): string {
 }
 
 /** A stage's parameters an attempt changed, as "key value" pairs, nested keys dotted. */
-export function changes(parameters: Record<string, unknown>, prefix = ""): string[] {
-  const found: string[] = [];
+export function changes(parameters: Record<string, unknown>): string[] {
+  return Object.entries(flat(parameters)).map(([name, value]) => shown(name, value));
+}
+
+/** What `after` changed of `before`: the values that differ, as "key value" pairs. */
+export function changedSince(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
+  const was = flat(before);
+  return Object.entries(flat(after))
+    .filter(([name, value]) => JSON.stringify(was[name]) !== JSON.stringify(value))
+    .map(([name, value]) => shown(name, value));
+}
+
+/** The parameters by dotted key: nested objects opened, lists kept whole. */
+function flat(parameters: Record<string, unknown>, prefix = "", into: Record<string, unknown> = {}) {
   for (const [key, value] of Object.entries(parameters)) {
     const name = prefix ? `${prefix}.${key}` : key;
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-      found.push(...changes(value as Record<string, unknown>, name));
-    } else if (Array.isArray(value)) {
-      found.push(`${name} [${value.length}]`);
+      flat(value as Record<string, unknown>, name, into);
     } else {
-      found.push(`${name} ${typeof value === "number" ? num(value, 4) : String(value)}`);
+      into[name] = value;
     }
   }
-  return found;
+  return into;
+}
+
+function shown(name: string, value: unknown): string {
+  if (Array.isArray(value)) return `${name} [${value.length}]`;
+  return `${name} ${typeof value === "number" ? num(value, 4) : String(value)}`;
 }
 
 /** Where a setting comes from, in two words. */

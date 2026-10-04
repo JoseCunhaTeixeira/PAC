@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from masw.io.quality.files import merged, preset_stage
-from masw.io.quality.log import LINE, Attempt, QCLog
+from masw.io.quality.log import LINE, LINE_RULES, Attempt, QCLog
 from masw.io.quality.runs import DEFAULT, GIVEN, PAC, is_default
 from masw.io.quality.view import Origin, Setting, number, plural, span
 from sigpipe.masw.presets import make_preset
@@ -97,7 +97,16 @@ class _Origins:
 
     def __init__(self, manifest: RunManifest, log: QCLog | None, unit: str, log_stage: str) -> None:
         self.log = log
-        self.own = [one for one in log.of(unit, log_stage) if one.parameters] if log else []
+        # A change of the line's that made the unit again says what it changed, the line's.
+        self.own = (
+            [
+                one
+                for one in log.of(unit, log_stage)
+                if one.parameters and one.triggered_by not in LINE_RULES
+            ]
+            if log
+            else []
+        )
         self.line = log.latest(LINE, log_stage) if log is not None else None
         # The muting the line's mute trial kept, logged with the line's images.
         self.trial = (

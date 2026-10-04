@@ -882,6 +882,81 @@ def test_an_assistant_run_card_says_why_its_windows_are_what_they_are(judged: st
     assert card["trials"][0]["wavelengths_m"] == [2.0, 12.0]
 
 
+def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
+    target = OUTPUT_DIR / judged
+    standard = {"method": "mute", "vmin": 80.0, "vmax": 1500.0, "width": 0.05}
+    mutes = {
+        "chosen": "none",
+        "trials": [
+            {"candidate": "none", "muting": None, "verdicts": ["pass", "pass"], "passed": 2},
+            {
+                "candidate": "standard",
+                "muting": standard,
+                "verdicts": ["pass", "reject"],
+                "passed": 1,
+            },
+        ],
+    }
+    (target / "mute.json").write_text(json.dumps(mutes))
+    tried = {
+        "stage": "preprocessing",
+        "overrides": {"muting": standard},
+        "change": "muting mute 80 to 1500 m/s, width 0.05 s",
+        "flag": "G2:weak_coherence",
+        "asked_by": 3,
+        "xmids": [2.5, 5.5],
+        "before": 0,
+        "after": 2,
+        "kept": True,
+        "note": "muting mute 80 to 1500 m/s, width 0.05 s: the line loop, ...",
+    }
+    # A try an older line_loop.json keeps without its change: the note says it.
+    older = {
+        **{key: value for key, value in tried.items() if key != "change"},
+        "kept": False,
+        "note": "Tried for the line, not kept: trigger t0 0.003 s, asked by 90 windows "
+        "(G1:shifted_trigger): 2 of 2 trial windows passing G3 against 2, under 2 more.",
+    }
+    (target / "line_loop.json").write_text(json.dumps({"trials": [tried, older]}))
+    try:
+        card = client.get(f"/quality/run/{judged}").json()
+    finally:
+        (target / "mute.json").unlink()
+        (target / "line_loop.json").unlink()
+
+    # Each trial of the line in its table: what was tried, how many trial windows passed, kept.
+    assert [(one["candidate"], one["passed"], one["kept"]) for one in card["mutes"]] == [
+        ("none", 2, True),
+        ("standard", 1, False),
+    ]
+    line, older = card["line_tries"]
+    assert (line["change"], line["before"], line["after"], line["kept"]) == (
+        "muting mute 80 to 1500 m/s, width 0.05 s",
+        0,
+        2,
+        True,
+    )
+    assert (older["change"], older["kept"]) == ("trigger t0 0.003 s", False)
+    assert card["segments"] == []
+
+
+def test_a_record_made_again_by_a_change_of_the_lines_settings_is_the_lines(run: str) -> None:
+    manifest = read_manifest(OUTPUT_DIR / run)
+    assert manifest is not None
+    muting = {**MUTE, "width": 0.05}
+    # The line loop's mute: on the line's attempt, and as what each record ran with again.
+    log = QCLog(
+        [
+            _retried(LINE, "phase_shift", "initial", {"muting": muting}),
+            _retried("1.mseed", "preprocessing", "line change", {"muting": muting}),
+        ]
+    )
+
+    setting = next(one for one in record_settings(manifest, log, "1.mseed") if one.key == "muting")
+
+    assert (setting.origin, setting.why) == ("rule", "the checks changed it on the line")
+
+
 def test_an_assistant_run_shows_g1_and_what_it_redid(judged: str) -> None:
     overview = client.get(f"/quality/records/overview/{judged}").json()
 

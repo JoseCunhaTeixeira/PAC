@@ -17,6 +17,12 @@ from sigpipe.masw.runs.history import log_entries
 LOG_FILE = "qc_log.jsonl"
 CONFIG_FILE = "qc_config.json"
 COHERENCE_FILE = "coherence.json"
+MUTE_FILE = "mute.json"  # the mute trial's candidates and the one kept
+SEGMENTS_FILE = "segments.json"  # a passive line's segments trial
+LINE_LOOP_FILE = "line_loop.json"  # the changes of the line's settings tried, and kept
+# The triggers of a record or window made again for a change of the line's settings (the mute
+# trial's, the line loop's, a redo of the line's): the line's change, not the unit's own.
+LINE_RULES = ("mute trial", "line change")
 LINE = "line"  # the unit of a line-level result
 
 type Verdict = Literal["pass", "retry", "reject"]
