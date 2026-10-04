@@ -1288,6 +1288,22 @@ def test_a_windows_records_muted_each_with_its_own_pulse_are_said_together(run: 
     assert card["preprocessing"].why.endswith("done again for 2 records (G2: 2 weak coherence)")
 
 
+def test_records_made_again_by_a_change_of_the_lines_settings_are_said_so(run: str) -> None:
+    manifest = read_manifest(OUTPUT_DIR / run)
+    assert manifest is not None
+    # The assistant's line loop: every record made again with the line's new settings, none of
+    # its own.
+    log = QCLog(
+        [_retried(name, "preprocessing", "line change", {}) for name in ("1.mseed", "2.mseed")]
+    )
+
+    card = {one.key: one for one in processing_settings(OUTPUT_DIR / run, manifest, log, None)}
+
+    assert card["preprocessing"].why.endswith(
+        "done again for 2 records (a change of the line's settings: 2)"
+    )
+
+
 def test_a_window_says_the_muting_most_of_its_records_ran_with() -> None:
     def muted(width: float) -> Setting:
         return Setting(

@@ -53,6 +53,7 @@ OWN_ENTRIES = ("mode", "masw", "dispersion")
 _CAUSES = {
     "backtrack": "after an earlier stage",
     "mute trial": "the mute trial",
+    "line change": "a change of the line's settings",
     "asked": "at the request",
 }
 
