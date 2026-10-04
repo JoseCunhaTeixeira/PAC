@@ -54,9 +54,10 @@ export function PetroPanel({
   const [comparisonAxis, setComparisonAxis] = useState<"frequency" | "wavelength">("frequency");
   // The window's curve's axis.
   const [curveAxis, setCurveAxis] = useState<CurveAxis>("frequency");
-  // Each section card's own: its sections smoothed along the line, as the Vs section can be.
-  const [soilSmoothing, setSoilSmoothing] = useState(false);
-  const [rockSmoothing, setRockSmoothing] = useState(false);
+  // Each section card's own: its sections smoothed along the line unless switched off, as the
+  // Vs section.
+  const [soilSmoothing, setSoilSmoothing] = useState(true);
+  const [rockSmoothing, setRockSmoothing] = useState(true);
   const xmid = selected ? xmidOf(selected) : null;
   const card = useJson<PetroCard>(xmid !== null ? `${API}/quality/petro/card/${at(folder)}/${xmid}` : null);
   const columns = (overview?.cells ?? []).filter((cell) => cell.status !== "none").length;

@@ -21,8 +21,12 @@ from paco.qc.g1_signal import SignalThresholds, judge_signal
 from masw.api.main import app
 from masw.io.paths import OUTPUT_DIR, workspace
 from masw.io.quality.dispersion import curve_metrics
+from masw.io.quality.done import in_common, record_settings, records_in_common
+from masw.io.quality.files import read_manifest
+from masw.io.quality.log import LINE, Attempt, QCLog
 from masw.io.quality.records import before_muting, signal_metrics, thresholds_of
-from masw.io.quality.view import DASH
+from masw.io.quality.runs import processing_settings
+from masw.io.quality.view import DASH, Setting
 from sigpipe.base import (
     Coordinate,
     DispersionCurve,
@@ -130,6 +134,8 @@ def test_a_pac_run_card_says_its_windows_came_from_pacs_form(run: str) -> None:
     assert (settings["length"]["value"], settings["length"]["detail"]) == ("5 m", "6 receivers")
     assert (settings["step"]["value"], settings["step"]["detail"]) == ("3 m", "3 receivers")
     assert settings["length"]["origin"] == "pac" and "set by hand" in settings["length"]["why"]
+    # The phase shift as the preset has it: the preset's default, as the windows' cards say.
+    assert settings["band"]["origin"] == "default"
     assert settings["reach"]["value"] == "any distance"
     assert settings["records"]["value"] == "2 of 2"
     assert card["trials"] == []
@@ -871,7 +877,7 @@ def test_an_assistant_run_card_says_why_its_windows_are_what_they_are(judged: st
     assert settings["step"]["origin"] == "given"  # 3, not the preset's 1
     assert settings["band"]["origin"] == "default"
     assert settings["preprocessing"]["why"].endswith(
-        "done again for 1 record by the signal check (G1: 1 shifted trigger)"
+        "done again for 1 record (G1: 1 shifted trigger)"
     )
     assert card["trials"][0]["wavelengths_m"] == [2.0, 12.0]
 
@@ -1229,3 +1235,97 @@ def test_an_inversion_whose_data_chose_the_layers_shows_how_its_chains_moved(run
     (gate,) = card["gates"]
     acceptance = [metric for metric in gate["metrics"] if metric["name"] == "acceptance"]
     assert [(one["threshold"], one["bound"]) for one in acceptance] == [(20, "min"), (30, "max")]
+
+
+def _retried(unit: str, stage: str, triggered_by: str, parameters: dict[str, Any]) -> Attempt:
+    """An attempt of the assistant's: a redo's fresh first one, or the line's mute trial."""
+    return Attempt(
+        unit=unit,
+        stage=stage,
+        attempt=1,
+        parameters=parameters,
+        triggered_by=triggered_by,
+        started_at=datetime.now(UTC),
+        status="succeeded",
+    )
+
+
+MUTE = {"method": "mute", "vmin": 80.0, "vmax": 1500.0}
+
+
+def test_a_windows_records_muted_each_with_its_own_pulse_are_said_together(run: str) -> None:
+    manifest = read_manifest(OUTPUT_DIR / run)
+    assert manifest is not None
+    # A redo after the image check: each record muted afresh with its own pulse's width.
+    log = QCLog(
+        [
+            _retried(
+                "1.mseed",
+                "preprocessing",
+                "G2:weak_coherence",
+                {"muting": {**MUTE, "width": 0.035}},
+            ),
+            _retried(
+                "2.mseed",
+                "preprocessing",
+                "G2:weak_coherence",
+                {"muting": {**MUTE, "width": 0.094}},
+            ),
+        ]
+    )
+
+    settings = {one.key: one for one in records_in_common(manifest, log, ["1.mseed", "2.mseed"])}
+
+    muting = settings["muting"]
+    assert (muting.value, muting.detail) == (
+        "mute",
+        f"vmin 80 m/s, vmax 1,500 m/s, width 0.035{DASH}0.094 s",
+    )
+    assert muting.origin == "rule" and not muting.spread
+    assert muting.why == "the checks changed it on 2 records (G2 weak coherence)"
+    # The run's card counts a redo's fresh attempts as done again.
+    card = {one.key: one for one in processing_settings(OUTPUT_DIR / run, manifest, log, None)}
+    assert card["preprocessing"].why.endswith("done again for 2 records (G2: 2 weak coherence)")
+
+
+def test_a_window_says_the_muting_most_of_its_records_ran_with() -> None:
+    def muted(width: float) -> Setting:
+        return Setting(
+            key="muting",
+            label="Muting",
+            value="mute",
+            detail=f"vmin 80 m/s, vmax 1,500 m/s, width {width} s",
+            why=f"the checks changed it on this unit: attempt 1 (G2 weak coherence): width {width} s",
+            origin="rule",
+        )
+
+    unmuted = Setting(
+        key="muting", label="Muting", value="none", why="the preset's default", origin="default"
+    )
+    widths = {"r1": 0.035, "r2": 0.05, "r3": 0.094}
+    per_unit = {name: [muted(width)] for name, width in widths.items()}
+    per_unit |= {"r4": [unmuted], "r5": [unmuted]}
+    values = {name: {"muting": {**MUTE, "width": width}} for name, width in widths.items()}
+    values |= {name: {"muting": {"method": "none"}} for name in ("r4", "r5")}
+    causes = {name: {"muting": ["G2 weak coherence"]} for name in widths}
+    causes |= {name: {"muting": []} for name in ("r4", "r5")}
+
+    (muting,) = in_common(per_unit, values, causes, "record")
+
+    # Three of five muted, each its own width: mute, not the two left unmuted.
+    assert (muting.value, muting.detail) == (
+        "mute",
+        f"vmin 80 m/s, vmax 1,500 m/s, width 0.035{DASH}0.094 s",
+    )
+    assert muting.spread == "among its records: none on r4, r5"
+
+
+def test_a_records_muting_the_mute_trial_chose_comes_from_the_data(run: str) -> None:
+    manifest = read_manifest(OUTPUT_DIR / run)
+    assert manifest is not None
+    # The line's mute trial: its muting logged with the line's images.
+    log = QCLog([_retried(LINE, "phase_shift", "initial", {"muting": {**MUTE, "width": 0.05}})])
+
+    muting = next(one for one in record_settings(manifest, log, "1.mseed") if one.key == "muting")
+
+    assert (muting.origin, muting.why) == ("rule", "the checks changed it on the line")

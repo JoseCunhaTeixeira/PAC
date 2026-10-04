@@ -312,7 +312,8 @@ export function InversionPanel({
   onSelect: (key: string) => void;
 }) {
   const model = MODEL;
-  const [smoothing, setSmoothing] = useState(false);
+  // The section smoothed along the line unless switched off.
+  const [smoothing, setSmoothing] = useState(true);
   // The depth each window's data inform, over the sections.
   const [informed, setInformed] = useState(true);
   const colours = canvasPalette(useTheme());

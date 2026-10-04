@@ -26,7 +26,6 @@ from masw.io.quality.log import (
     COHERENCE_FILE,
     LINE,
     LOG_FILE,
-    Attempt,
     QCLog,
     config_section,
     line_receivers,
@@ -50,6 +49,12 @@ MIN_PASS_SHARE = 0.8  # the assistant's default: the trial windows a window leng
 MAX_UNCERTAINTY = 0.2  # the assistant's default: picks precise enough to stop at a length
 # The preset's entries the card says apart from the preprocessing's stages.
 OWN_ENTRIES = ("mode", "masw", "dispersion")
+# What asked for a stage to run again, other than a check's flag, in words.
+_CAUSES = {
+    "backtrack": "after an earlier stage",
+    "mute trial": "the mute trial",
+    "asked": "at the request",
+}
 
 
 class LengthTrial(BaseModel):
@@ -216,15 +221,16 @@ def processing_settings(
     notes = line.notes if line is not None else ()
 
     def origin(stages: Iterable[str], keys: Iterable[str] | None = None) -> tuple[Origin, str]:
-        """Where the values of `stages` (their `keys`, or all) come from, when no rule set them."""
+        """Where the values of `stages` (their `keys`, or all) come from, when no rule set them:
+        the preset's default as the units' cards say it, else the request or PAC's form."""
         same = all(
             _same(preset[stage].get(key), defaults.get(stage, {}).get(key))
             for stage in stages
             for key in (keys if keys is not None else preset[stage])
         )
-        if log is None:
-            return "pac", PAC + (f" ({DEFAULT})" if same else "")
-        return ("default", DEFAULT) if same else ("given", GIVEN)
+        if same:
+            return "default", DEFAULT
+        return ("given", GIVEN) if log is not None else ("pac", PAC)
 
     def rule(stage: str, key: str) -> str | None:
         """The assistant's reason for the value it set on the line, from its note."""
@@ -305,7 +311,7 @@ def processing_settings(
     dispersion: dict[str, Any] = preset["dispersion"]
     band = rule("dispersion", "fmax") or rule("dispersion", "fmin")
     where, why = ("rule", band) if band is not None else origin(["dispersion"])
-    narrowed = _again(log, "phase_shift", "window", "by the image check (G2)")
+    narrowed = _again(log, "phase_shift", "window")
     settings.append(
         Setting(
             key="band",
@@ -317,8 +323,15 @@ def processing_settings(
         )
     )
     stages = [name for name in preset if name not in OWN_ENTRIES]
-    where, why = origin(stages)
-    redone = _again(log, "preprocessing", "record", "by the signal check (G1)")
+    # A record step the checks chose for the whole line (the mute trial's muting, logged with
+    # the line's images).
+    chosen = [name for name in stages if name in changed]
+    where, why = (
+        ("rule", f"the checks chose its {', '.join(chosen)} on the line")
+        if chosen
+        else origin(stages)
+    )
+    redone = _again(log, "preprocessing", "record")
     settings.append(
         Setting(
             key="preprocessing",
@@ -422,30 +435,30 @@ def _trace_reasons(log: QCLog | None, traces: Mapping[str, tuple[int, ...]]) -> 
     )
 
 
-def _again(log: QCLog | None, stage: str, unit: str, by: str) -> str:
-    """The units the assistant ran `stage` again on, and what asked for it: "8 windows by the
-    image check (G2: 6 aliasing, 2 band at fmax)"."""
+def _again(log: QCLog | None, stage: str, unit: str) -> str:
+    """The units the assistant ran `stage` again on, and what asked for it, by check: "8 windows
+    (G2: 6 aliasing, 2 band at fmax)". A redo's fresh first attempt counts, as every attempt
+    after the first run."""
     again = [
         attempt
         for attempt in (log.attempts if log is not None else ())
-        if attempt.stage == stage and attempt.unit != LINE and attempt.attempt > 1
+        if attempt.stage == stage and attempt.unit != LINE and attempt.triggered_by != "initial"
     ]
     if not again:
         return ""
     units = {attempt.unit for attempt in again}
-    asked = Counter(_trigger(attempt) for attempt in again).most_common()
-    return (
-        f"{plural(len(units), unit)} {by.removesuffix(')')}: "
-        + ", ".join(f"{count} {name}" for name, count in asked)
-        + ")"
+    causes: dict[str, Counter[str]] = {}
+    for attempt in again:
+        gate, _, flag = attempt.triggered_by.partition(":")
+        if flag:
+            causes.setdefault(gate, Counter())[flag_text(flag)] += 1
+        else:
+            causes.setdefault(_CAUSES.get(gate, gate), Counter())[""] += 1
+    said = "; ".join(
+        f"{cause}: " + ", ".join(f"{count} {what}".rstrip() for what, count in counts.most_common())
+        for cause, counts in causes.items()
     )
-
-
-def _trigger(attempt: Attempt) -> str:
-    """What asked for an attempt, in words: the flag's name, or an earlier stage run again."""
-    if attempt.triggered_by == "backtrack":
-        return "after an earlier stage"
-    return flag_text(attempt.triggered_by.split(":", 1)[-1])
+    return f"{plural(len(units), unit)} ({said})"
 
 
 def stage_text(name: str, values: Mapping[str, Any]) -> str:
@@ -475,6 +488,15 @@ def _value(value: object) -> str:
     if isinstance(value, bool) or not isinstance(value, int | float):
         return str(value)
     return number(value)
+
+
+def is_default(values: object, defaults: object) -> bool:
+    """Whether a stage's `values` are its preset's `defaults`, field by field as `_same` says."""
+    if isinstance(values, Mapping) and isinstance(defaults, Mapping):
+        found = cast(Mapping[str, Any], values)
+        expected = cast(Mapping[str, Any], defaults)
+        return all(_same(value, expected.get(key)) for key, value in found.items())
+    return _same(cast(object, values), defaults)
 
 
 def _same(value: object, default: object) -> bool:

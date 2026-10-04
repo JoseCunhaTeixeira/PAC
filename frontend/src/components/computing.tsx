@@ -320,8 +320,8 @@ export function WindowsCard({
   );
 }
 
-/** Each shot cut: muting on, the trigger's shift first (left empty, each record's own, from its
- * file), then a time window and the arrivals between two velocities, each bound left empty when
+/** Each shot cut: muting on, the trigger's shift first (left empty, 0: no shift), then a time
+ * window and the arrivals between two velocities, each bound left empty when
  * none, the shot's pulse kept after the slowest; the record previewed, what the muting removes
  * veiled. Off, none of it applies. Each number kept to what the records hold, as sigpipe checks
  * it: the shortest record, the data that ends first once moved (see records.ts). A passive line
@@ -339,9 +339,8 @@ export function MutingRow({
   gather?: boolean;
   trigger?: { t0: number | null; setT0: (t0: number) => void };
 }) {
-  // What the files' headers say of the trigger, optional (a file may not say it: no shift for
-  // it): one value, in all of them or some, each value when they differ (left empty, each record
-  // moved by its own), or nothing.
+  // What the files' headers say of the trigger, as the field's hint (a file may not say it): one
+  // value, in all of them or some, each value when they differ, or nothing.
   const known = (acquisition.triggers ?? []).filter((t): t is number => t !== null);
   const said = distinct(known);
   const where = known.length === acquisition.files.length ? "the files' headers" : `${known.length} of ${acquisition.files.length} files' headers`;

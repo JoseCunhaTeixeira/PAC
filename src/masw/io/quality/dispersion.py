@@ -20,9 +20,7 @@ from pydantic import BaseModel, ConfigDict
 from masw.io.paths import workspace
 from masw.io.pick_origin import assistant_picked, checks_current_in, pick_origin
 from masw.io.quality.done import (
-    most_common,
-    record_ranges,
-    record_settings,
+    records_in_common,
     window_ranges,
     window_settings,
     with_spreads,
@@ -647,7 +645,7 @@ def _records_settings(
     window: Path, manifest: RunManifest, log: QCLog | None
 ) -> tuple[Setting, ...]:
     """How the records window folder `window` stacks were preprocessed, before its image was
-    made of them: what most ran with, the others named (most_common); none when it says no
+    made of them: what most ran with, the others named (records_in_common); none when it says no
     records."""
     path = window / "window.json"
     if not path.exists():
@@ -657,11 +655,7 @@ def _records_settings(
         for one in MASWWindow.model_validate_json(path.read_text()).selected_files
         if one.name not in manifest.exclusions.records
     ]
-    return most_common(
-        {name: record_settings(manifest, log, name) for name in names},
-        "record",
-        ranges=record_ranges(manifest, log, names),
-    )
+    return records_in_common(manifest, log, names)
 
 
 def _line_settings(
