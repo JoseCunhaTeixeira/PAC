@@ -182,6 +182,14 @@ const LABELS: Record<string, [string, string, string]> = {
   redo: ["Redid the {stage}", "Redoing the {stage}", "Redo the {stage}"],
 };
 
+// Why PACo's host left a call unmade, in the user's words.
+const NOT_RUN: Record<string, string> = {
+  "the user chooses first": "waiting for your choice",
+  "outside the scope": "your message did not ask for it",
+  "made already": "made already in this answer",
+  "the same call just failed": "it had just failed",
+};
+
 // PACo's answer lists, last, the parameters the stages ran with, the settings the gates changed
 // and the user's settings kept as given, each under its title line.
 const LISTS = ["Parameters used", "Settings the gates changed", "Settings kept as you gave them"];
@@ -878,7 +886,7 @@ function StepRow({
         {step.note && (
           <span className="chat-step-note">
             {step.state === "refused"
-              ? `Not run: ${step.note}`
+              ? `Not run: ${NOT_RUN[step.note] ?? step.note}`
               : `Failed: ${step.note}`}
           </span>
         )}
