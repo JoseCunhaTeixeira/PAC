@@ -48,6 +48,38 @@ export interface LengthTrial {
   compared: boolean;
 }
 
+// A mute the assistant's mute trial tried on trial windows along the line.
+export interface MuteTried {
+  candidate: string; // none, standard, wider, cone, tight
+  muting: Record<string, unknown> | null;
+  passed: number;
+  verdicts: string[]; // one a trial window
+  wavelengths_m: [number, number] | null;
+  kept: boolean;
+}
+
+// A passive line's segments and FK selection the assistant tried, the line's own first.
+export interface SegmentsTried {
+  segment_s: number;
+  threshold: number | null; // null: no selection
+  wavelength_span: number | null;
+  coherence: number | null;
+  kept: boolean;
+  own: boolean;
+}
+
+// A change of the line's settings the assistant's line loop tried.
+export interface LineTried {
+  change: string;
+  flag: string; // the check that asked it most: "G2:weak_coherence"
+  asked_by: number; // windows asking it
+  xmids: number[]; // the trial windows
+  before: number; // trial windows passing G3 with the line's settings before it
+  after: number; // with it
+  kept: boolean;
+  note: string;
+}
+
 export interface StageCount {
   key: StageKey;
   done: number;
@@ -72,6 +104,9 @@ export interface RunCard {
   records: boolean;
   settings: Setting[];
   trials: LengthTrial[];
+  mutes?: MuteTried[];
+  segments?: SegmentsTried[];
+  line_tries?: LineTried[];
   stages: StageCount[];
   receivers: number[];
   sources: Record<string, number>;

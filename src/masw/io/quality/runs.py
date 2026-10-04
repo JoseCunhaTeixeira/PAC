@@ -25,7 +25,10 @@ from masw.io.quality.files import (
 from masw.io.quality.log import (
     COHERENCE_FILE,
     LINE,
+    LINE_LOOP_FILE,
     LOG_FILE,
+    MUTE_FILE,
+    SEGMENTS_FILE,
     QCLog,
     config_section,
     line_receivers,
@@ -82,6 +85,51 @@ class LengthChoice(BaseModel):
     length: int
     trials: tuple[LengthTrial, ...]
     notes: tuple[str, ...] = ()
+
+
+class MuteTried(BaseModel):
+    """One mute the assistant's mute trial tried on trial windows along the line (mute.json):
+    none, the standard one, or the gathers' cone, widened or tight."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    candidate: str
+    muting: dict[str, Any] | None = None  # None: no mute
+    passed: int  # trial windows G3 passed
+    verdicts: tuple[str, ...] = ()  # one a trial window
+    wavelengths_m: tuple[float, float] | None = None  # median shortest and longest passed
+    kept: bool = False
+
+
+class SegmentsTried(BaseModel):
+    """One segment length and FK selection the assistant tried on a passive line's trial windows
+    (segments.json): the line's own first."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    segment_s: float
+    threshold: float | None = None  # the FK selection's; None: no selection
+    wavelength_span: float | None = None  # the picks' longest wavelength over their shortest
+    coherence: float | None = None  # the images' along the picks
+    kept: bool = False
+    own: bool = False  # the line's own settings, which the others are judged against
+
+
+class LineTried(BaseModel):
+    """One change of the line's settings the assistant's line loop tried (line_loop.json): the
+    change, the check that asked it and how many windows asked, the trial windows passing G3
+    with the line's settings before it and with it, and whether it was kept for the line."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    change: str = ""  # an older line_loop.json says it in the note alone
+    flag: str
+    asked_by: int
+    xmids: tuple[float, ...] = ()
+    before: int
+    after: int
+    kept: bool
+    note: str = ""
 
 
 class RunEntry(BaseModel):
@@ -144,6 +192,9 @@ class RunCard(BaseModel):
     records: bool  # the profile's records are in the input folder: they can be shown
     settings: tuple[Setting, ...]
     trials: tuple[LengthTrial, ...]  # the window lengths the assistant tried, when it chose one
+    mutes: tuple[MuteTried, ...] = ()  # the mutes its mute trial tried
+    segments: tuple[SegmentsTried, ...] = ()  # a passive line's segments it tried
+    line_tries: tuple[LineTried, ...] = ()  # the changes of the line's settings it tried
     stages: tuple[StageCount, ...]
     receivers: tuple[float, ...]  # every receiver's x
     sources: dict[str, float]  # each record's shot x, by file name; none on a passive line
@@ -196,6 +247,9 @@ def run_card(folder: str) -> RunCard:
         records=(INPUT_DIR / manifest.profile.name).is_dir(),
         settings=processing_settings(run_folder, manifest, read_log(run_folder), choice),
         trials=choice.trials if choice is not None else (),
+        mutes=mutes_tried(run_folder),
+        segments=segments_tried(run_folder),
+        line_tries=line_tried(run_folder),
         stages=_stages(run_folder, manifest),
         receivers=line.receivers,
         sources=line.sources,
@@ -207,6 +261,77 @@ def run_card(folder: str) -> RunCard:
 def length_choice(run_folder: Path) -> LengthChoice | None:
     path = run_folder / COHERENCE_FILE
     return LengthChoice.model_validate_json(path.read_text()) if path.exists() else None
+
+
+class _MuteFile(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    chosen: str | None = None
+    trials: tuple[MuteTried, ...] = ()
+
+
+class _SegmentsFile(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    baseline: SegmentsTried | None = None
+    candidates: tuple[SegmentsTried, ...] = ()
+    chosen: SegmentsTried | None = None
+
+
+class _LineLoopFile(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    trials: tuple[LineTried, ...] = ()
+
+
+def mutes_tried(run_folder: Path) -> tuple[MuteTried, ...]:
+    """The mutes the run's mute trial tried, the one kept said; none without a trial."""
+    path = run_folder / MUTE_FILE
+    if not path.exists():
+        return ()
+    found = _MuteFile.model_validate_json(path.read_text())
+    return tuple(
+        one.model_copy(update={"kept": one.candidate == found.chosen}) for one in found.trials
+    )
+
+
+def segments_tried(run_folder: Path) -> tuple[SegmentsTried, ...]:
+    """The segments a passive run's trial tried, the line's own first, the one kept said."""
+    path = run_folder / SEGMENTS_FILE
+    if not path.exists():
+        return ()
+    found = _SegmentsFile.model_validate_json(path.read_text())
+    own, chosen = found.baseline, found.chosen
+    tried = ([own] if own is not None else []) + [one for one in found.candidates if one != own]
+    return tuple(
+        one.model_copy(
+            update={"own": one is own, "kept": one == chosen if chosen is not None else one is own}
+        )
+        for one in tried
+    )
+
+
+def line_tried(run_folder: Path) -> tuple[LineTried, ...]:
+    """The changes of the line's settings the run's line loop tried, in order."""
+    path = run_folder / LINE_LOOP_FILE
+    if not path.exists():
+        return ()
+    trials = _LineLoopFile.model_validate_json(path.read_text()).trials
+    return tuple(
+        one if one.change else one.model_copy(update={"change": _change_of(one.note)})
+        for one in trials
+    )
+
+
+# How the line loop words a change it did not keep; one it kept, the change then ": the line loop".
+_NOT_KEPT = "Tried for the line, not kept: "
+
+
+def _change_of(note: str) -> str:
+    """The change a try's note words, for a line_loop.json older than its `change`."""
+    if note.startswith(_NOT_KEPT):
+        return note.removeprefix(_NOT_KEPT).split(", asked by ")[0]
+    return note.split(": the line loop")[0]
 
 
 def processing_settings(

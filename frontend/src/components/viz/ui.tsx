@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { BoxTools, Callout, Segmented } from "../kit";
 import {
   capitalized,
+  changedSince,
   changes,
   metricLabel,
   metricLimit,
@@ -410,7 +411,7 @@ export function AttemptTable<T extends AttemptSummary>({
           </tr>
         </thead>
         <tbody>
-          {attempts.map((attempt) => (
+          {attempts.map((attempt, index) => (
             <tr key={`${attempt.stage}-${attempt.attempt}`}>
               <td className="num">{attempt.attempt}</td>
               <td>{attempt.stage.replaceAll("_", " ")}</td>
@@ -425,7 +426,7 @@ export function AttemptTable<T extends AttemptSummary>({
                       .map(([gate, verdict]) => `${gate} ${verdict}`)
                       .join(", ") || "—"}
               </td>
-              <td>{changedText(attempt.parameters)}</td>
+              <td>{changedText(attempt, attempts.slice(0, index).findLast((one) => one.stage === attempt.stage))}</td>
             </tr>
           ))}
         </tbody>
@@ -434,9 +435,13 @@ export function AttemptTable<T extends AttemptSummary>({
   );
 }
 
-/** What an attempt set, short: the long lists (every layer's bounds) counted, not spelt out. */
-function changedText(parameters: Record<string, unknown>): string {
-  const said = changes(parameters);
+/** What an attempt changed, short: against the stage's attempt before it, the values that
+ * differ; a first run changes nothing (the run's own); with none before it (a stage started
+ * afresh), what it ran with. The long lists (every layer's bounds) counted, not spelt out. */
+function changedText(attempt: AttemptSummary, before: AttemptSummary | undefined): string {
+  if (before === undefined && attempt.triggered_by === "initial") return "—";
+  const said =
+    before === undefined ? changes(attempt.parameters) : changedSince(before.parameters, attempt.parameters);
   if (said.length > 6) return `${said.slice(0, 5).join(", ")}, … (${said.length})`;
   return said.join(", ") || "—";
 }
