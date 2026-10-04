@@ -4,13 +4,15 @@ assistant's retries, from its QC log; a window's, the line's too), where each co
 history when the retries changed it, and how the line's other units differ in it. Read, never
 measured."""
 
+import re
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
 from masw.io.quality.files import merged, preset_stage
 from masw.io.quality.log import LINE, Attempt, QCLog
-from masw.io.quality.runs import DEFAULT, GIVEN, PAC
+from masw.io.quality.runs import DEFAULT, GIVEN, PAC, is_default
 from masw.io.quality.view import Origin, Setting, number, plural, span
 from sigpipe.masw.presets import make_preset
 from sigpipe.masw.runs import RunManifest, xmid_of
@@ -54,6 +56,11 @@ _WINDOW_STAGES = {
 # it, when so few; more are counted.
 _SPREAD_VALUES = 3
 _SPREAD_UNITS = 3
+# A setting's kind, whatever numbers a unit had of its own (a trigger's shift): its value
+# without its numbers.
+_NUMBERS = re.compile(r"\d[\d.,]*")
+# The field a setting's value says, when a number of each unit's own (a trigger's shift).
+_VALUE_FIELD = {"trigger": "t0"}
 # From sigpipe c17b3de on (its commit's time, in UTC), a shot's trigger is corrected with its
 # muting only; the runs before corrected it whatever the muting.
 _TRIGGER_WITH_MUTING = datetime(2026, 9, 28, 14, 46, tzinfo=UTC)
@@ -85,12 +92,19 @@ def trigger_text(attempt: Attempt) -> str:
 
 class _Origins:
     """Where a unit's settings of one log stage come from: its own retries (their history), the
-    line's (a window's), else the run's (the preset's default, the request, PAC's form)."""
+    line's (a window's; a record's, the line's mute trial), else the run's (the preset's
+    default, the request, PAC's form)."""
 
     def __init__(self, manifest: RunManifest, log: QCLog | None, unit: str, log_stage: str) -> None:
         self.log = log
         self.own = [one for one in log.of(unit, log_stage) if one.parameters] if log else []
         self.line = log.latest(LINE, log_stage) if log is not None else None
+        # The muting the line's mute trial kept, logged with the line's images.
+        self.trial = (
+            log.latest(LINE, "phase_shift")
+            if log is not None and log_stage == "preprocessing"
+            else None
+        )
         self.preset: dict[str, Any] = manifest.preset.model_dump(mode="json")
         self.defaults: dict[str, Any] = make_preset(manifest.preset.mode).model_dump(mode="json")
 
@@ -103,11 +117,15 @@ class _Origins:
                 for one in changed
             )
             return "rule", f"the checks changed it on this unit: {history}"
-        if self.line is not None and stage in self.line.parameters:
+        if any(line is not None and stage in line.parameters for line in (self.line, self.trial)):
             return "rule", "the checks changed it on the line"
-        if self.preset.get(stage) == self.defaults.get(stage):
+        if is_default(self.preset.get(stage), self.defaults.get(stage)):
             return "default", DEFAULT
         return ("given", GIVEN) if self.log is not None else ("pac", PAC)
+
+    def causes(self, stage: str) -> list[str]:
+        """What asked the unit's own retries that changed `stage`, in words, in order."""
+        return [trigger_text(one) for one in self.own if stage in one.parameters]
 
 
 def _stages(
@@ -254,14 +272,31 @@ def with_spreads(
     return tuple(spread)
 
 
-def most_common(
-    per_unit: Mapping[str, Sequence[Setting]],
-    noun: str,
-    ranges: Mapping[str, str] | None = None,
+def records_in_common(
+    manifest: RunManifest, log: QCLog | None, names: Sequence[str]
 ) -> tuple[Setting, ...]:
-    """The settings most of `per_unit`'s units ran with (a window's records), each with the
-    other values and the units that ran with them (`spread`, "among its records: …"; named
-    when a few, else counted), or their range (`ranges`) when too many values to name."""
+    """How the records `names` (a window's) were preprocessed before their image was made, step
+    by step, as most of them were (in_common)."""
+    origins = {name: _Origins(manifest, log, name, "preprocessing") for name in names}
+    return in_common(
+        {name: record_settings(manifest, log, name) for name in names},
+        {name: _stages(manifest, log, name, "preprocessing", _RECORD_STAGES) for name in names},
+        {name: {stage: origins[name].causes(stage) for stage in _RECORD_STAGES} for name in names},
+        "record",
+    )
+
+
+def in_common(
+    per_unit: Mapping[str, Sequence[Setting]],
+    values: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    causes: Mapping[str, Mapping[str, Sequence[str]]],
+    noun: str,
+) -> tuple[Setting, ...]:
+    """The settings most of `per_unit`'s units ran with (a window's records), by kind: a method
+    (mute, none), a trigger's shift (a t0, its file's, none), whatever numbers each unit had of
+    its own (`values`: each unit's steps) given as their range over those units, and why
+    (`causes`: what changed each unit's step); with the other kinds and the units that ran
+    with them (`spread`, "among its records: …"; named when a few, else counted)."""
     first = next(iter(per_unit.values()), ())
     common: list[Setting] = []
     for setting in first:
@@ -269,23 +304,73 @@ def most_common(
         for unit, settings in per_unit.items():
             match = next((one for one in settings if one.key == setting.key), None)
             if match is not None:
-                groups.setdefault(_shown(match), []).append((unit, match))
+                groups.setdefault(_NUMBERS.sub("#", match.value), []).append((unit, match))
         ranked = sorted(groups.values(), key=len, reverse=True)
-        others = sum(len(group) for group in ranked[1:])
+        shown = [_together(group, values, causes, noun) for group in ranked]
         if len(ranked) - 1 > _SPREAD_VALUES:
-            said = (
-                f"{ranges[setting.key]} on {plural(others, noun)}"
-                if ranges is not None and ranges.get(setting.key)
-                else f"{plural(len(ranked) - 1, 'other value')} on {plural(others, noun)}"
-            )
+            others = sum(len(group) for group in ranked[1:])
+            said = f"{plural(len(ranked) - 1, 'other value')} on {plural(others, noun)}"
         else:
             said = "; ".join(
-                f"{_shown(group[0][1])} on {_named([unit for unit, _ in group], noun, -1)}"
-                for group in ranked[1:]
+                f"{_shown(one)} on {_named([unit for unit, _ in group], noun, -1)}"
+                for one, group in zip(shown[1:], ranked[1:], strict=True)
             )
         update = {"spread": f"among its {noun}s: {said}" if said else ""}
-        common.append(ranked[0][0][1].model_copy(update=update))
+        common.append(shown[0].model_copy(update=update))
     return tuple(common)
+
+
+def _together(
+    group: Sequence[tuple[str, Setting]],
+    values: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    causes: Mapping[str, Mapping[str, Sequence[str]]],
+    noun: str,
+) -> Setting:
+    """One setting for the units of `group`, which ran with the same kind: the first's when they
+    all said the same; else what they share, each number that differs as its range, and why."""
+    first = group[0][1]
+    if len({(_shown(one), one.why) for _, one in group}) == 1:
+        return first
+    key = first.key
+    steps = [values[unit].get(key, {}) for unit, _ in group]
+    field = _VALUE_FIELD.get(key)
+    if field is not None:
+        value = _field_together(field, [step.get(field) for step in steps])
+        detail = first.detail
+    else:
+        value = first.value
+        fields = [name for name in steps[0] if name != "method"]
+        detail = ", ".join(
+            f"{name.replace('_', ' ')} {said}"
+            for name in fields
+            if (said := _field_together(name, [step.get(name) for step in steps]))
+        )
+    origin = Counter(one.origin for _, one in group).most_common(1)[0][0]
+    why = first.why
+    if len({one.why for _, one in group}) > 1 and origin == "rule":
+        asked = sorted({cause for unit, _ in group for cause in causes[unit].get(key, ())})
+        why = f"the checks changed it on {plural(len(group), noun)}" + (
+            f" ({', '.join(asked)})" if asked else ""
+        )
+    return first.model_copy(
+        update={"value": value or first.value, "detail": detail, "origin": origin, "why": why}
+    )
+
+
+def _field_together(name: str, found: Sequence[object]) -> str:
+    """A field's values over units, in words: the one they share, or the range of its numbers
+    ("0.035-0.094 s"); "" when none has it."""
+    present = [one for one in found if one is not None]
+    if not present:
+        return ""
+    numbers = [
+        float(one) for one in present if isinstance(one, int | float) and not isinstance(one, bool)
+    ]
+    if len({str(one) for one in present}) == 1:
+        return _value(name, present[0])
+    if len(numbers) == len(present):
+        return span(min(numbers), max(numbers), _UNITS.get(name, ""), 4)
+    return "varies"
 
 
 def record_ranges(
@@ -331,7 +416,8 @@ def _ranges(per_unit: Mapping[str, dict[str, dict[str, Any]]]) -> dict[str, str]
 
 
 def _shown(setting: Setting) -> str:
-    return f"{setting.value} {setting.detail}" if setting.detail else setting.value
+    """A setting in a line, as a spread names it: "mute (vmin 80 m/s, width 0.05 s)"."""
+    return f"{setting.value} ({setting.detail})" if setting.detail else setting.value
 
 
 def _named(units: Sequence[str], noun: str, others: int) -> str:
