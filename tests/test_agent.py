@@ -46,6 +46,7 @@ PROCESS = {
     "redo": False,
     "replace_hand_work": False,
     "option": None,
+    "workers": None,
 }
 # A message asking no stage (what exists, a greeting): a look.
 LOOK = {**PROCESS, "process": False}
