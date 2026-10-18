@@ -30,12 +30,21 @@ services:
       - "8000:8000"
     environment:
       CORS_ORIGINS: ${PAC_WEB_URL:-http://localhost:5173}
-      # The assistant's model: the `model` service, the `tunnel` service
-      # (http://tunnel:8001/v1), or a server elsewhere.
-      PACO_LLM_BASE_URL: ${PACO_LLM_BASE_URL:-http://model:8000/v1}
+      # The agent the chat runs (guided or autonomous) and its model, from .env (the settings
+      # page wins over them): the `model` service by default, the `tunnel` service
+      # (http://tunnel:8001/v1), a server elsewhere, or a provider's API, whose own address an
+      # empty PACO_LLM_BASE_URL in .env leaves.
+      PACO_AGENT_MODE: ${PACO_AGENT_MODE:-}
+      PACO_LLM_PROVIDER: ${PACO_LLM_PROVIDER:-}
+      PACO_LLM_BASE_URL: ${PACO_LLM_BASE_URL-http://model:8000/v1}
       # Qwen/Qwen3-14B-FP8, as install_assistant.py writes it in .env.
       PACO_LLM_MODEL: ${PACO_LLM_MODEL:-}
       PACO_LLM_API_KEY: ${PACO_LLM_API_KEY:-EMPTY}
+      PACO_LLM_REGION: ${PACO_LLM_REGION:-}
+      PACO_LLM_PROJECT: ${PACO_LLM_PROJECT:-}
+      PACO_LLM_CONTEXT: ${PACO_LLM_CONTEXT:-}
+      PACO_LLM_VISION: ${PACO_LLM_VISION:-}
+      PACO_LLM_EFFORT: ${PACO_LLM_EFFORT:-}
       # Worker processes of the assistant's runs.
       PACO_WORKERS: ${PACO_WORKERS:-4}
       # Where the assistant's settings page keeps its settings (the agent, the model, its key),
