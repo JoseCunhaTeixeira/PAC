@@ -88,6 +88,22 @@ class RunResult(BaseModel):
     stages: tuple[RunStage, ...]
 
 
+class Tokens(BaseModel):
+    """The model's tokens: those it read (`prompt`, `cached` of them from the provider's cache)
+    and those it wrote (`completion`)."""
+
+    prompt: int = 0
+    cached: int = 0
+    completion: int = 0
+
+    def __add__(self, other: Tokens) -> Tokens:
+        return Tokens(
+            prompt=self.prompt + other.prompt,
+            cached=self.cached + other.cached,
+            completion=self.completion + other.completion,
+        )
+
+
 class Event(BaseModel):
     index: int
     # The user's message, a tool call (or its failure), the answer, an error, a stop.
@@ -96,6 +112,8 @@ class Event(BaseModel):
     # An answer's: the runs it worked on, and how long it took.
     results: tuple[RunResult, ...] = ()
     seconds: float | None = None
+    # An answer's (or a failed or stopped one's): the model's tokens for it, when it told them.
+    tokens: Tokens | None = None
 
 
 class SessionInfo(BaseModel):
@@ -111,6 +129,8 @@ class SessionInfo(BaseModel):
     # and whether the last asks the user to choose among the options a tool offered.
     answers: int = 0
     asks: bool = False
+    # The model's tokens for its answers so far, when it told them.
+    tokens: Tokens | None = None
 
 
 class AgentStatus(BaseModel):
@@ -270,6 +290,7 @@ class Session:
         self.closed = False
         self.answers = 0  # the answers ended so far
         self.asks = False  # the last one asks the user to choose
+        self.tokens: Tokens | None = None  # the model's, for those answers
         self.started_at = self.updated_at = datetime.now(UTC)
         self._model = model
         self._questions: queue.Queue[str | None] = queue.Queue()
@@ -307,6 +328,7 @@ class Session:
                 updated_at=self.updated_at,
                 answers=self.answers,
                 asks=self.asks,
+                tokens=self.tokens,
             )
 
     def stop(self) -> bool:
@@ -335,9 +357,17 @@ class Session:
         text: str,
         results: tuple[RunResult, ...] = (),
         seconds: float | None = None,
+        tokens: Tokens | None = None,
     ) -> None:
         self.events.append(
-            Event(index=len(self.events), kind=kind, text=text, results=results, seconds=seconds)
+            Event(
+                index=len(self.events),
+                kind=kind,
+                text=text,
+                results=results,
+                seconds=seconds,
+                tokens=tokens,
+            )
         )
         self.updated_at = datetime.now(UTC)
 
@@ -358,11 +388,14 @@ class Session:
         results: tuple[RunResult, ...] = (),
         seconds: float | None = None,
         asks: bool = False,
+        tokens: Tokens | None = None,
     ) -> None:
         """The answer ended (`kind`: answered, failed or stopped); `asks` when it asks the user
-        to choose among the options a tool offered."""
+        to choose among the options a tool offered; `tokens`, the model's for it."""
         with self._lock:
-            self._add(kind, text, results, seconds)
+            self._add(kind, text, results, seconds, tokens)
+            if tokens is not None:
+                self.tokens = tokens if self.tokens is None else self.tokens + tokens
             self.answers += 1
             self.asks = asks
             self.busy = False
@@ -437,10 +470,11 @@ class Session:
                             failed = error
                     with self._lock:
                         self._scope = None
+                    spent = _tokens(agent.steps[first:])
                     if failed is not None:
-                        self._finish("error", f"{type(failed).__name__}: {failed}")
+                        self._finish("error", f"{type(failed).__name__}: {failed}", tokens=spent)
                     elif answer is None:
-                        self._finish("stopped", STOPPED)
+                        self._finish("stopped", STOPPED, tokens=spent)
                     else:
                         done = [
                             (step.name, step.arguments, step.result)
@@ -458,6 +492,7 @@ class Session:
                             results,
                             time.monotonic() - started,
                             asks=isinstance(agent, Agent) and bool(agent.offers),
+                            tokens=spent,
                         )
         except Exception as error:
             logger.exception("The agent's session %s stopped", self.id)
@@ -473,6 +508,21 @@ class Session:
                     save_transcript(transcript, LOG_DIR)
                 except Exception:
                     logger.exception("Could not save the conversation of session %s", self.id)
+
+
+def _tokens(steps: Sequence[object]) -> Tokens | None:
+    """The model's tokens over its calls among `steps`; none when it told none (a server that
+    reports no usage, a scripted model)."""
+    from paco.agent.record import ModelStep
+
+    calls = [s for s in steps if isinstance(s, ModelStep) and s.prompt_tokens is not None]
+    if not calls:
+        return None
+    return Tokens(
+        prompt=sum(call.prompt_tokens or 0 for call in calls),
+        cached=sum(call.cached_tokens or 0 for call in calls),
+        completion=sum(call.completion_tokens or 0 for call in calls),
+    )
 
 
 def _tools_server(mode: Mode) -> MCPServer:

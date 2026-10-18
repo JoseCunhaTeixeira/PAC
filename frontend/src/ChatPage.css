@@ -266,6 +266,13 @@
   color: var(--text-faint);
 }
 
+/* An answer's tokens, under it. */
+.chat-tokens {
+  margin: 6px 0 0;
+  font-size: var(--fs-small);
+  color: var(--text-faint);
+}
+
 /* The steps: folded behind a toggle once the answer is in, shown live while the agent works. */
 .chat-steps-toggle {
   display: inline-flex;

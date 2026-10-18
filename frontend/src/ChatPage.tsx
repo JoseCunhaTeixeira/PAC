@@ -49,13 +49,21 @@ interface RunResult {
   stages: ("processing" | "picking" | "inversion" | "petro")[];
 }
 
+// The model's tokens: read (cached: from its provider's cache) and written.
+interface Tokens {
+  prompt: number;
+  cached: number;
+  completion: number;
+}
+
 interface ChatEvent {
   index: number;
   kind: "user" | "step" | "answer" | "error" | "stopped";
   text: string;
-  // An answer's: the runs it worked on, and how long it took.
+  // An answer's: the runs it worked on, how long it took, and the model's tokens for it.
   results?: RunResult[];
   seconds?: number | null;
+  tokens?: Tokens | null;
 }
 
 interface EventsOut {
@@ -74,6 +82,7 @@ interface SessionInfo {
   closed: boolean;
   started_at: string;
   updated_at: string;
+  tokens?: Tokens | null; // the model's, for its answers so far
 }
 
 // The conversation this tab shows, to find it again when the page comes back.
@@ -122,6 +131,7 @@ interface Turn {
   answer: string | null;
   results: RunResult[];
   seconds: number | null;
+  tokens: Tokens | null;
   error: string | null;
   stopped: string | null;
 }
@@ -602,6 +612,7 @@ export default function ChatPage() {
                           />
                         )}
                         {one.busy ? "answering" : when(one.updated_at)}
+                        {!one.busy && one.tokens && ` · ${counted(one.tokens.prompt + one.tokens.completion)} tokens`}
                       </span>
                     </button>
                     <button
@@ -872,6 +883,11 @@ function TurnView({
             </div>
           ))}
           <RunLinks results={turn.results} seconds={turn.seconds} />
+          {turn.tokens && (
+            <p className="chat-tokens" data-tip="The model's tokens for this answer: read (cached: from its provider's cache) and written">
+              {tokensSaid(turn.tokens)}
+            </p>
+          )}
         </div>
       )}
       {turn.error !== null && (
@@ -886,6 +902,20 @@ function TurnView({
       )}
     </section>
   );
+}
+
+/** A count in few figures: 950, 1.2k, 894k, 1.2M. */
+function counted(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 10_000) return `${(n / 1000).toFixed(1)}k`;
+  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+/** An answer's tokens: "894k tokens in (767k cached), 13k out". */
+function tokensSaid(tokens: Tokens): string {
+  const cached = tokens.cached ? ` (${counted(tokens.cached)} cached)` : "";
+  return `${counted(tokens.prompt)} tokens in${cached}, ${counted(tokens.completion)} out`;
 }
 
 /** How long an answer took: "3 min 12 s". */
@@ -1001,6 +1031,7 @@ function turnsOf(events: ChatEvent[]): Turn[] {
         answer: null,
         results: [],
         seconds: null,
+        tokens: null,
         error: null,
         stopped: null,
       });
@@ -1025,6 +1056,7 @@ function turnsOf(events: ChatEvent[]): Turn[] {
       turn.answer = event.text;
       turn.results = event.results ?? [];
       turn.seconds = event.seconds ?? null;
+      turn.tokens = event.tokens ?? null;
     } else if (event.kind === "stopped") {
       turn.stopped = event.text;
     } else {

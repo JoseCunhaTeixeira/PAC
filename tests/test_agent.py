@@ -183,6 +183,50 @@ def test_one_message_at_a_time(monkeypatch: pytest.MonkeyPatch) -> None:
     agent.sessions.close(session.id)
 
 
+class CountsTokens(FillsForms):
+    """Answers at once, each call's tokens told, as a provider's API tells them."""
+
+    def __init__(self) -> None:
+        super().__init__(LOOK)
+        self.calls = 0
+
+    async def __call__(
+        self,
+        messages: list[ChatCompletionMessageParam],  # noqa: ARG002
+        tools: list[ChatCompletionFunctionToolParam],  # noqa: ARG002
+    ) -> Reply:
+        self.calls += 1
+        return Reply(
+            content="Nothing to process.",
+            tool_calls=(),
+            prompt_tokens=1200,
+            completion_tokens=80,
+            cached_tokens=1000,
+        )
+
+
+def test_each_answer_and_its_conversation_say_the_tokens() -> None:
+    model = CountsTokens()
+    session = agent.sessions.create(model).id
+    for text in ("What can I process?", "And now?"):
+        client.post(f"/agent/sessions/{session}/messages", json={"text": text})
+        _events(session)
+
+    answers = [one["tokens"] for one in _events(session)["events"] if one["kind"] == "answer"]
+    listed = next(one for one in client.get("/agent/sessions").json() if one["id"] == session)
+    agent.sessions.close(session)
+
+    # Each answer its calls' tokens; the conversation's, all of them.
+    assert len(answers) == 2 and all(one["prompt"] >= 1200 for one in answers)
+    total = {
+        "prompt": 1200 * model.calls,
+        "cached": 1000 * model.calls,
+        "completion": 80 * model.calls,
+    }
+    assert listed["tokens"] == total
+    assert {key: sum(one[key] for one in answers) for key in total} == total
+
+
 def _shots_runs() -> set[Path]:
     """The runs of the shots profile, now."""
     runs = OUTPUT_DIR / "shots"

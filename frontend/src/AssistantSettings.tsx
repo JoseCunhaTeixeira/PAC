@@ -354,7 +354,7 @@ function SettingsForm({
                     <input
                       type="password"
                       value={key}
-                      placeholder={keyKept ? "Set: leave empty to keep it" : atServer ? "If the server asks for one" : "Your key"}
+                      placeholder={keyKept ? "••••••••••••••••" : atServer ? "If the server asks for one" : "Your key"}
                       autoComplete="new-password"
                       spellCheck={false}
                       onChange={(e) => {
