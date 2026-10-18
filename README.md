@@ -77,7 +77,7 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 What this does: `-f docker-compose.prod.yml` points Docker at the file you just downloaded, and `-d` runs PAC in the background so you get your terminal back. The first start downloads the images and can take a few minutes; after that it's nearly instant. PAC then keeps running (and even comes back automatically after a reboot) until you stop it in Step "Stop PAC" below.
 
-**Step 4 — Open the app.** Go to http://localhost:5173 in your browser. Two demo profiles, `active_p1` and `passive_p1`, are already there so you can try PAC immediately (see [Adding your own data](#adding-your-own-data)). If the page doesn't load right away, wait a moment and refresh — or see [Troubleshooting](#troubleshooting).
+**Step 4 — Open the app.** Go to http://localhost:5173 in your browser. Two test profiles, `active_test_profile` and `passive_test_profile`, are already there so you can try PAC immediately (see [Adding your own data](#adding-your-own-data)). If the page doesn't load right away, wait a moment and refresh — or see [Troubleshooting](#troubleshooting).
 
 #### Everyday commands (optional)
 None of these are needed just to use PAC — it keeps running by itself. Use them when you want to inspect, update, or stop the app. Always run them from inside your `pac` folder.
@@ -179,7 +179,7 @@ The **Visualization** page shows one run: how it was made (by you or the assista
 
 To process your own data, simply drop a profile folder like the above into `data/input/` — no restart needed.
 
-**About the demo profiles:** an empty `data/input` (a freshly created folder, as in Option 1) gets seeded on first start with two demo profiles, `active_p1` and `passive_p1`, so there's something to try immediately. A `data/input` that already has content — your own profile folders, or the demo data committed with the source code in Option 2 — is left untouched; add your own profile folders alongside or instead of the demo ones.
+**About the test profiles:** an empty `data/input` (a freshly created folder, as in Option 1) gets seeded on first start with two test profiles, so there's something to try immediately: `active_test_profile` (33 shots on 96 receivers) and `passive_test_profile` (2 records of ambient noise on the same receivers), light copies of real lines. A `data/input` that already has content — your own profile folders, or the test profiles committed with the source code in Option 2 — is left untouched; add your own profile folders alongside or instead of the test profiles.
 
 **About your results:** they are written to `data/output` on your computer, so stopping or removing the containers keeps them.
 
@@ -192,7 +192,7 @@ To process your own data, simply drop a profile folder like the above into `data
 
 ## The assistant (optional)
 
-The assistant is an AI agent, **PACo**, that works PAC for you. You ask it in plain words — *"Process active_p1 and give me its dispersion curves"* — and it runs PAC's processing, checks the quality of every step (and retries what it can), picks the dispersion curves, inverts them into velocity models if you asked for them (or into soils and a water table, if you asked for those), then tells you what it did and which settings it changed. Its results are ordinary PAC runs: you open them in the other pages, to review or correct them.
+The assistant is an AI agent, **PACo**, that works PAC for you. You ask it in plain words — *"Process active_test_profile and give me its dispersion curves"* — and it runs PAC's processing, checks the quality of every step (and retries what it can), picks the dispersion curves, inverts them into velocity models if you asked for them (or into soils and a water table, if you asked for those), then tells you what it did and which settings it changed. Its results are ordinary PAC runs: you open them in the other pages, to review or correct them.
 
 You can keep working in PAC's other pages while it answers: a run one side is writing is refused to the other until it ends. Nothing is deleted: results a step replaces are kept in the window's `replaced` folder. The Assistant entry of the menu shows when it is working, and when an answer waits for your choice.
 
@@ -257,9 +257,9 @@ The line of the `model` service ends with `(healthy)` once the model is ready, w
 
 **Step 5 — Talk to the assistant.** Open http://localhost:5173: the menu now has an **Assistant** page. Type your request and press Enter, for example:
 - *Which profiles can I process?*
-- *Process active_p1 and give me its dispersion curves.*
-- *Process active_p1 and invert it: I want its velocity section.*
-- *Process active_p1 and give me the soil types and the water table.* The assistant runs the petrophysical inversion (a Silex model) on the curves the model was trained for: the bundled one needs curves reaching 43 Hz, and the assistant says how many of yours do.
+- *Process active_test_profile and give me its dispersion curves.*
+- *Process active_test_profile and invert it: I want its velocity section.*
+- *Process active_test_profile and give me the soil types and the water table.* The assistant runs the petrophysical inversion (a Silex model) on the curves the model was trained for: the bundled one needs curves reaching 43 Hz, and the assistant says how many of yours do.
 
 The page shows each step the assistant takes (the tools it calls, in small grey text; untick *Show tool calls* to hide them) and a progress line while it works. Processing a profile takes a few minutes; an inversion, longer. When it has finished, open the **Dispersion Picking**, **Seismic Inversion**, **Petrophysical Inversion** or **Visualization** pages: they open on the latest run, the assistant's.
 
@@ -356,7 +356,7 @@ The assistant runs Qwen3-14B (`Qwen/Qwen3-14B-FP8`), served by vLLM behind an Op
 - **Several GPUs:** add `VLLM_TENSOR_PARALLEL_SIZE=2` to `.env` (the number of GPUs), and the model is spread over them.
 - **The model does not start** and `docker compose logs model` says the memory is too small: lower `PACO_LLM_CONTEXT` in `.env` (the model's context, 16384 by default, for both vLLM and PACo; below 12288, long requests may not fit).
 
-**Another model.** The assistant works with any model served behind an OpenAI-compatible chat API that supports tool calling: set `PACO_LLM_MODEL` (and `PACO_LLM_CONTEXT`, its context) in `.env`, then `docker compose up -d`. A model of another family also needs its own tool-call parser in `docker-compose.yml`'s `model` service, in place of `--tool-call-parser=hermes`, and no `--reasoning-parser=qwen3`. PACo's tests (15 scenarios of the assistant's rules, played 5 times each, on active_p1 when these were measured) gave:
+**Another model.** The assistant works with any model served behind an OpenAI-compatible chat API that supports tool calling: set `PACO_LLM_MODEL` (and `PACO_LLM_CONTEXT`, its context) in `.env`, then `docker compose up -d`. A model of another family also needs its own tool-call parser in `docker-compose.yml`'s `model` service, in place of `--tool-call-parser=hermes`, and no `--reasoning-parser=qwen3`. PACo's tests (15 scenarios of the assistant's rules, played 5 times each, on PAC's former demo line when these were measured) gave:
 
 | Model | GPU memory | PACo's tests (75 plays) |
 |---|---|---|

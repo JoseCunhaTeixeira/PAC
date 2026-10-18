@@ -6,8 +6,11 @@ __pycache__
 .ruff_cache
 .pytest_cache
 frontend
-data/output/*
-!data/output/.gitkeep
+# Of the data, the test profiles alone: the user's own lines stay on their machine.
+data/input/*
+!data/input/active_test_profile
+!data/input/passive_test_profile
+data/output
 *.egg-info
 # The assistant's settings, the API key with them: mounted, never built into the image.
 data/settings

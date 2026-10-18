@@ -9,6 +9,8 @@ repos:
         args: [--unsafe]
       - id: check-toml
       - id: check-added-large-files
+        # The test profiles' records are the large files PAC ships on purpose.
+        exclude: ^data/input/(active|passive)_test_profile/
       - id: check-merge-conflict
       - id: mixed-line-ending
 

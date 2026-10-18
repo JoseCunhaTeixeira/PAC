@@ -137,15 +137,15 @@ interface Progress {
 const EXAMPLES: Record<Mode, string[]> = {
   workflow: [
     "Which profiles can I process?",
-    "Process active_p1 and give me its dispersion curves.",
-    "Process active_p1 and invert it: I want its velocity section.",
-    "Process active_p1 and give me the soil types and the water table.",
+    "Process active_test_profile and give me its dispersion curves.",
+    "Process active_test_profile and invert it: I want its velocity section.",
+    "Process active_test_profile and give me the soil types and the water table.",
   ],
   autonomous: [
-    "Which profiles can I study?",
-    "Study active_p2: I want its velocity section down to 20 m.",
-    "Study active_p2 for lateral changes near the surface.",
-    "Give me passive_p2's dispersion curves, as deep as the data allow.",
+    "Survey active_test_profile: what depth and detail can it give?",
+    "Study active_test_profile: I want its velocity section down to 20 m.",
+    "Study active_test_profile for lateral changes near the surface.",
+    "Give me passive_test_profile's dispersion curves, as deep as the data allow.",
   ],
 };
 

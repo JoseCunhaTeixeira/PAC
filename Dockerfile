@@ -17,8 +17,10 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev ${PAC_EXTRAS:+--extra $PAC_EXTRAS}
 
 COPY src ./src
-COPY data ./data
-RUN cp -r data/input data_demo_input
+# The test profiles, baked in once: the entrypoint seeds an empty data/input with them. The data
+# folders themselves are the user's, mounted.
+COPY data/input ./data_demo_input
+RUN mkdir -p data/input data/output
 RUN uv sync --frozen --no-dev ${PAC_EXTRAS:+--extra $PAC_EXTRAS}
 
 FROM python:3.14-slim-bookworm AS runtime
