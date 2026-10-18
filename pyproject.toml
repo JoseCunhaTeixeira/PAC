@@ -101,11 +101,6 @@ ignore = [
     "E501", # line length handled by formatter
 ]
 
-[tool.ruff.per-file-target-version]
-# The install step runs on the host, with the python3 it has, before PAC is installed.
-"src/masw/gpu.py" = "py39"
-"install_assistant.py" = "py39"
-
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 

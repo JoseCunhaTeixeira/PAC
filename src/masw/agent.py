@@ -1,14 +1,13 @@
 """PACo's agent in PAC: the chat page's conversations, each an agent in this process whose tools
 are PACo's, called in-process on PAC's own folders, so that its runs are PAC's runs. In one of two
 modes, as the assistant's settings say (masw.assistant, PACO_AGENT_MODE): workflow, PACo leading a
-small model (Qwen3-14B served by vLLM) step by step, or autonomous, the model choosing its own
-settings and experiments, for a frontier model with a long context. The same model either way, any
-provider's (PACO_LLM_*: PACo's paco.llm), served elsewhere.
+small model step by step, or autonomous, the model choosing its own settings and experiments, for
+a frontier model with a long context. The same model either way, a provider's API or the user's
+server (PACO_LLM_*: PACo's paco.llm).
 
-PACo is optional (PAC's `agent` extra): without it, without a model, or with a model server that
-does not answer, `status` says what is missing and the rest of PAC is unaffected. With
-masw.assistant, the only module of PAC that knows PACo, which it imports once a conversation
-starts."""
+Without a model, or with a model server that does not answer, `status` says what is missing and
+the rest of PAC is unaffected. With masw.assistant, the only module of PAC that knows PACo, which
+it imports once a conversation starts."""
 
 from __future__ import annotations
 

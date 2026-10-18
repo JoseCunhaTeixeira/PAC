@@ -3,17 +3,6 @@
 #
 #   docker compose up -d --build
 #
-# The `model` service runs vLLM on this machine's NVIDIA GPU (for an AMD one, add
-# -f docker-compose.rocm.yml), with the agent profile: `python3 install_assistant.py` checks the
-# GPU and writes .env accordingly.
-#
-# The model on a GPU machine (in the cloud, say) and PAC on this one, with CPUs only:
-#   on the GPU machine:  python3 install_assistant.py --with && docker compose up -d model
-#   here:                python3 install_assistant.py --tunnel user@gpu-machine
-#                        docker compose up -d --build
-# The `tunnel` service then carries the assistant's requests to the model over SSH.
-# Without a model, the page says what is missing and the rest of PAC works as before.
-#
 # PAC on a server, opened from other computers: set PAC_API_URL (e.g. http://server:8000) and
 # PAC_WEB_URL (http://server:5173) in .env, the addresses the browsers use.
 
@@ -27,15 +16,12 @@ services:
     environment:
       CORS_ORIGINS: ${PAC_WEB_URL:-http://localhost:5173}
       # The mode the chat runs (autonomous or workflow) and its model, from .env (the settings
-      # popup wins over them): a provider's API, which needs no address, or a server: the `model`
-      # service (http://model:8000/v1, as install_assistant.py writes it), the `tunnel` service
-      # (http://tunnel:8001/v1), or a server elsewhere.
+      # popup wins over them): a provider's API, which needs no address, or a server's address.
       PACO_AGENT_MODE: ${PACO_AGENT_MODE:-}
       PACO_LLM_PROVIDER: ${PACO_LLM_PROVIDER:-}
       PACO_LLM_BASE_URL: ${PACO_LLM_BASE_URL:-}
-      # Qwen/Qwen3-14B-FP8, as install_assistant.py writes it in .env.
       PACO_LLM_MODEL: ${PACO_LLM_MODEL:-}
-      PACO_LLM_API_KEY: ${PACO_LLM_API_KEY:-EMPTY}
+      PACO_LLM_API_KEY: ${PACO_LLM_API_KEY:-}
       PACO_LLM_CONTEXT: ${PACO_LLM_CONTEXT:-}
       PACO_LLM_VISION: ${PACO_LLM_VISION:-}
       # Worker processes of the assistant's runs.
@@ -60,73 +46,3 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
-
-  # The assistant's model, Qwen/Qwen3-14B-FP8 (PACO_LLM_MODEL in .env, which install_assistant.py
-  # writes), on a 24 GB GPU. The first start downloads it.
-  model:
-    image: vllm/vllm-openai:v0.30.0
-    command:
-      - --model=${PACO_LLM_MODEL:-}
-      # The context PACo reads too: one setting for both.
-      - --max-model-len=${PACO_LLM_CONTEXT:-16384}
-      # A model larger than one GPU, spread over several: their number.
-      - --tensor-parallel-size=${VLLM_TENSOR_PARALLEL_SIZE:-1}
-      # One user: preparing for few conversations at once leaves the GPU's memory to the context.
-      - --max-num-seqs=${VLLM_MAX_NUM_SEQS:-8}
-      # Qwen3's tool calls, and its thinking kept out of the answers.
-      - --enable-auto-tool-choice
-      - --tool-call-parser=hermes
-      - --reasoning-parser=qwen3
-    environment:
-      HF_TOKEN: ${HF_TOKEN:-}
-      # Required of every request when set (PAC sends it as PACO_LLM_API_KEY).
-      VLLM_API_KEY: ${VLLM_API_KEY:-}
-    volumes:
-      - huggingface:/root/.cache/huggingface
-    ipc: host
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    ports:
-      # This machine only: reach it from another one through an SSH tunnel. MODEL_BIND=0.0.0.0
-      # opens it to the network: only behind a TLS proxy, and with VLLM_API_KEY set.
-      - ${MODEL_BIND:-127.0.0.1}:8001:8000
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 10s
-      start_period: 10m  # downloading and loading the model
-    restart: unless-stopped
-    profiles: [agent]
-
-  # The assistant's model on another machine, reached over SSH (install_assistant.py --tunnel
-  # writes its settings): it forwards PAC's requests, on this network only, to the model on that
-  # machine's own 127.0.0.1:8001. Its key must have no passphrase: it reconnects unattended.
-  tunnel:
-    build: ./tunnel
-    command:
-      - -N
-      - -o
-      - BatchMode=yes
-      - -o
-      - ExitOnForwardFailure=yes
-      - -o
-      - ServerAliveInterval=30
-      - -o
-      - UserKnownHostsFile=/ssh/known_hosts
-      - -p
-      - ${MODEL_SSH_PORT:-22}
-      - -L
-      - 0.0.0.0:8001:127.0.0.1:8001
-      - ${MODEL_SSH:-}
-    volumes:
-      - ${MODEL_SSH_KEY:-./no-key}:/ssh/key:ro
-      - ${MODEL_SSH_KNOWN_HOSTS:-./no-known-hosts}:/ssh/known_hosts:ro
-    restart: unless-stopped
-    profiles: [tunnel]
-
-volumes:
-  huggingface:

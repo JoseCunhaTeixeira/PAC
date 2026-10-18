@@ -10,7 +10,7 @@ import "./AssistantSettings.css";
 // what is set (saved here, or in .env), and saves once a mode and a model are chosen.
 
 type Mode = "autonomous" | "workflow";
-// Where the model is: a provider's API, or a server (the user's GPU with vLLM, or any other).
+// Where the model is: a provider's API, or the user's server.
 type Way = "api" | "server";
 type Api = "anthropic" | "openai" | "gemini" | "mistral";
 

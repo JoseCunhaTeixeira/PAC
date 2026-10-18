@@ -3,10 +3,7 @@
 import re
 from pathlib import Path
 
-import pytest
-
-# The assistant is PAC's optional agent extra: without PACo, nothing to check.
-prompts = pytest.importorskip("paco.prompts")
+from paco import prompts
 
 APP = Path(__file__).parents[1] / "frontend" / "src" / "App.tsx"
 

@@ -10,10 +10,6 @@ from typing import Any
 
 import anyio
 import pytest
-
-# The assistant is PAC's optional agent extra: without PACo, nothing to test here.
-pytest.importorskip("paco")
-
 from fastapi.testclient import TestClient
 from openai.types.chat import (
     ChatCompletionFunctionToolParam,
@@ -614,7 +610,7 @@ def test_a_conversation_made_while_the_settings_change_is_made_again(
 def test_the_popups_settings_win_over_a_dotenv(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # PAC run from a folder whose .env sets a small model's context, as install_assistant.py writes.
+    # PAC run from a folder whose .env sets a small model's context.
     (tmp_path / ".env").write_text("PACO_LLM_MODEL=Qwen/Qwen3-14B-FP8\nPACO_LLM_CONTEXT=16384\n")
     monkeypatch.chdir(tmp_path)
     from paco.agent.settings import AgentSettings
