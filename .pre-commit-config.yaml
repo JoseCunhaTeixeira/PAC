@@ -26,7 +26,7 @@ repos:
       - id: pyright
         name: pyright
         # With the assistant's extra, as CI checks it: src/masw/agent.py imports PACo.
-        entry: uv run --extra agent pyright
+        entry: uv run pyright
         language: system
         types: [python]
         pass_filenames: false

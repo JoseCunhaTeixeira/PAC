@@ -42,9 +42,8 @@ interface NavItem {
   icon: ReactNode;
 }
 
-// The sidebar: home, the AI assistant who can do it all (where PAC was installed with PACo; its
-// settings in a popup, from its page), then the workflow's order: records to images, images to
-// curves and models, what came out.
+// The sidebar: home, the AI assistant who can do it all (its settings in a popup, from its page),
+// then the workflow's order: records to images, images to curves and models, what came out.
 const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   { label: null, items: [{ to: "/", label: "Home", icon: <HomeIcon /> }] },
   {
@@ -86,10 +85,8 @@ function NewsMark({ news }: { news: Exclude<News, null> }) {
 export default function App() {
   const location = useLocation();
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme());
-  // The assistant's page, only where PAC was installed with it.
-  const [assistant, setAssistant] = useState(false);
   // What runs, beside each page in the menu.
-  const running = useRunning(assistant);
+  const running = useRunning();
   // What the assistant said while its page was not open: its menu row says so.
   const news = useAssistantNews(running.conversations, location.pathname === "/assistant");
   // The assistant's settings popup (opened from its page, or by itself at start), and its saves,
@@ -104,16 +101,8 @@ export default function App() {
   // What a click presses stays where it is on screen while the page changes around it.
   useStayPut();
 
-  useEffect(() => {
-    fetch(`${API}/agent/installed`)
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data: { installed: boolean }) => setAssistant(data.installed))
-      .catch(() => setAssistant(false));
-  }, []);
-
   // At start, the settings popup opens by itself while the assistant's settings are incomplete.
   useEffect(() => {
-    if (!assistant) return;
     let cancelled = false;
     fetch(`${API}/agent/settings`)
       .then((res) => (res.ok ? res.json() : Promise.reject()))
@@ -124,7 +113,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [assistant]);
+  }, []);
 
   return (
     <ThemeContext.Provider value={theme}>
@@ -141,12 +130,10 @@ export default function App() {
 
           <nav className="sidebar-nav">
             {NAV_GROUPS.map((group) => {
-              const items = group.items.filter((item) => assistant || !item.to.startsWith("/assistant"));
-              if (items.length === 0) return null; // the assistant's group, without PACo
               return (
                 <div key={group.label ?? "top"} className="sidebar-group">
                   {group.label && <div className="sidebar-group-label">{group.label}</div>}
-                  {items.map((item) => {
+                  {group.items.map((item) => {
                     const runs = runsAt(item.to, running);
                     const told = item.to === "/assistant" && !runs ? news : null;
                     return (
@@ -206,7 +193,7 @@ export default function App() {
         <main className="app-main">
           <ErrorBoundary resetKey={location.pathname}>
           <Routes>
-            <Route path="/" element={<HomePage assistant={assistant} />} />
+            <Route path="/" element={<HomePage />} />
             <Route path="/active" element={<ActiveComputingPage />} />
             <Route path="/passive" element={<PassiveComputingPage />} />
             <Route path="/passive-active" element={<PassiveActiveComputingPage />} />
@@ -218,14 +205,12 @@ export default function App() {
           </Routes>
           </ErrorBoundary>
         </main>
-        {assistant && (
-          <AssistantSettingsPopup
-            open={settingsOpen}
-            answering={running.assistant}
-            onClose={() => setSettingsOpen(false)}
-            onSaved={() => setSaves((count) => count + 1)}
-          />
-        )}
+        <AssistantSettingsPopup
+          open={settingsOpen}
+          answering={running.assistant}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={() => setSaves((count) => count + 1)}
+        />
       </div>
       </SettingsPopupContext.Provider>
     </ThemeContext.Provider>

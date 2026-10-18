@@ -8,6 +8,8 @@ services:
     volumes:
       - ./data/input:/app/data/input
       - ./data/output:/app/data/output
+      # The assistant's settings, as its settings popup saves them (the API key with them).
+      - ./data/settings:/app/data/settings
     restart: unless-stopped
 
   frontend:

@@ -74,7 +74,7 @@ function Ways({ title, ways }: { title: string; ways: Way[] }) {
   );
 }
 
-export default function HomePage({ assistant = false }: { assistant?: boolean }) {
+export default function HomePage() {
   usePageTitle("Home");
   const theme = useTheme();
   return (
@@ -95,11 +95,9 @@ export default function HomePage({ assistant = false }: { assistant?: boolean })
             <Link to="/visualization" className="button hero-secondary">
               <EyeIcon size={16} /> Explore results
             </Link>
-            {assistant && (
-              <Link to="/assistant" className="button hero-secondary">
-                <SparklesIcon size={16} /> Ask the AI assistant
-              </Link>
-            )}
+            <Link to="/assistant" className="button hero-secondary">
+              <SparklesIcon size={16} /> Ask the AI assistant
+            </Link>
           </div>
         </div>
         <div className="hero-visual">

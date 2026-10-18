@@ -1,13 +1,11 @@
-# PAC: the API and the web app, at http://localhost:5173.
+# PAC: the API and the web app, at http://localhost:5173, with its assistant (PACo, PAC's agent,
+# in the backend), whose model is set in its settings popup: a provider's API, or a server.
 #
-#   docker compose up -d                                   # PAC alone
-#   PAC_EXTRAS=agent docker compose --profile agent up -d --build
-#                                                          # with the assistant and its model
+#   docker compose up -d --build
 #
-# The assistant page runs PACo, PAC's agent, in the backend (built with PAC_EXTRAS=agent), and
-# asks a model served apart: the `model` service runs vLLM on this machine's NVIDIA GPU (for an
-# AMD one, add -f docker-compose.rocm.yml). `python3 install_assistant.py` checks the GPU and
-# writes .env accordingly.
+# The `model` service runs vLLM on this machine's NVIDIA GPU (for an AMD one, add
+# -f docker-compose.rocm.yml), with the agent profile: `python3 install_assistant.py` checks the
+# GPU and writes .env accordingly.
 #
 # The model on a GPU machine (in the cloud, say) and PAC on this one, with CPUs only:
 #   on the GPU machine:  python3 install_assistant.py --with && docker compose up -d model
@@ -24,8 +22,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        PAC_EXTRAS: ${PAC_EXTRAS:-}
     ports:
       - "8000:8000"
     environment:

@@ -18,13 +18,10 @@ dependencies = [
     # Named here only to take its CPU build (tool.uv.sources): sigpipe's Silex model runs on it.
     "torch",
     "disba>=0.7.0",
+    # The assistant: PACo, PAC's agent (its workflow or autonomous mode), run in PAC's process.
+    # Its model is the user's, set in the assistant's settings: a provider's API, or their server.
+    "PACo @ git+https://github.com/JoseCunhaTeixeira/PACo",
 ]
-
-[project.optional-dependencies]
-# The assistant page: PACo, PAC's agent (in its workflow or autonomous mode),
-# run in PAC's process. Its model is served apart (vLLM on a GPU able to hold it, here or
-# elsewhere: see docker-compose.yml's agent profile), or a provider's API.
-agent = ["PACo @ git+https://github.com/JoseCunhaTeixeira/PACo"]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.14", "pyright>=1.1", "pre-commit>=4"]

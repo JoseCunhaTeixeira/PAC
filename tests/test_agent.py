@@ -110,10 +110,6 @@ def _events(session: str, after: int = 0) -> dict[str, Any]:
     raise AssertionError("the agent did not answer")
 
 
-def test_the_menu_shows_the_assistant_where_it_is_installed() -> None:
-    assert client.get("/agent/installed").json() == {"installed": True}
-
-
 def test_without_a_model_the_page_says_what_to_set(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PACO_LLM_BASE_URL", raising=False)
     monkeypatch.delenv("PACO_LLM_MODEL", raising=False)

@@ -49,7 +49,6 @@ def test_a_24_gb_card_runs_the_model(tmp_path: Path) -> None:
 
     assert verdict.compatible
     assert verdict.settings == {
-        "PAC_EXTRAS": "agent",
         "COMPOSE_PROFILES": "agent",
         "PACO_AGENT_MODE": "workflow",
         "PACO_LLM_PROVIDER": "server",
@@ -112,11 +111,11 @@ def test_no_gpu_or_macos_is_not_compatible(tmp_path: Path) -> None:
 
 def test_the_env_file_keeps_the_users_lines(tmp_path: Path) -> None:
     env = tmp_path / ".env"
-    env.write_text("HF_TOKEN=secret\nPACO_LLM_MODEL=old\nCOMPOSE_PROFILES=agent\n")
+    env.write_text("HF_TOKEN=secret\nPACO_LLM_MODEL=old\nPAC_EXTRAS=agent\n")
 
-    write_env(env, {"PAC_EXTRAS": "agent", "PACO_LLM_MODEL": MODEL})
-    assert env.read_text() == f"HF_TOKEN=secret\nPAC_EXTRAS=agent\nPACO_LLM_MODEL={MODEL}\n"
-    # Without the assistant, its lines go.
+    write_env(env, {"COMPOSE_PROFILES": "agent", "PACO_LLM_MODEL": MODEL})
+    assert env.read_text() == f"HF_TOKEN=secret\nCOMPOSE_PROFILES=agent\nPACO_LLM_MODEL={MODEL}\n"
+    # Without a model served by PAC, its lines go.
     write_env(env, {})
     assert env.read_text() == "HF_TOKEN=secret\n"
 
@@ -132,7 +131,6 @@ def test_a_remote_model_is_checked_first() -> None:
 
     assert model == MODEL and asked == [("https://gpu.example.org/v1", "key")]
     assert settings == {
-        "PAC_EXTRAS": "agent",
         "PACO_AGENT_MODE": "workflow",
         "PACO_LLM_PROVIDER": "server",
         "PACO_LLM_BASE_URL": "https://gpu.example.org/v1",

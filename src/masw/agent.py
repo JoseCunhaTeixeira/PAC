@@ -13,7 +13,6 @@ starts."""
 from __future__ import annotations
 
 import contextlib
-import importlib.util
 import json
 import logging
 import os
@@ -132,20 +131,9 @@ class SessionBusy(RuntimeError):
     """A conversation is still answering the last message."""
 
 
-def installed() -> bool:
-    """Whether PAC was installed with its assistant (the agent extra)."""
-    return importlib.util.find_spec("paco") is not None
-
-
 def status() -> AgentStatus:
-    """Whether the chat can run: PACo installed, its model set, a model server of the user's
-    answering, and the long context the autonomous mode needs."""
-    if not installed():
-        return AgentStatus(
-            available=False,
-            reason="PACo, PAC's agent, is not installed: install PAC with its agent extra "
-            "(uv sync --extra agent; with Docker, build with PAC_EXTRAS=agent).",
-        )
+    """Whether the chat can run: its model set, a model server of the user's answering, and the
+    long context the autonomous mode needs."""
     try:
         _, mode, settings = snapshot()
     except AgentUnavailable as error:
@@ -529,8 +517,6 @@ class Sessions:
         """A new conversation, kept, and the changes of the settings it follows."""
         changes, settings = _changes, None
         if model is None:
-            if not installed():
-                raise AgentUnavailable(status().reason or "The agent is not available.")
             changes, chosen, settings = snapshot()
             mode = mode or chosen
             if not (found := _checked(mode, settings)).available:

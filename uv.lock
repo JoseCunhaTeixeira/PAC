@@ -1367,17 +1367,13 @@ dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "obspy" },
+    { name = "paco" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "scipy" },
     { name = "sigpipe", extra = ["santiludo", "silex"] },
     { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'linux'" },
-]
-
-[package.optional-dependencies]
-agent = [
-    { name = "paco" },
 ]
 
 [package.dev-dependencies]
@@ -1395,7 +1391,7 @@ requires-dist = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "obspy" },
-    { name = "paco", marker = "extra == 'agent'", git = "https://github.com/JoseCunhaTeixeira/PACo" },
+    { name = "paco", git = "https://github.com/JoseCunhaTeixeira/PACo" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "scipy" },
@@ -1403,7 +1399,6 @@ requires-dist = [
     { name = "torch", marker = "sys_platform != 'linux'" },
     { name = "torch", marker = "sys_platform == 'linux'", index = "https://download.pytorch.org/whl/cpu" },
 ]
-provides-extras = ["agent"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2074,7 +2069,7 @@ wheels = [
 [[package]]
 name = "sigpipe"
 version = "1.0.0"
-source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#772ff36ffb79196251805603371377f57a12189f" }
+source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#0ef52196798513178c099ef7ee5acbdadedcff26" }
 dependencies = [
     { name = "disba" },
     { name = "h5py" },

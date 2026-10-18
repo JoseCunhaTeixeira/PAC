@@ -16,7 +16,6 @@ from masw.agent import (
     Event,
     SessionBusy,
     SessionInfo,
-    installed,
     save_settings,
     sessions,
     status,
@@ -47,12 +46,6 @@ class EventsOut(BaseModel):
     stopping: bool = False  # a stop was asked, and the answer has not ended yet
     progress: str | None  # the running tool's latest progress
     closed: bool  # the conversation ended (an error stopped it): start a new one
-
-
-@router.get("/agent/installed")
-def get_installed() -> dict[str, bool]:
-    """Whether the menu shows the assistant: PAC installed with it."""
-    return {"installed": installed()}
 
 
 @router.get("/agent/status")
@@ -173,9 +166,7 @@ async def test_settings(given: assistant.AssistantSettingsIn) -> TestOut:
 
 def _model_settings(given: assistant.AssistantSettingsIn) -> ModelSettings:
     """PACo's settings of the model `given` names (the key set when the popup sent none); 422,
-    saying what is missing or wrong, when PACo refuses them; 503 without PACo."""
-    if not installed():
-        raise HTTPException(status_code=503, detail="PACo, PAC's agent, is not installed.")
+    saying what is missing or wrong, when PACo refuses them."""
     from paco.llm.settings import ModelSettings
 
     values = assistant.values_of(given)

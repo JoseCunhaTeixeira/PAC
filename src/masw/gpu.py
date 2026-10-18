@@ -40,7 +40,8 @@ MODEL_URL = "http://model:8000/v1"
 SERVED = {"PACO_AGENT_MODE": "workflow", "PACO_LLM_PROVIDER": "server"}
 # vLLM's FP8 kernels on NVIDIA start with Ampere.
 MIN_CUDA_CAPABILITY = 8.0
-# The .env lines the assistant owns: set when it is installed, removed when it is not.
+# The .env lines of the assistant's model: set when PAC serves one, removed when it does not
+# (PAC_EXTRAS, from before PAC always had its assistant: removed).
 AGENT_KEYS = (
     "PAC_EXTRAS",
     "COMPOSE_PROFILES",
@@ -172,7 +173,6 @@ def check(
     if missing := _docker_misses(gpu, runner, dev, system):
         return Verdict(False, f"{about} fits the model, but {missing}.", gpu)
     settings = {
-        "PAC_EXTRAS": "agent",
         "COMPOSE_PROFILES": "agent",
         **SERVED,
         "PACO_LLM_BASE_URL": MODEL_URL,
@@ -245,7 +245,7 @@ def remote_settings(
             "PAC (--with), or reach another machine through SSH (--tunnel USER@HOST)"
         )
     model = checked_model(url, model, api_key, models)
-    settings = {"PAC_EXTRAS": "agent", **SERVED, "PACO_LLM_BASE_URL": url, "PACO_LLM_MODEL": model}
+    settings = {**SERVED, "PACO_LLM_BASE_URL": url, "PACO_LLM_MODEL": model}
     if api_key:
         settings["PACO_LLM_API_KEY"] = api_key
     return settings, model
@@ -312,7 +312,6 @@ def tunnel_settings(
         tunnel.terminate()
         tunnel.wait()
     settings = {
-        "PAC_EXTRAS": "agent",
         "COMPOSE_PROFILES": "tunnel",
         "MODEL_SSH": target,
         "MODEL_SSH_PORT": str(port),
@@ -428,13 +427,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     answer = args.answer
     if answer is None:
         reply = input(
-            "Install PAC's assistant, an AI agent that processes profiles for you? It needs an "
-            "NVIDIA or AMD GPU of 24 GB or more. [y/N] "
+            "Serve the assistant's model on this machine? It needs an NVIDIA or AMD GPU of 24 GB "
+            "or more. [y/N] "
         )
         answer = "yes" if reply.strip().lower() in ("y", "yes") else "no"
     if answer == "no":
         write_env(args.env, {})
-        print("PAC will run without the assistant.")
+        print("PAC will serve no model: set the assistant's in its settings.")
         print("Next: docker compose up -d --build")
         return 0
 
@@ -443,8 +442,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_env(args.env, verdict.settings)
     if not verdict.compatible:
         print(
-            "PAC will run without the assistant. With a model served elsewhere: "
-            "python3 install_assistant.py --remote URL --model NAME"
+            "PAC will serve no model: set the assistant's in its settings, or one served "
+            "elsewhere with python3 install_assistant.py --remote URL --model NAME"
         )
         return 1
     print(f"Written to {args.env}: " + ", ".join(f"{k}={v}" for k, v in verdict.settings.items()))

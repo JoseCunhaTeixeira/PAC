@@ -31,16 +31,14 @@ const NOTHING: Running = {
 };
 const EVERY_MS = 3000;
 
-async function running(assistant: boolean): Promise<Running> {
+async function running(): Promise<Running> {
   const jobs = await fetch(`${API}/jobs`)
     .then((res) => (res.ok ? (res.json() as Promise<Job[]>) : []))
     .catch(() => [] as Job[]);
-  // Not heard of without the assistant, or when its conversations do not answer.
-  const sessions = assistant
-    ? await fetch(`${API}/agent/sessions`)
-        .then((res) => (res.ok ? (res.json() as Promise<Conversation[]>) : null))
-        .catch(() => null)
-    : null;
+  // Not heard of when the assistant's conversations do not answer.
+  const sessions = await fetch(`${API}/agent/sessions`)
+    .then((res) => (res.ok ? (res.json() as Promise<Conversation[]>) : null))
+    .catch(() => null);
   const live = jobs.filter((job) => job.state === "running");
   return {
     processing: new Set(live.filter((job) => job.kind === "processing").map((job) => job.mode ?? "")),
@@ -51,13 +49,13 @@ async function running(assistant: boolean): Promise<Running> {
   };
 }
 
-/** What runs now, asked every few seconds; the assistant's only where PAC has it. */
-export function useRunning(assistant: boolean): Running {
+/** What runs now, asked every few seconds. */
+export function useRunning(): Running {
   const [now, setNow] = useState<Running>(NOTHING);
   useEffect(() => {
     let cancelled = false;
     const ask = () =>
-      running(assistant).then((found) => {
+      running().then((found) => {
         if (!cancelled) setNow(found);
       });
     void ask();
@@ -66,7 +64,7 @@ export function useRunning(assistant: boolean): Running {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [assistant]);
+  }, []);
   return now;
 }
 
