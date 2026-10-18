@@ -6,6 +6,9 @@ data/input/*
 data/output/*
 !data/output/.gitkeep
 
+# The assistant's settings page keeps its settings there, the API key with them.
+data/settings/
+
 logs/
 
 .claude/

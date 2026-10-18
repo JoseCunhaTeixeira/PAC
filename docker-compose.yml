@@ -38,9 +38,13 @@ services:
       PACO_LLM_API_KEY: ${PACO_LLM_API_KEY:-EMPTY}
       # Worker processes of the assistant's runs.
       PACO_WORKERS: ${PACO_WORKERS:-4}
+      # Where the assistant's settings page keeps its settings (the agent, the model, its key),
+      # applied over these.
+      PAC_SETTINGS_DIR: /app/data/settings
     volumes:
       - ./data/input:/app/data/input
       - ./data/output:/app/data/output
+      - ./data/settings:/app/data/settings
     restart: unless-stopped
 
   frontend:

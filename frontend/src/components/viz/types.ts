@@ -113,6 +113,19 @@ export interface RunCard {
   windows: LineWindow[];
   // The shots a window stacks: from, to this far from its middle (to null: any distance).
   reach: [number, number | null] | null;
+  // The journal of the assistant's geophysicist (PACo's autonomous agent), when it made the run;
+  // absent from an older backend.
+  journal?: JournalEntry[];
+}
+
+// One entry of the geophysicist's journal: its id (E3, L2, H1...), its kind, when, what it says,
+// and the entries it rests on.
+export interface JournalEntry {
+  id: string;
+  kind: string;
+  at: string;
+  text: string;
+  of: string[];
 }
 
 export type Use = "used" | "part" | "excluded" | "failed" | "inside" | "near" | "far" | "traces";

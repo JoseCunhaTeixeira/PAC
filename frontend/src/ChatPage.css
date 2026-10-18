@@ -696,3 +696,21 @@
   color: var(--text-faint);
   font-size: var(--fs-small);
 }
+
+/* The way to the assistant's settings, beside its status: a link that looks like its buttons. */
+a.chat-quiet {
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.chat-settings {
+  justify-content: center;
+  padding: 6px 9px;
+}
+
+.chat-unavailable-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

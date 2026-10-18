@@ -19,6 +19,7 @@ matplotlib.use("Agg")
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from masw import assistant
 from masw.api.routers import (
     acquisitions,
     agent,
@@ -46,6 +47,8 @@ __version__ = _pkg_version("PAC")
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     setup_logging()
+    # The assistant's settings its page saved, over compose's.
+    assistant.load()
     logger.info("MASW API starting")
     yield
     logger.info("MASW API shutting down")

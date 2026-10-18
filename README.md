@@ -339,14 +339,24 @@ Then start PAC with `docker compose up -d --build`, and open http://server:5173 
 
 **Caution:** anyone who reaches the server's ports 5173 and 8000 can use PAC and its assistant. Keep the server on a private network (or behind a VPN), and never open these ports to the internet.
 
+### The assistant's settings
+
+The menu's **Assistant settings** page, under *AI assistant*, sets the assistant without editing `.env`:
+
+- **The agent.** *Guided workflow*, the default: PACo leads the model through its workflow one tool at a time, and its quality gates check each stage. Made for a small model on your own GPU, such as Qwen3-14B. *Autonomous geophysicist*: the model surveys the line, chooses the windows, the shots and the images, runs its own experiments and judges them with the gates, decides every window, then inverts. Its journal of hypotheses, experiments and decisions is on the run's card in **Visualization**. It needs a frontier model with a long context (128k tokens or more), and it uses many more tokens: hundreds of thousands for a line, which an online service bills.
+- **The model.** Any provider: Anthropic (Claude), Claude on Google Cloud Vertex AI, Amazon Bedrock or Microsoft Foundry, OpenAI, Azure OpenAI, Google Gemini (on its API or Vertex AI), Mistral, your own vLLM server, or another OpenAI-compatible server. Give the model's name, your API key (Vertex AI takes the backend machine's Google credentials instead: `gcloud auth application-default login`), the server's address where it needs one, the cloud region and project where it needs them, and the model's context if you know it. **Test the connection** makes one short call to the model.
+- **Vision.** Off by default. When on, the figures the geophysicist looks at (records, dispersion images, curves) are sent to the model's provider with its requests: leave it off when your data must stay on your machines, or the provider is not approved for them; the agent then reads tables and measures instead. The guided workflow never sends figures.
+
+The page keeps its settings in `data/settings/assistant.env`, the API key with them, readable by you alone (never share or commit it), and applies them over `.env`'s. A conversation keeps the agent it started with; the next one takes the new settings.
+
 ### The model
 
-The assistant runs Qwen3-14B (`Qwen/Qwen3-14B-FP8`), served by vLLM behind an OpenAI-compatible chat API with tool calling.
+The assistant runs Qwen3-14B (`Qwen/Qwen3-14B-FP8`), served by vLLM behind an OpenAI-compatible chat API with tool calling, unless its settings page names another.
 
 - **Several GPUs:** add `VLLM_TENSOR_PARALLEL_SIZE=2` to `.env` (the number of GPUs), and the model is spread over them.
 - **The model does not start** and `docker compose logs model` says the memory is too small: lower `VLLM_MAX_MODEL_LEN` in `.env` (the conversation's length, 16384 by default; below 12288, long requests may not fit).
 
-**Another model.** The assistant works with any model served behind an OpenAI-compatible chat API that supports tool calling: set `PACO_LLM_MODEL` (and `VLLM_MAX_MODEL_LEN`, its context) in `.env`, then `docker compose up -d`. A model of another family also needs its own tool-call parser in `docker-compose.yml`'s `model` service, in place of `--tool-call-parser=hermes`, and no `--reasoning-parser=qwen3`. PACo's tests (15 scenarios of the assistant's rules, played 5 times each) gave:
+**Another model.** The assistant works with any model served behind an OpenAI-compatible chat API that supports tool calling: set `PACO_LLM_MODEL` (and `VLLM_MAX_MODEL_LEN`, its context) in `.env`, then `docker compose up -d`. A model of another family also needs its own tool-call parser in `docker-compose.yml`'s `model` service, in place of `--tool-call-parser=hermes`, and no `--reasoning-parser=qwen3`. PACo's tests (15 scenarios of the assistant's rules, played 5 times each, on active_p1 when these were measured) gave:
 
 | Model | GPU memory | PACo's tests (75 plays) |
 |---|---|---|
@@ -356,14 +366,14 @@ The assistant runs Qwen3-14B (`Qwen/Qwen3-14B-FP8`), served by vLLM behind an Op
 | `Qwen/Qwen3-30B-A3B-FP8` | 48 GB, or two 24 GB GPUs | not tested |
 | `Qwen/Qwen3-32B-FP8` | 48 GB, or two 24 GB GPUs | not tested |
 
-**An online service** (no GPU needed). Several companies serve models behind an OpenAI-compatible API; choose one that serves Qwen3-14B. From the service, you need three things: the API's address (it ends in `/v1`), the model's name, and an API key. Then, in the `PAC` folder:
+**An online service** (no GPU needed). Any provider of the **Assistant settings** page: a frontier model there runs either agent, the autonomous geophysicist included. Or a company serving Qwen3-14B behind an OpenAI-compatible API, set from the command line. From the service, you need three things: the API's address (it ends in `/v1`), the model's name, and an API key. Then, in the `PAC` folder:
 ```sh
 python3 install_assistant.py --remote https://api.example.com/v1 --model <the model's name> --api-key <your key>
 docker compose up -d --build
 ```
 The command checks that the service answers and serves that model, then writes the three into `.env`. The key stays in that file, on your computer: never share or commit it.
 
-What the service then receives: your messages to the assistant, the descriptions of PACo's tools, and what the tools return, that is the quality gates' summaries (profile and run names, settings, verdicts, velocities and depths). Your records, dispersion images and models stay on your computer. Check that this suits your data's rules before using an online service. Services charge by use: one request, such as processing and picking a profile, takes a few tens of thousands of tokens.
+What the service then receives: your messages to the assistant, the descriptions of PACo's tools, and what the tools return, that is the quality gates' summaries (profile and run names, settings, verdicts, velocities and depths). Your records, dispersion images and models stay on your computer, unless you turn vision on for the autonomous geophysicist: its figures then go to the service too. Check that this suits your data's rules before using an online service. Services charge by use: one request, such as processing and picking a profile, takes a few tens of thousands of tokens.
 
 ### If something goes wrong
 
@@ -386,7 +396,7 @@ export PACO_LLM_MODEL=Qwen/Qwen3-14B-FP8             # the model it serves
 export PACO_LLM_CONTEXT=16384                        # its context (vLLM's --max-model-len)
 uv run uvicorn masw.api.main:app --host 127.0.0.1 --port 8000
 ```
-and the web app with `npm install && npm run dev` in `frontend/`. With an online service, also set `PACO_LLM_API_KEY`. These settings can instead go in a `.env` file in the `PAC` folder, which the backend reads when started from there.
+and the web app with `npm install && npm run dev` in `frontend/`. With an online service, also set `PACO_LLM_PROVIDER` and `PACO_LLM_API_KEY`. These settings can instead go in a `.env` file in the `PAC` folder, which the backend reads when started from there, or on the **Assistant settings** page, whose settings win.
 
 The assistant's processing uses half of the computer's cores (`PACO_WORKERS` to change it), and keeps the windows' images it makes in `data/output/.cache`, at most 2 GB, to take them again when a run makes the same ones (`PACO_CACHE_GB=0` keeps none).
 

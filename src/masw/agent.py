@@ -1,11 +1,14 @@
-"""PACo's agent in PAC: the chat page's conversations, each an agent in this process whose tools
-are PACo's, called in-process on PAC's own folders, so that its runs are PAC's runs. The model is
-served elsewhere, behind an OpenAI-compatible API (vLLM serving Qwen3-14B): PACo's settings
-PACO_LLM_BASE_URL and PACO_LLM_MODEL.
+"""PACo's agents in PAC: the chat page's conversations, each an agent in this process whose tools
+are PACo's, called in-process on PAC's own folders, so that its runs are PAC's runs. Two agents,
+as the assistant's settings say (masw.assistant, PACO_AGENT_MODE): PACo's guided workflow, made
+for a small model (Qwen3-14B served by vLLM), or its autonomous geophysicist, which chooses its own
+settings and experiments, made for a frontier model with a long context. The model is any
+provider's (PACO_LLM_*: PACo's paco.llm), served elsewhere.
 
 PACo is optional (PAC's `agent` extra): without it, without a model, or with a model server that
-does not answer, `status` says what is missing and the rest of PAC is unaffected. The only
-module of PAC that imports PACo, and only once a conversation starts."""
+does not answer, `status` says what is missing and the rest of PAC is unaffected. With
+masw.assistant, the only module of PAC that knows PACo, which it imports once a conversation
+starts."""
 
 from __future__ import annotations
 
@@ -15,6 +18,7 @@ import json
 import logging
 import os
 import queue
+import re
 import threading
 import time
 import uuid
@@ -29,10 +33,13 @@ import anyio.to_thread
 import httpx
 from pydantic import BaseModel, ValidationError
 
+from masw.assistant import Mode
 from masw.io.paths import INPUT_DIR, OUTPUT_DIR
 
 if TYPE_CHECKING:
-    from paco.agent import AgentSettings, ChatModel
+    from mcp.server import MCPServer
+    from paco.agent import Agent, AgentSettings, ChatModel
+    from paco.geo.host.loop import Host
     from paco.stopping import Signal
 
 logger = logging.getLogger(__name__)
@@ -57,6 +64,18 @@ RUN_STAGES: dict[str, RunStage] = {
     "job_status": "inversion",
     "invert_petro": "petro",
 }
+# The geophysicist's tools that work on a run, and what each does there: a commit processes the
+# line and picks it.
+GEO_STAGES: dict[str, tuple[RunStage, ...]] = {
+    "commit": ("processing", "picking"),
+    "pick": ("picking",),
+    "decide": ("picking",),
+    "freeze": ("picking",),
+    "invert": ("inversion",),
+    "job_status": ("inversion",),
+}
+# A run's id, as PACo names runs; an inversion job's id (inv-<run's form>) is none.
+RUN_ID = re.compile(r"(?<![\w-])\d{8}-\d{6}-[0-9a-f]{4}(?![\w-])")
 
 
 class RunResult(BaseModel):
@@ -96,6 +115,9 @@ class AgentStatus(BaseModel):
     available: bool
     reason: str | None = None  # what is missing, and how to fix it
     model: str | None = None
+    # The agent the chat runs (guided, autonomous), and the model's provider.
+    mode: Mode | None = None
+    provider: str | None = None
 
 
 class AgentUnavailable(RuntimeError):
@@ -112,47 +134,76 @@ def installed() -> bool:
 
 
 def status() -> AgentStatus:
-    """Whether the chat can run: PACo installed, its model set, the model server answering."""
+    """Whether the chat can run: PACo installed, its model set and its client made (a cloud's
+    library there), a model server of the user's answering, and the autonomous geophysicist's
+    long context."""
     if not installed():
         return AgentStatus(
             available=False,
             reason="PACo, PAC's agent, is not installed: install PAC with its agent extra "
             "(uv sync --extra agent; with Docker, build with PAC_EXTRAS=agent).",
         )
+    from paco.llm.chat import chat_model
+    from paco.llm.settings import LOCAL
+
+    mode = _mode()
     try:
         settings = _settings()
     except AgentUnavailable as error:
-        return AgentStatus(available=False, reason=str(error))
-    url = settings.llm_base_url.rstrip("/")
+        return AgentStatus(available=False, reason=str(error), mode=mode)
+    found = AgentStatus(
+        available=False, model=settings.llm_model, mode=mode, provider=settings.llm_provider
+    )
+    if mode == "autonomous":
+        from paco.geo.host.loop import short_context
+
+        if (short := short_context(settings.context())) is not None:
+            return found.model_copy(update={"reason": short})
     try:
-        response = httpx.get(
-            f"{url}/models",
-            headers={"Authorization": f"Bearer {settings.llm_api_key.get_secret_value()}"},
-            timeout=3.0,
-        )
-        response.raise_for_status()
-    except httpx.HTTPError as error:
-        return AgentStatus(
-            available=False,
-            reason=f"The model server at {url} does not answer ({type(error).__name__}): start "
-            "it (docker compose --profile agent up), or set PACO_LLM_BASE_URL to a server that "
-            "runs, on a machine whose GPU can serve the model.",
-            model=settings.llm_model,
-        )
-    return AgentStatus(available=True, model=settings.llm_model)
+        chat_model(settings)
+    except ValueError as error:  # a cloud's library or credentials missing
+        return found.model_copy(update={"reason": str(error)})
+    if settings.llm_provider in LOCAL and settings.llm_base_url:
+        url = settings.llm_base_url.rstrip("/")
+        try:
+            response = httpx.get(
+                f"{url}/models",
+                headers={"Authorization": f"Bearer {settings.llm_api_key.get_secret_value()}"},
+                timeout=3.0,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            return found.model_copy(
+                update={
+                    "reason": f"The model server at {url} does not answer "
+                    f"({type(error).__name__}): start it (docker compose --profile agent up), or "
+                    "set a server that runs on the assistant's settings page."
+                }
+            )
+    return found.model_copy(update={"available": True})
 
 
 def _settings() -> AgentSettings:
     from paco.agent import AgentSettings
+    from paco.llm.settings import missing
 
     try:
         return AgentSettings()  # pyright: ignore[reportCallIssue]  # from the environment
     except ValidationError as error:
-        missing = ", ".join(f"PACO_{problem['loc'][0]}".upper() for problem in error.errors())
         raise AgentUnavailable(
-            f"The agent's model is not set: set {missing} (the model server's address, e.g. "
-            "http://127.0.0.1:8001/v1, and the name it serves the model under)."
+            f"The assistant's model is not set: set {missing(error)} on the assistant's settings "
+            "page (the model's provider and name, and its server's address where it needs one)."
         ) from error
+
+
+def _mode() -> Mode:
+    """The agent the chat runs, as the settings say: the guided workflow unless set."""
+    from paco.modes import ModeSettings
+
+    try:
+        return ModeSettings().agent_mode
+    except ValidationError:
+        return "guided"
 
 
 def _use_pacs_folders() -> None:
@@ -171,8 +222,10 @@ class Session:
     page polls the events. An answer can be stopped: at once, and everything it started (see
     paco.stopping), what had finished kept, nothing half-written."""
 
-    def __init__(self, model: ChatModel | None = None) -> None:
+    def __init__(self, model: ChatModel | None = None, mode: Mode | None = None) -> None:
         self.id = uuid.uuid4().hex
+        # The agent it runs, for its whole life: a change of the settings is the next one's.
+        self.mode: Mode = mode or _mode()
         self.events: list[Event] = []
         self.busy = False
         self.stopping = False  # a stop was asked, and the answer has not ended yet
@@ -284,23 +337,23 @@ class Session:
 
     async def _converse(self) -> None:
         from mcp import Client
-        from openai import AsyncOpenAI
-        from paco import server, stopping
-        from paco.agent import Agent, Limits, OpenAIChat, save_transcript
+        from paco import stopping
+        from paco.agent import Agent, Limits, save_transcript
         from paco.agent.record import ToolStep
+        from paco.llm.chat import chat_model, seeing
 
-        agent: Agent | None = None
+        agent: Agent | Host | None = None
         name = "scripted"
         try:
             settings = _settings() if self._model is None else None
+            vision = False
             if settings is not None:
                 name = settings.llm_model
-                client = AsyncOpenAI(
-                    base_url=settings.llm_base_url, api_key=settings.llm_api_key.get_secret_value()
-                )
-                model: ChatModel = OpenAIChat(
-                    client, settings.llm_model, settings.llm_temperature, settings.llm_seed
-                )
+                chat = chat_model(settings)
+                if self.mode == "autonomous" and (said := await seeing(chat)) is not None:
+                    logger.info("Session %s: %s", self.id, said)
+                model: ChatModel = chat
+                vision = chat.vision
             else:
                 assert self._model is not None
                 model = self._model
@@ -312,9 +365,23 @@ class Session:
             with self._lock:
                 self._signal = signal
                 self._loop = anyio.lowlevel.current_token()
-            async with Client(server.server) as tools:
-                limits = Limits.of(settings) if settings is not None else None
-                agent = await Agent.start(tools, model, on_event=self._on_event, limits=limits)
+            async with Client(_tools_server(self.mode)) as tools:
+                if self.mode == "autonomous":
+                    from paco.geo.host.loop import Host
+                    from paco.geo.host.loop import Limits as GeoLimits
+                    from paco.settings import get_settings
+
+                    agent = await Host.start(
+                        tools,
+                        model,
+                        get_settings(),
+                        limits=GeoLimits.of(settings) if settings is not None else None,
+                        vision=vision,
+                        on_event=self._on_event,
+                    )
+                else:
+                    limits = Limits.of(settings) if settings is not None else None
+                    agent = await Agent.start(tools, model, on_event=self._on_event, limits=limits)
                 while (question := await anyio.to_thread.run_sync(self._questions.get)) is not None:
                     signal.renew()
                     answer: str | None = None
@@ -343,12 +410,17 @@ class Session:
                             for step in agent.steps[first:]
                             if isinstance(step, ToolStep) and step.called and not step.is_error
                         ]
+                        results = (
+                            run_results(done)
+                            if isinstance(agent, Agent)
+                            else geo_run_results(done, _line_run(agent))
+                        )
                         self._finish(
                             "answer",
                             answer,
-                            run_results(done),
+                            results,
                             time.monotonic() - started,
-                            asks=bool(agent.offers),
+                            asks=isinstance(agent, Agent) and bool(agent.offers),
                         )
         except Exception as error:
             logger.exception("The agent's session %s stopped", self.id)
@@ -358,9 +430,33 @@ class Session:
                 self.closed = True
             if agent is not None and agent.steps:
                 try:
-                    save_transcript(agent.transcript(name), LOG_DIR)
+                    transcript = (
+                        agent.transcript(name) if isinstance(agent, Agent) else agent.transcript()
+                    )
+                    save_transcript(transcript, LOG_DIR)
                 except Exception:
                     logger.exception("Could not save the conversation of session %s", self.id)
+
+
+def _tools_server(mode: Mode) -> MCPServer:
+    """The tools' server of the agent `mode` names: PACo's, or the geophysicist's."""
+    if mode == "autonomous":
+        from paco.geo import server as geo
+
+        return geo.server
+    from paco import server
+
+    return server.server
+
+
+def _line_run(host: Host) -> str | None:
+    """The run of the geophysicist's line now, in its study; None before its first commit."""
+    from paco.geo.tools.commit import line_of
+
+    if host.study is None:
+        return None
+    line = line_of(host.study)
+    return line.run_id if line is not None else None
 
 
 class Sessions:
@@ -368,12 +464,13 @@ class Sessions:
         self._sessions: dict[str, Session] = {}
         self._lock = threading.Lock()
 
-    def create(self, model: ChatModel | None = None) -> Session:
-        """A new conversation; raises AgentUnavailable, with the reason, when the chat cannot
-        run (a scripted `model` needs no model server)."""
+    def create(self, model: ChatModel | None = None, mode: Mode | None = None) -> Session:
+        """A new conversation, with the agent `mode` names (the settings' when none); raises
+        AgentUnavailable, with the reason, when the chat cannot run (a scripted `model` needs no
+        model server)."""
         if model is None and not (found := status()).available:
             raise AgentUnavailable(found.reason or "The agent is not available.")
-        session = Session(model)
+        session = Session(model, mode)
         with self._lock:
             idle = [one for one in self._sessions.values() if not one.busy]
             while len(self._sessions) >= MAX_SESSIONS and idle:
@@ -422,6 +519,28 @@ def run_results(calls: Sequence[tuple[str, str, str]]) -> tuple[RunResult, ...]:
         stages = done.setdefault(run_id, [])
         if stage not in stages:
             stages.append(stage)
+    return _found(done)
+
+
+def geo_run_results(
+    calls: Sequence[tuple[str, str, str]], line_run: str | None
+) -> tuple[RunResult, ...]:
+    """The runs the geophysicist's tool calls of an answer worked on, each call its name,
+    arguments and result: the runs its results name (a commit's, a freeze's), else its line's
+    now (`line_run`); with what each did."""
+    done: dict[str, list[RunStage]] = {}
+    for name, _arguments, result in calls:
+        stages = GEO_STAGES.get(name)
+        if stages is None:
+            continue
+        for run_id in RUN_ID.findall(result) or ([line_run] if line_run else []):
+            listed = done.setdefault(run_id, [])
+            listed.extend(stage for stage in stages if stage not in listed)
+    return _found(done)
+
+
+def _found(done: dict[str, list[RunStage]]) -> tuple[RunResult, ...]:
+    """The runs of `done` found in PAC's output folder, with their stages."""
     results: list[RunResult] = []
     for run_id, stages in done.items():
         found = sorted(OUTPUT_DIR.glob(f"*/{run_id}/run.json"))

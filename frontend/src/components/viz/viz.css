@@ -993,3 +993,37 @@
 .viz-records-head .field {
   flex: 0 1 320px;
 }
+
+/* The geophysicist's journal on a run's card: an entry a line, its id in the margin; its
+   reasoning (hypotheses, conclusions, decisions) apart from what code wrote. */
+.viz-journal {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: var(--fs-small);
+  line-height: 1.45;
+}
+
+.viz-journal li {
+  display: grid;
+  grid-template-columns: 3.2em 1fr;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.viz-journal li.reasoning {
+  color: var(--text);
+}
+
+.viz-journal-id {
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  color: var(--accent-fg);
+  padding-top: 1px;
+}
+
+.viz-journal-of {
+  color: var(--text-faint);
+}

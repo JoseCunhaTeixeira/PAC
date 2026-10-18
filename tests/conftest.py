@@ -15,6 +15,8 @@ _ROOT = Path(tempfile.mkdtemp(prefix="pac-tests-"))
 atexit.register(shutil.rmtree, _ROOT, ignore_errors=True)
 os.environ["MASW_INPUT_DIR"] = str(_ROOT / "input")
 os.environ["MASW_OUTPUT_DIR"] = str(_ROOT / "output")
+# The assistant's settings page saves there, never in PAC's own data folder.
+os.environ["PAC_SETTINGS_DIR"] = str(_ROOT / "settings")
 (_ROOT / "input").mkdir()
 (_ROOT / "output").mkdir()
 
@@ -33,8 +35,18 @@ def no_env_file(monkeypatch: pytest.MonkeyPatch) -> None:
     CI, which has none, fails."""
     try:
         from paco.agent.settings import AgentSettings
+        from paco.geo.settings import GeoSettings
+        from paco.llm.settings import JudgeSettings, ModelSettings
+        from paco.modes import ModeSettings
         from paco.settings import Settings
     except ImportError:  # PAC without its assistant
         return
-    for settings in (AgentSettings, Settings):
+    for settings in (
+        AgentSettings,
+        GeoSettings,
+        JudgeSettings,
+        ModelSettings,
+        ModeSettings,
+        Settings,
+    ):
         monkeypatch.setitem(settings.model_config, "env_file", None)

@@ -22,6 +22,7 @@ from masw.io.quality.files import (
     read_manifest,
     shot_distances,
 )
+from masw.io.quality.journal import JournalEntry, run_journal
 from masw.io.quality.log import (
     COHERENCE_FILE,
     LINE,
@@ -201,6 +202,8 @@ class RunCard(BaseModel):
     windows: tuple[LineWindow, ...]
     # The shots a window stacks: from, to this far from its middle (to None: any distance).
     reach: tuple[float, float | None] | None
+    # The journal of the assistant's geophysicist (PACo's autonomous agent), when it made the run.
+    journal: tuple[JournalEntry, ...] = ()
 
 
 def maker(run_folder: Path) -> Maker:
@@ -255,6 +258,7 @@ def run_card(folder: str) -> RunCard:
         sources=line.sources,
         windows=_windows(manifest, line.receivers),
         reach=shot_distances(masw) if line.sources else None,
+        journal=run_journal(run_folder.parent, manifest.run_id),
     )
 
 

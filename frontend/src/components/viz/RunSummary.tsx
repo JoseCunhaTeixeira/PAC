@@ -1,6 +1,6 @@
 import { capitalized, num, range, runDate, triggerLabel } from "./format";
 import { FolderIcon } from "../icons";
-import type { LengthTrial, LineTried, MuteTried, RunCard, SegmentsTried, Setting } from "./types";
+import type { JournalEntry, LengthTrial, LineTried, MuteTried, RunCard, SegmentsTried, Setting } from "./types";
 import { Fold, OriginTag, SettingsList } from "./ui";
 
 // A run at a glance: who made it and when, its windows' length and step and the shots they
@@ -163,6 +163,43 @@ function LineTries({ tries }: { tries: LineTried[] }) {
   );
 }
 
+// What each kind of entry is, in the journal's margin: code writes what happened, the model its
+// reasoning.
+const JOURNAL_KINDS: Record<string, string> = {
+  objective: "objective",
+  settings: "your settings",
+  experiment: "experiment",
+  commit: "commit",
+  freeze: "freeze",
+  inversion: "inversion",
+  report: "report",
+  hypothesis: "hypothesis",
+  conclusion: "conclusion",
+  decision: "decision",
+};
+const REASONING = new Set(["hypothesis", "conclusion", "decision"]);
+
+function Journal({ entries }: { entries: JournalEntry[] }) {
+  return (
+    <ol className="viz-journal">
+      {entries.map((entry) => {
+        const text = entry.text.startsWith(entry.id) ? entry.text.slice(entry.id.length).trim() : entry.text;
+        return (
+          <li key={entry.id} className={REASONING.has(entry.kind) ? "reasoning" : undefined}>
+            <span className="viz-journal-id" data-tip={JOURNAL_KINDS[entry.kind] ?? entry.kind}>
+              {entry.id}
+            </span>
+            <span>
+              {text}
+              {entry.of.length > 0 && <span className="viz-journal-of"> (from {entry.of.join(", ")})</span>}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export function RunSummary({ card }: { card: RunCard }) {
   const tiles = TILES.map((key) => card.settings.find((one) => one.key === key)).filter(
     (one): one is Setting => one !== undefined,
@@ -173,6 +210,9 @@ export function RunSummary({ card }: { card: RunCard }) {
   const mutes = card.mutes ?? [];
   const segments = card.segments ?? [];
   const lineTries = card.line_tries ?? [];
+  const journal = card.journal ?? [];
+  // The assistant's geophysicist made it when its journal names it.
+  const by = card.by === "assistant" ? (journal.length > 0 ? "by the geophysicist" : "by the assistant") : "by hand";
   return (
     <section className="viz-card">
       <div className="viz-run-title">
@@ -188,9 +228,15 @@ export function RunSummary({ card }: { card: RunCard }) {
         {card.by && (
           <span
             className="viz-chip blue"
-            data-tip={card.by === "assistant" ? "By the assistant\nChecked stage by stage" : "By hand"}
+            data-tip={
+              card.by !== "assistant"
+                ? "By hand"
+                : journal.length > 0
+                  ? "By the assistant's autonomous geophysicist\nIts experiments and decisions in its journal"
+                  : "By the assistant\nChecked stage by stage"
+            }
           >
-            {card.by === "assistant" ? "by the assistant" : "by hand"}
+            {by}
           </span>
         )}
         {card.started_at && <span className="viz-chip">{runDate(card.started_at)}</span>}
@@ -204,6 +250,11 @@ export function RunSummary({ card }: { card: RunCard }) {
           {mutes.length > 0 && <Mutes mutes={mutes} />}
           {segments.length > 0 && <Segments segments={segments} />}
           {lineTries.length > 0 && <LineTries tries={lineTries} />}
+        </Fold>
+      )}
+      {journal.length > 0 && (
+        <Fold title={`The geophysicist's journal: ${journal.length} entries`}>
+          <Journal entries={journal} />
         </Fold>
       )}
     </section>

@@ -1420,3 +1420,46 @@ def test_a_records_muting_the_mute_trial_chose_comes_from_the_data(run: str) -> 
     muting = next(one for one in record_settings(manifest, log, "1.mseed") if one.key == "muting")
 
     assert (muting.origin, muting.why) == ("rule", "the checks changed it on the line")
+
+
+def test_a_run_the_geophysicist_made_has_its_journal(tmp_path: Path) -> None:
+    from masw.io.quality.journal import run_journal
+
+    profile = tmp_path / "shots"
+    study = profile / "studies" / "20261018-110000-aaaa"
+    study.mkdir(parents=True)
+    commits = [
+        {"number": 1, "run_id": "20261018-120000-abcd"},
+        {"number": 2, "run_id": "20261018-130000-ef01"},
+    ]
+    (study / "line.json").write_text(
+        json.dumps({"run_id": "20261018-130000-ef01", "commits": commits})
+    )
+    entries = [
+        {
+            "id": "O1",
+            "kind": "objective",
+            "at": "2026-10-18T11:00:00Z",
+            "text": "O1 a velocity section to 20 m",
+        },
+        {
+            "id": "H1",
+            "kind": "hypothesis",
+            "at": "2026-10-18T11:05:00Z",
+            "text": "longer windows",
+            "of": ["E1"],
+        },
+    ]
+    (study / "journal.jsonl").write_text(
+        "".join(json.dumps(one) + "\n" for one in entries) + "not json\n"
+    )
+
+    # A run of its line, now or at a commit: the study's journal, a line unread left out.
+    for run_id in ("20261018-130000-ef01", "20261018-120000-abcd"):
+        found = run_journal(profile, run_id)
+        assert [(one.id, one.kind, one.of) for one in found] == [
+            ("O1", "objective", ()),
+            ("H1", "hypothesis", ("E1",)),
+        ]
+    assert run_journal(profile, "20261018-140000-0000") == ()
+    assert run_journal(tmp_path / "noise", "20261018-120000-abcd") == ()

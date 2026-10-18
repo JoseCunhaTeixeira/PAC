@@ -1,10 +1,15 @@
-"""The chat page: conversations with PACo's agent (masw.agent), polled like PAC's jobs."""
+"""The chat page: conversations with PACo's agent (masw.agent), polled like PAC's jobs; and the
+assistant's settings page: the agent, the model and its test, vision (masw.assistant)."""
 
 import logging
+import time
+from typing import TYPE_CHECKING, Any
 
+import anyio
 from fastapi import APIRouter, HTTPException, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
+from masw import assistant
 from masw.agent import (
     AgentStatus,
     AgentUnavailable,
@@ -15,6 +20,12 @@ from masw.agent import (
     sessions,
     status,
 )
+
+if TYPE_CHECKING:
+    from paco.llm.settings import ModelSettings
+
+# How long a connection test waits for the model, in seconds.
+TEST_S = 60.0
 
 logger = logging.getLogger(__name__)
 
@@ -106,3 +117,89 @@ def close_session(session_id: str) -> Response:
     if not sessions.close(session_id):
         raise HTTPException(status_code=404, detail=f"Unknown conversation: {session_id}")
     return Response(status_code=204)
+
+
+class TestOut(BaseModel):
+    """A connection test: whether the model answered, what it said, how long it took, whether it
+    takes images (asked when vision is on), or the error."""
+
+    ok: bool
+    reply: str | None = None
+    seconds: float | None = None
+    images: bool | None = None
+    error: str | None = None
+
+
+@router.get("/agent/providers")
+def get_providers() -> list[dict[str, Any]]:
+    """The model providers the settings page offers, with what each needs; none without PACo."""
+    if not installed():
+        return []
+    from paco.llm.settings import PROVIDERS
+
+    return [info.model_dump() for info in PROVIDERS]
+
+
+@router.get("/agent/settings")
+def get_settings() -> assistant.AssistantSettings:
+    """The assistant's settings in force, the API key left out (whether one is set)."""
+    return assistant.current()
+
+
+@router.put("/agent/settings")
+def put_settings(given: assistant.AssistantSettingsIn) -> assistant.AssistantSettings:
+    """The assistant's settings saved and applied, once PACo takes them: refused, saying what is
+    missing or wrong, otherwise. The conversations open keep their agent; the next ones take
+    these."""
+    _model_settings(given)
+    return assistant.save(given)
+
+
+@router.post("/agent/settings/test")
+async def test_settings(given: assistant.AssistantSettingsIn) -> TestOut:
+    """One short call to the model the page's settings name (saved or not), and, with vision on,
+    whether it takes images: what the page says of the connection. A few tokens, never a figure."""
+    from paco.llm.chat import chat_model, tried
+
+    settings = _model_settings(given)
+    started = time.monotonic()
+    try:
+        # Asked once, within a minute: the page waits for it.
+        with anyio.fail_after(TEST_S):
+            chat = chat_model(settings, reconnect_s=0)
+            reply = await tried(chat)
+            images = await chat.takes_images() if given.vision else None
+    except TimeoutError:
+        return TestOut(ok=False, error=f"No answer within {TEST_S:g} s.")
+    except Exception as exc:  # a key refused, a model not there, a server down: said as such
+        return TestOut(ok=False, error=f"{type(exc).__name__}: {exc}")
+    return TestOut(
+        ok=True, reply=reply[:200], seconds=round(time.monotonic() - started, 2), images=images
+    )
+
+
+def _model_settings(given: assistant.AssistantSettingsIn) -> ModelSettings:
+    """PACo's settings of the model `given` names (the key set when the page sent none); 422,
+    saying what is missing or wrong, when PACo refuses them; 503 without PACo."""
+    if not installed():
+        raise HTTPException(status_code=503, detail="PACo, PAC's agent, is not installed.")
+    from paco.llm.settings import ModelSettings
+
+    values = assistant.values_of(given)
+    try:
+        return ModelSettings(
+            _env_file=None,  # pyright: ignore[reportCallIssue]
+            llm_provider=values[assistant.NAMES["provider"]],  # pyright: ignore[reportArgumentType]
+            llm_model=values[assistant.NAMES["model"]],
+            llm_base_url=values[assistant.NAMES["base_url"]] or None,
+            llm_api_key=values[assistant.KEY] or assistant.NO_KEY,  # pyright: ignore[reportArgumentType]
+            llm_region=values[assistant.NAMES["region"]] or None,
+            llm_project=values[assistant.NAMES["project"]] or None,
+            llm_context=given.context,
+            llm_vision=given.vision,
+        )
+    except ValidationError as exc:
+        problems = "; ".join(
+            f"PACO_{problem['loc'][0]}".upper() + f" ({problem['msg']})" for problem in exc.errors()
+        )
+        raise HTTPException(status_code=422, detail=f"Set {problems}.") from exc

@@ -9,3 +9,5 @@ frontend
 data/output/*
 !data/output/.gitkeep
 *.egg-info
+# The assistant's settings, the API key with them: mounted, never built into the image.
+data/settings

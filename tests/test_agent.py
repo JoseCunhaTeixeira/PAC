@@ -371,3 +371,170 @@ def test_an_answer_that_asks_to_choose_is_said_to_the_menu() -> None:
 
     listed = {one["id"]: one for one in client.get("/agent/sessions").json()}
     assert (listed[session]["answers"], listed[session]["asks"]) == (1, True), said
+
+
+def test_the_geophysicists_answer_says_the_runs_it_worked_on() -> None:
+    run = OUTPUT_DIR / "shots" / "20261018-120000-abcd"
+    run.mkdir(parents=True, exist_ok=True)
+    (run / "run.json").write_text("{}")
+    calls = [
+        ("survey", "{}", "active line, 28 shots"),
+        ("commit", "{}", "L1 made run 20261018-120000-abcd. 7 windows picked."),
+        ("decide", "{}", "Accepted 18.75."),  # the line's run, as the study keeps it
+        ("invert", "{}", "Job inv-20261018-130000-ef01 started on 7 windows."),  # a job, no run
+    ]
+
+    try:
+        (result,) = agent.geo_run_results(calls, "20261018-120000-abcd")
+    finally:
+        shutil.rmtree(run)
+
+    assert result.folder == "shots/20261018-120000-abcd"
+    assert result.stages == ("processing", "picking", "inversion")
+
+
+def test_each_mode_has_its_agents_tools() -> None:
+    guided = anyio.run(agent._tools_server("guided").list_tools)  # pyright: ignore[reportPrivateUsage]
+    autonomous = anyio.run(agent._tools_server("autonomous").list_tools)  # pyright: ignore[reportPrivateUsage]
+
+    assert {"run_processing", "judge"} <= {tool.name for tool in guided}
+    assert {"try_settings", "commit", "freeze"} <= {tool.name for tool in autonomous}
+
+
+def test_the_autonomous_geophysicist_needs_a_long_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PACO_AGENT_MODE", "autonomous")
+    monkeypatch.setenv("PACO_LLM_BASE_URL", "http://127.0.0.1:9/v1")
+    monkeypatch.setenv("PACO_LLM_MODEL", "Qwen/Qwen3-14B-FP8")
+    monkeypatch.delenv("PACO_LLM_CONTEXT", raising=False)
+
+    found = client.get("/agent/status").json()
+
+    # A server of the user's: a small model's context unless set, too short for it.
+    assert (found["available"], found["mode"]) == (False, "autonomous")
+    assert found["reason"].startswith("The autonomous geophysicist needs a model with a long")
+
+
+# ---------------------------------------------------------------- the assistant's settings page
+
+
+@pytest.fixture
+def fresh_settings(monkeypatch: pytest.MonkeyPatch) -> Path:
+    """No settings saved, none in the environment: as a new install."""
+    from masw import assistant
+
+    assistant.SETTINGS_FILE.unlink(missing_ok=True)
+    for name in (*assistant.NAMES.values(), assistant.KEY):
+        monkeypatch.delenv(name, raising=False)
+    return assistant.SETTINGS_FILE
+
+
+def test_the_settings_are_saved_applied_and_the_key_never_shown(
+    fresh_settings: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    providers = {one["name"]: one for one in client.get("/agent/providers").json()}
+    assert (
+        providers["anthropic-vertex"]["key"] == "none" and providers["vllm"]["address"] == "needed"
+    )
+    assert client.get("/agent/settings").json()["key_set"] is False
+
+    sent = {
+        "mode": "autonomous",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "api_key": "sk-ant-secret",
+        "vision": False,
+    }
+    saved = client.put("/agent/settings", json=sent)
+
+    assert saved.status_code == 200
+    body = saved.json()
+    assert (body["mode"], body["provider"], body["model"], body["key_set"]) == (
+        "autonomous",
+        "anthropic",
+        "claude-opus-5-5",
+        True,
+    )
+    assert "sk-ant-secret" not in saved.text
+    # Kept for the next start, readable by its owner alone; in force now.
+    assert fresh_settings.stat().st_mode & 0o777 == 0o600
+    assert "PACO_LLM_API_KEY=sk-ant-secret" in fresh_settings.read_text()
+    import os
+
+    assert (os.environ["PACO_AGENT_MODE"], os.environ["PACO_LLM_PROVIDER"]) == (
+        "autonomous",
+        "anthropic",
+    )
+    # Saved again without a key: the key kept.
+    again = client.put("/agent/settings", json={**sent, "api_key": None, "mode": "guided"})
+    assert again.json()["key_set"] is True and os.environ["PACO_LLM_API_KEY"] == "sk-ant-secret"
+    for name in (
+        "PACO_AGENT_MODE",
+        "PACO_LLM_PROVIDER",
+        "PACO_LLM_MODEL",
+        "PACO_LLM_API_KEY",
+        "PACO_LLM_VISION",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_settings_paco_refuses_are_not_saved(fresh_settings: Path) -> None:
+    # A vLLM server without its address.
+    refused = client.put(
+        "/agent/settings", json={"provider": "vllm", "model": "Qwen/Qwen3-14B-FP8"}
+    )
+
+    assert refused.status_code == 422
+    assert refused.json()["detail"].startswith("Set PACO_LLM_BASE_URL (")
+    assert not fresh_settings.exists()
+
+
+@pytest.mark.usefixtures("fresh_settings")
+def test_a_connection_test_says_why_it_failed() -> None:
+    tried = client.post(
+        "/agent/settings/test",
+        json={
+            "provider": "vllm",
+            "model": "Qwen/Qwen3-14B-FP8",
+            "base_url": "http://127.0.0.1:9/v1",
+        },
+    )
+
+    assert tried.status_code == 200
+    body = tried.json()
+    assert body["ok"] is False and body["error"].startswith("APIConnectionError")
+
+
+@pytest.mark.usefixtures("fresh_settings")
+def test_the_pages_settings_win_over_a_dotenv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # PAC run from a folder whose .env sets a small model's context, as install_assistant.py writes.
+    (tmp_path / ".env").write_text("PACO_LLM_MODEL=Qwen/Qwen3-14B-FP8\nPACO_LLM_CONTEXT=16384\n")
+    monkeypatch.chdir(tmp_path)
+    from paco.agent.settings import AgentSettings
+
+    monkeypatch.setitem(AgentSettings.model_config, "env_file", ".env")
+    assert client.get("/agent/settings").json()["model"] == "Qwen/Qwen3-14B-FP8"
+
+    sent = {
+        "mode": "autonomous",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "context": None,
+    }
+    assert client.put("/agent/settings", json=sent).status_code == 200
+
+    # The page left the context empty: the provider's own, not .env's.
+    assert AgentSettings().context() == 131_072  # pyright: ignore[reportCallIssue]
+    for name in (
+        "PACO_AGENT_MODE",
+        "PACO_LLM_PROVIDER",
+        "PACO_LLM_MODEL",
+        "PACO_LLM_BASE_URL",
+        "PACO_LLM_REGION",
+        "PACO_LLM_PROJECT",
+        "PACO_LLM_CONTEXT",
+        "PACO_LLM_VISION",
+        "PACO_LLM_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)

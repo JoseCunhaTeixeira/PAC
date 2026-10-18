@@ -15,6 +15,7 @@ import {
   CrossIcon,
   PlusIcon,
   SendIcon,
+  SlidersIcon,
   SparklesIcon,
   StopIcon,
   TrashIcon,
@@ -23,12 +24,18 @@ import { PageArt } from "./components/PageArt";
 import { usePageTitle } from "./components/pageTitle";
 import "./ChatPage.css";
 
-// PACo's agent, in PAC's process (GET /agent/status says whether it can run, and if not why).
+// PACo's agent, in PAC's process (GET /agent/status says whether it can run, and if not why):
+// its guided workflow, or its autonomous geophysicist, as the assistant's settings say.
+type Mode = "guided" | "autonomous";
+
 interface AgentStatus {
   available: boolean;
   reason: string | null;
   model: string | null;
+  mode?: Mode | null;
 }
+
+const MODE_NAMES: Record<Mode, string> = { guided: "Guided", autonomous: "Autonomous" };
 
 // A run an answer worked on, and what it did there, in order.
 interface RunResult {
@@ -121,12 +128,21 @@ interface Progress {
   fraction: number | null;
 }
 
-const EXAMPLES = [
-  "Which profiles can I process?",
-  "Process active_p1 and give me its dispersion curves.",
-  "Process active_p1 and invert it: I want its velocity section.",
-  "Process active_p1 and give me the soil types and the water table.",
-];
+// Requests to start from, as each agent takes them.
+const EXAMPLES: Record<Mode, string[]> = {
+  guided: [
+    "Which profiles can I process?",
+    "Process active_p1 and give me its dispersion curves.",
+    "Process active_p1 and invert it: I want its velocity section.",
+    "Process active_p1 and give me the soil types and the water table.",
+  ],
+  autonomous: [
+    "Which profiles can I study?",
+    "Study active_p2: I want its velocity section down to 20 m.",
+    "Study active_p2 for lateral changes near the surface.",
+    "Give me passive_p2's dispersion curves, as deep as the data allow.",
+  ],
+};
 
 const CALL = /^-> (\w+)\((.*)\)(?: refused: (.*))?$/s;
 
@@ -180,6 +196,17 @@ const LABELS: Record<string, [string, string, string]> = {
     "Run the petrophysical inversion",
   ],
   redo: ["Redid the {stage}", "Redoing the {stage}", "Redo the {stage}"],
+  inspect: ["Looked up the {what}", "Looking up the {what}", "Look up the {what}"],
+  // The autonomous geophysicist's own tools.
+  survey: ["Surveyed {profile}", "Surveying {profile}", "Survey {profile}"],
+  observe: ["Read the checks", "Reading the checks", "Read the checks"],
+  look: ["Looked at the {what}", "Looking at the {what}", "Look at the {what}"],
+  advise: ["Asked PACo about the {topic}", "Asking PACo about the {topic}", "Ask PACo about the {topic}"],
+  try_settings: ["Tried settings", "Trying settings", "Try settings"],
+  commit: ["Committed the line", "Committing the line", "Commit the line"],
+  decide: ["Decided windows", "Deciding windows", "Decide windows"],
+  freeze: ["Froze the curves", "Freezing the curves", "Freeze the curves"],
+  journal: ["Kept the journal", "Keeping the journal", "Keep the journal"],
 };
 
 // Why PACo's host left a call unmade, in the user's words.
@@ -471,6 +498,14 @@ export default function ChatPage() {
           </div>
           <div className="chat-header-actions">
             <StatusBadge status={status} />
+            <Link
+              to="/assistant/settings"
+              className="chat-quiet chat-settings"
+              aria-label="Assistant settings"
+              data-tip={"Assistant settings\nThe agent, the model, vision"}
+            >
+              <SlidersIcon size={15} />
+            </Link>
             <button
               ref={toggleRef}
               className={
@@ -575,12 +610,19 @@ export default function ChatPage() {
             <p style={{ margin: "0 0 12px" }}>
               The rest of PAC works without it.
             </p>
-            <button className="chat-quiet" onClick={checkStatus}>
-              Check again
-            </button>
+            <span className="chat-unavailable-actions">
+              <Link to="/assistant/settings" className="chat-quiet">
+                Open the assistant&apos;s settings
+              </Link>
+              <button className="chat-quiet" onClick={checkStatus}>
+                Check again
+              </button>
+            </span>
           </div>
         )}
-        {status?.available && turns.length === 0 && <Welcome onPick={start} />}
+        {status?.available && turns.length === 0 && (
+          <Welcome onPick={start} mode={status.mode ?? "guided"} />
+        )}
         {turns.map((turn, i) => (
           <TurnView
             key={turn.key}
@@ -657,21 +699,37 @@ export default function ChatPage() {
 
 function StatusBadge({ status }: { status: AgentStatus | null }) {
   const ready = status?.available === true;
+  const mode = status?.mode ? `${MODE_NAMES[status.mode]} · ` : "";
   const label =
     status === null
       ? "Checking…"
       : ready
-        ? (status.model ?? "Ready")
+        ? `${mode}${status.model ?? "Ready"}`
         : "Unavailable";
   return (
-    <span className="chat-status">
+    <span
+      className="chat-status"
+      data-tip={
+        status?.mode === "autonomous"
+          ? "The autonomous geophysicist\nIt chooses and tries its own settings"
+          : status?.mode === "guided"
+            ? "The guided workflow\nPACo leads the model step by step"
+            : undefined
+      }
+    >
       <span className={ready ? "chat-status-dot ready" : "chat-status-dot"} />
       {label}
     </span>
   );
 }
 
-function Welcome({ onPick }: { onPick: (example: string) => void }) {
+function Welcome({
+  onPick,
+  mode,
+}: {
+  onPick: (example: string) => void;
+  mode: Mode;
+}) {
   return (
     <div className="chat-welcome">
       <div className="chat-welcome-icon">
@@ -682,7 +740,7 @@ function Welcome({ onPick }: { onPick: (example: string) => void }) {
         Ask in plain words, or start from one of these.
       </p>
       <div className="chat-chips">
-        {EXAMPLES.map((example) => (
+        {EXAMPLES[mode].map((example) => (
           <button
             key={example}
             className="chat-chip"
@@ -886,7 +944,7 @@ function StepRow({
         {step.note && (
           <span className="chat-step-note">
             {step.state === "refused"
-              ? `Not run: ${NOT_RUN[step.note] ?? step.note}`
+              ? `Not run: ${NOT_RUN[step.note] ?? step.note.replace(/^Not called: /, "")}`
               : `Failed: ${step.note}`}
           </span>
         )}
@@ -962,8 +1020,8 @@ function stepLabel(step: Step, underWay: boolean): string {
   return labels[form].replace(/\{(\w+)\}/g, (_, name: string) => {
     const value = step.args[name];
     if (typeof value !== "string" || !value)
-      return name === "profile" ? "a profile" : "stage";
-    return name === "stage" ? value.replaceAll("_", " ") : value;
+      return name === "profile" ? "a profile" : name === "stage" ? "stage" : "data";
+    return name === "profile" ? value : value.replaceAll("_", " ");
   });
 }
 

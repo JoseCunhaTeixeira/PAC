@@ -9,6 +9,7 @@ import InversionPage from "./InversionPage";
 import PetroInversionPage from "./PetroInversionPage";
 import VisualizationPage from "./VisualizationPage";
 import ChatPage from "./ChatPage";
+import AssistantSettingsPage from "./AssistantSettingsPage";
 import { API } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useStayPut } from "./components/stayPut";
@@ -26,6 +27,7 @@ import {
   OutcropIcon,
   PassiveActiveIcon,
   PassiveIcon,
+  SlidersIcon,
   SparklesIcon,
   SunIcon,
 } from "./components/icons";
@@ -40,11 +42,18 @@ interface NavItem {
   icon: ReactNode;
 }
 
-// The sidebar: home, the AI assistant who can do it all (where PAC was installed with PACo),
-// then the workflow's order: records to images, images to curves and models, what came out.
+// The sidebar: home, the AI assistant who can do it all and its settings (where PAC was installed
+// with PACo), then the workflow's order: records to images, images to curves and models, what came
+// out.
 const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   { label: null, items: [{ to: "/", label: "Home", icon: <HomeIcon /> }] },
-  { label: "Automate", items: [{ to: "/assistant", label: "AI assistant", icon: <SparklesIcon /> }] },
+  {
+    label: "Automate",
+    items: [
+      { to: "/assistant", label: "AI assistant", icon: <SparklesIcon /> },
+      { to: "/assistant/settings", label: "Assistant settings", icon: <SlidersIcon /> },
+    ],
+  },
   {
     label: "Compute",
     items: [
@@ -114,7 +123,7 @@ export default function App() {
 
           <nav className="sidebar-nav">
             {NAV_GROUPS.map((group) => {
-              const items = group.items.filter((item) => assistant || item.to !== "/assistant");
+              const items = group.items.filter((item) => assistant || !item.to.startsWith("/assistant"));
               if (items.length === 0) return null; // the assistant's group, without PACo
               return (
                 <div key={group.label ?? "top"} className="sidebar-group">
@@ -126,7 +135,7 @@ export default function App() {
                       <NavLink
                         key={item.to}
                         to={item.to}
-                        end={item.to === "/"}
+                        end={item.to === "/" || item.to === "/assistant"}
                         title={item.label}
                         className={({ isActive }) =>
                           "sidebar-link" + (isActive ? " active" : "") + (told ? ` news-${told}` : "")
@@ -188,6 +197,7 @@ export default function App() {
             <Route path="/petro_inversion" element={<PetroInversionPage />} />
             <Route path="/visualization" element={<VisualizationPage />} />
             <Route path="/assistant" element={<ChatPage />} />
+            <Route path="/assistant/settings" element={<AssistantSettingsPage />} />
           </Routes>
           </ErrorBoundary>
         </main>
