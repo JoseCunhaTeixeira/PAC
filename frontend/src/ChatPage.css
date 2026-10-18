@@ -30,6 +30,10 @@
   border: 1px solid rgba(255, 255, 255, 0.16);
 }
 
+.chat-hero .chat-status:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
 .chat-hero .chat-quiet {
   background: rgba(8, 20, 34, 0.55);
   color: #ffffff;
@@ -75,17 +79,29 @@
   padding-top: 8px;
 }
 
+/* The assistant's state, a button: a click opens its settings. */
 .chat-status {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   padding: 5px 11px;
+  border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface-hover);
   color: var(--text-muted);
+  box-shadow: none;
   font-size: var(--fs-small);
   font-weight: 600;
   white-space: nowrap;
+}
+
+.chat-status:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.chat-status svg {
+  opacity: 0.8;
 }
 
 .chat-status-dot {
@@ -697,18 +713,7 @@
   font-size: var(--fs-small);
 }
 
-/* The way to the assistant's settings, beside its status: a link that looks like its buttons. */
-a.chat-quiet {
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.chat-settings {
-  justify-content: center;
-  padding: 6px 9px;
-}
-
+/* The way to the assistant's settings popup, beside its status. */
 .chat-unavailable-actions {
   display: inline-flex;
   flex-wrap: wrap;

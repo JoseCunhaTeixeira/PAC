@@ -19,11 +19,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The assistant page: PACo, PAC's agent (its guided workflow and its autonomous geophysicist),
+# The assistant page: PACo, PAC's agent (in its workflow or autonomous mode),
 # run in PAC's process. Its model is served apart (vLLM on a GPU able to hold it, here or
-# elsewhere: see docker-compose.yml's agent profile), or any provider's, the cloud credentials'
-# libraries with it (Vertex AI's, Bedrock's).
-agent = ["PACo[vertex,bedrock] @ git+https://github.com/JoseCunhaTeixeira/PACo"]
+# elsewhere: see docker-compose.yml's agent profile), or a provider's API.
+agent = ["PACo @ git+https://github.com/JoseCunhaTeixeira/PACo"]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.14", "pyright>=1.1", "pre-commit>=4"]

@@ -1,4 +1,4 @@
-"""The geophysicist's journal of a run: the study of PACo's autonomous agent whose line the run is
+"""The journal of a run PACo's autonomous mode made: the study whose line the run is
 (<output>/<profile>/studies/<id>/: its line, line.json, and its journal, journal.jsonl), read as
 plain JSON, PACo not needed. The journal says what the agent set out to do, each experiment and
 commit with its numbers, its hypotheses, conclusions and decisions, the freeze, the inversions and

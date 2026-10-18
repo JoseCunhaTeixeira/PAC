@@ -1422,7 +1422,7 @@ def test_a_records_muting_the_mute_trial_chose_comes_from_the_data(run: str) -> 
     assert (muting.origin, muting.why) == ("rule", "the checks changed it on the line")
 
 
-def test_a_run_the_geophysicist_made_has_its_journal(tmp_path: Path) -> None:
+def test_a_run_the_autonomous_mode_made_has_its_journal(tmp_path: Path) -> None:
     from masw.io.quality.journal import run_journal
 
     profile = tmp_path / "shots"

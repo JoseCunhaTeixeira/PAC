@@ -994,7 +994,7 @@
   flex: 0 1 320px;
 }
 
-/* The geophysicist's journal on a run's card: an entry a line, its id in the margin; its
+/* The autonomous mode's journal on a run's card: an entry a line, its id in the margin; its
    reasoning (hypotheses, conclusions, decisions) apart from what code wrote. */
 .viz-journal {
   list-style: none;

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Routes, Route, NavLink, Link, useLocation } from "react-router-dom";
 import HomePage from "./HomePage";
 import ActiveComputingPage from "./ActiveComputingPage";
@@ -9,13 +9,14 @@ import InversionPage from "./InversionPage";
 import PetroInversionPage from "./PetroInversionPage";
 import VisualizationPage from "./VisualizationPage";
 import ChatPage from "./ChatPage";
-import AssistantSettingsPage from "./AssistantSettingsPage";
+import AssistantSettingsPopup from "./AssistantSettings";
 import { API } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useStayPut } from "./components/stayPut";
 import { TipLayer } from "./components/TipLayer";
 import { runsAt, useRunning } from "./components/running";
 import { useAssistantNews, type News } from "./components/assistantNews";
+import { complete, SettingsPopupContext, type AssistantSettings } from "./components/assistantSettings";
 import { applyTheme, getInitialTheme, ThemeContext, type Theme } from "./theme";
 import {
   ActiveIcon,
@@ -27,7 +28,6 @@ import {
   OutcropIcon,
   PassiveActiveIcon,
   PassiveIcon,
-  SlidersIcon,
   SparklesIcon,
   SunIcon,
 } from "./components/icons";
@@ -42,17 +42,14 @@ interface NavItem {
   icon: ReactNode;
 }
 
-// The sidebar: home, the AI assistant who can do it all and its settings (where PAC was installed
-// with PACo), then the workflow's order: records to images, images to curves and models, what came
-// out.
+// The sidebar: home, the AI assistant who can do it all (where PAC was installed with PACo; its
+// settings in a popup, from its page), then the workflow's order: records to images, images to
+// curves and models, what came out.
 const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   { label: null, items: [{ to: "/", label: "Home", icon: <HomeIcon /> }] },
   {
     label: "Automate",
-    items: [
-      { to: "/assistant", label: "AI assistant", icon: <SparklesIcon /> },
-      { to: "/assistant/settings", label: "Assistant settings", icon: <SlidersIcon /> },
-    ],
+    items: [{ to: "/assistant", label: "AI assistant", icon: <SparklesIcon /> }],
   },
   {
     label: "Compute",
@@ -95,6 +92,11 @@ export default function App() {
   const running = useRunning(assistant);
   // What the assistant said while its page was not open: its menu row says so.
   const news = useAssistantNews(running.conversations, location.pathname === "/assistant");
+  // The assistant's settings popup (opened from its page, or by itself at start), and its saves,
+  // for the chat to read them again.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [saves, setSaves] = useState(0);
+  const popup = useMemo(() => ({ open: () => setSettingsOpen(true), saved: saves }), [saves]);
 
   useEffect(() => {
     applyTheme(theme);
@@ -109,8 +111,24 @@ export default function App() {
       .catch(() => setAssistant(false));
   }, []);
 
+  // At start, the settings popup opens by itself while the assistant's settings are incomplete.
+  useEffect(() => {
+    if (!assistant) return;
+    let cancelled = false;
+    fetch(`${API}/agent/settings`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((found: AssistantSettings) => {
+        if (!cancelled && !complete(found)) setSettingsOpen(true);
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [assistant]);
+
   return (
     <ThemeContext.Provider value={theme}>
+      <SettingsPopupContext.Provider value={popup}>
       <div className="app">
         <aside className="sidebar">
           <Link to="/" className="sidebar-brand">
@@ -197,11 +215,19 @@ export default function App() {
             <Route path="/petro_inversion" element={<PetroInversionPage />} />
             <Route path="/visualization" element={<VisualizationPage />} />
             <Route path="/assistant" element={<ChatPage />} />
-            <Route path="/assistant/settings" element={<AssistantSettingsPage />} />
           </Routes>
           </ErrorBoundary>
         </main>
+        {assistant && (
+          <AssistantSettingsPopup
+            open={settingsOpen}
+            answering={running.assistant}
+            onClose={() => setSettingsOpen(false)}
+            onSaved={() => setSaves((count) => count + 1)}
+          />
+        )}
       </div>
+      </SettingsPopupContext.Provider>
     </ThemeContext.Provider>
   );
 }

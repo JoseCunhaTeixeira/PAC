@@ -211,8 +211,8 @@ export function RunSummary({ card }: { card: RunCard }) {
   const segments = card.segments ?? [];
   const lineTries = card.line_tries ?? [];
   const journal = card.journal ?? [];
-  // The assistant's geophysicist made it when its journal names it.
-  const by = card.by === "assistant" ? (journal.length > 0 ? "by the geophysicist" : "by the assistant") : "by hand";
+  // The assistant's autonomous mode made it when it has a journal.
+  const by = card.by === "assistant" ? (journal.length > 0 ? "by the autonomous mode" : "by the assistant") : "by hand";
   return (
     <section className="viz-card">
       <div className="viz-run-title">
@@ -232,7 +232,7 @@ export function RunSummary({ card }: { card: RunCard }) {
               card.by !== "assistant"
                 ? "By hand"
                 : journal.length > 0
-                  ? "By the assistant's autonomous geophysicist\nIts experiments and decisions in its journal"
+                  ? "By the assistant's autonomous mode\nIts experiments and decisions in its journal"
                   : "By the assistant\nChecked stage by stage"
             }
           >
@@ -253,7 +253,7 @@ export function RunSummary({ card }: { card: RunCard }) {
         </Fold>
       )}
       {journal.length > 0 && (
-        <Fold title={`The geophysicist's journal: ${journal.length} entries`}>
+        <Fold title={`The journal: ${journal.length} entries`}>
           <Journal entries={journal} />
         </Fold>
       )}

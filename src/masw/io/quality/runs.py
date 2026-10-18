@@ -202,7 +202,7 @@ class RunCard(BaseModel):
     windows: tuple[LineWindow, ...]
     # The shots a window stacks: from, to this far from its middle (to None: any distance).
     reach: tuple[float, float | None] | None
-    # The journal of the assistant's geophysicist (PACo's autonomous agent), when it made the run.
+    # The journal of PACo's autonomous mode, when it made the run.
     journal: tuple[JournalEntry, ...] = ()
 
 

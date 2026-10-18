@@ -1,9 +1,9 @@
 """The chat page: conversations with PACo's agent (masw.agent), polled like PAC's jobs; and the
-assistant's settings page: the agent, the model and its test, vision (masw.assistant)."""
+assistant's settings popup: the mode, the model and its test, vision (masw.assistant)."""
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import anyio
 from fastapi import APIRouter, HTTPException, Response
@@ -17,6 +17,7 @@ from masw.agent import (
     SessionBusy,
     SessionInfo,
     installed,
+    save_settings,
     sessions,
     status,
 )
@@ -120,24 +121,13 @@ def close_session(session_id: str) -> Response:
 
 
 class TestOut(BaseModel):
-    """A connection test: whether the model answered, what it said, how long it took, whether it
-    takes images (asked when vision is on), or the error."""
+    """A connection test: whether the model answered, how long it took, whether it takes images
+    (asked when vision is on), or the error."""
 
     ok: bool
-    reply: str | None = None
     seconds: float | None = None
     images: bool | None = None
     error: str | None = None
-
-
-@router.get("/agent/providers")
-def get_providers() -> list[dict[str, Any]]:
-    """The model providers the settings page offers, with what each needs; none without PACo."""
-    if not installed():
-        return []
-    from paco.llm.settings import PROVIDERS
-
-    return [info.model_dump() for info in PROVIDERS]
 
 
 @router.get("/agent/settings")
@@ -149,37 +139,40 @@ def get_settings() -> assistant.AssistantSettings:
 @router.put("/agent/settings")
 def put_settings(given: assistant.AssistantSettingsIn) -> assistant.AssistantSettings:
     """The assistant's settings saved and applied, once PACo takes them: refused, saying what is
-    missing or wrong, otherwise. The conversations open keep their agent; the next ones take
-    these."""
+    missing or wrong, otherwise; refused while an answer runs (409). Changed, they clear the
+    conversations (masw.agent.save_settings); the next ones take them."""
+    if given.mode is None:
+        raise HTTPException(status_code=422, detail="Choose a mode: autonomous or workflow.")
     _model_settings(given)
-    return assistant.save(given)
+    try:
+        return save_settings(given)
+    except SessionBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/agent/settings/test")
 async def test_settings(given: assistant.AssistantSettingsIn) -> TestOut:
-    """One short call to the model the page's settings name (saved or not), and, with vision on,
-    whether it takes images: what the page says of the connection. A few tokens, never a figure."""
+    """One short call to the model the popup's settings name (saved or not), and, with vision on,
+    whether it takes images: what the popup says of the connection. A few tokens, never a figure."""
     from paco.llm.chat import chat_model, tried
 
     settings = _model_settings(given)
     started = time.monotonic()
     try:
-        # Asked once, within a minute: the page waits for it.
+        # Asked once, within a minute: the popup counts it down.
         with anyio.fail_after(TEST_S):
             chat = chat_model(settings, reconnect_s=0)
-            reply = await tried(chat)
+            await tried(chat)
             images = await chat.takes_images() if given.vision else None
     except TimeoutError:
         return TestOut(ok=False, error=f"No answer within {TEST_S:g} s.")
     except Exception as exc:  # a key refused, a model not there, a server down: said as such
         return TestOut(ok=False, error=f"{type(exc).__name__}: {exc}")
-    return TestOut(
-        ok=True, reply=reply[:200], seconds=round(time.monotonic() - started, 2), images=images
-    )
+    return TestOut(ok=True, seconds=round(time.monotonic() - started, 2), images=images)
 
 
 def _model_settings(given: assistant.AssistantSettingsIn) -> ModelSettings:
-    """PACo's settings of the model `given` names (the key set when the page sent none); 422,
+    """PACo's settings of the model `given` names (the key set when the popup sent none); 422,
     saying what is missing or wrong, when PACo refuses them; 503 without PACo."""
     if not installed():
         raise HTTPException(status_code=503, detail="PACo, PAC's agent, is not installed.")
@@ -193,8 +186,6 @@ def _model_settings(given: assistant.AssistantSettingsIn) -> ModelSettings:
             llm_model=values[assistant.NAMES["model"]],
             llm_base_url=values[assistant.NAMES["base_url"]] or None,
             llm_api_key=values[assistant.KEY] or assistant.NO_KEY,  # pyright: ignore[reportArgumentType]
-            llm_region=values[assistant.NAMES["region"]] or None,
-            llm_project=values[assistant.NAMES["project"]] or None,
             llm_context=given.context,
             llm_vision=given.vision,
         )

@@ -34,7 +34,8 @@ export function holdInPlace(element: Element) {
 }
 
 /** Every press on the page holds what it pressed in place; one on the scrollbar (the document
- * itself) lets go, and an element marked `data-moves-page` scrolls on purpose. */
+ * itself) lets go, an element marked `data-moves-page` scrolls on purpose, and a popup (a dialog
+ * over the page) leaves the page behind it as it is. */
 export function useStayPut() {
   useEffect(() => {
     function down(event: PointerEvent) {
@@ -43,7 +44,7 @@ export function useStayPut() {
         release();
         return;
       }
-      if (target.closest("[data-moves-page]")) return;
+      if (target.closest("[data-moves-page], dialog")) return;
       holdInPlace(target);
     }
     function key(event: KeyboardEvent) {

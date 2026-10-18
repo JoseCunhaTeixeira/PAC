@@ -2,6 +2,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useRef,
   useState,
@@ -21,12 +22,13 @@ import {
   TrashIcon,
 } from "./components/icons";
 import { PageArt } from "./components/PageArt";
+import { useSettingsPopup } from "./components/assistantSettings";
 import { usePageTitle } from "./components/pageTitle";
 import "./ChatPage.css";
 
 // PACo's agent, in PAC's process (GET /agent/status says whether it can run, and if not why):
-// its guided workflow, or its autonomous geophysicist, as the assistant's settings say.
-type Mode = "guided" | "autonomous";
+// in its workflow or autonomous mode, as the assistant's settings say.
+type Mode = "workflow" | "autonomous";
 
 interface AgentStatus {
   available: boolean;
@@ -35,7 +37,10 @@ interface AgentStatus {
   mode?: Mode | null;
 }
 
-const MODE_NAMES: Record<Mode, string> = { guided: "Guided", autonomous: "Autonomous" };
+const MODE_NAMES: Record<Mode, string> = { workflow: "Workflow", autonomous: "Autonomous" };
+// What a conversation cleared under the page says: the settings changed elsewhere.
+const CLEARED =
+  "The assistant's settings changed: the conversations were cleared. Your next message starts a new one.";
 
 // A run an answer worked on, and what it did there, in order.
 interface RunResult {
@@ -128,9 +133,9 @@ interface Progress {
   fraction: number | null;
 }
 
-// Requests to start from, as each agent takes them.
+// Requests to start from, as each mode takes them.
 const EXAMPLES: Record<Mode, string[]> = {
-  guided: [
+  workflow: [
     "Which profiles can I process?",
     "Process active_p1 and give me its dispersion curves.",
     "Process active_p1 and invert it: I want its velocity section.",
@@ -197,7 +202,7 @@ const LABELS: Record<string, [string, string, string]> = {
   ],
   redo: ["Redid the {stage}", "Redoing the {stage}", "Redo the {stage}"],
   inspect: ["Looked up the {what}", "Looking up the {what}", "Look up the {what}"],
-  // The autonomous geophysicist's own tools.
+  // The autonomous mode's own tools.
   survey: ["Surveyed {profile}", "Surveying {profile}", "Survey {profile}"],
   observe: ["Read the checks", "Reading the checks", "Read the checks"],
   look: ["Looked at the {what}", "Looking at the {what}", "Look at the {what}"],
@@ -263,6 +268,18 @@ export default function ChatPage() {
       );
   }, []);
 
+  // The settings popup. New settings clear the conversations: the page shows a new one, and the
+  // assistant's state read again.
+  const settings = useSettingsPopup();
+  const takeSaved = useEffectEvent(() => {
+    checkStatus();
+    newConversation();
+    void refreshList();
+  });
+  useEffect(() => {
+    if (settings.saved > 0) takeSaved();
+  }, [settings.saved]);
+
   // The conversations the server keeps, the latest first.
   const refreshList = useCallback(async (): Promise<SessionInfo[]> => {
     try {
@@ -317,6 +334,12 @@ export default function ChatPage() {
       pollRef.current = window.setInterval(() => {
         fetch(`${API}/agent/sessions/${id}/events?after=${seenRef.current}`)
           .then(async (res) => {
+            if (res.status === 404) {
+              // Cleared: the assistant's settings changed, in another tab or browser.
+              remember(null);
+              setSession(null);
+              throw new Error(CLEARED);
+            }
             if (!res.ok) throw new Error(await detail(res));
             return (await res.json()) as EventsOut;
           })
@@ -390,30 +413,42 @@ export default function ChatPage() {
     };
   }, [checkStatus, refreshList, open]);
 
+  // A new conversation, shown empty: its id, or none when the assistant cannot run.
+  async function begin(): Promise<string | null> {
+    const res = await fetch(`${API}/agent/sessions`, { method: "POST" });
+    if (!res.ok) {
+      setError(await detail(res));
+      return null;
+    }
+    const id = ((await res.json()) as { id: string }).id;
+    remember(id);
+    setSession(id);
+    setEvents([]);
+    setUnfolded(new Set());
+    seenRef.current = 0;
+    setClosed(false);
+    return id;
+  }
+
   async function send() {
     const message = text.trim();
     if (!message || busy) return;
     setError(null);
-    let id = session;
-    if (!id || closed) {
-      const res = await fetch(`${API}/agent/sessions`, { method: "POST" });
-      if (!res.ok) {
-        setError(await detail(res));
-        return;
-      }
-      id = ((await res.json()) as { id: string }).id;
-      remember(id);
-      setSession(id);
-      setEvents([]);
-      setUnfolded(new Set());
-      seenRef.current = 0;
-      setClosed(false);
+    let id = session && !closed ? session : await begin();
+    if (!id) return;
+    const ask = (to: string) =>
+      fetch(`${API}/agent/sessions/${to}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: message }),
+      });
+    let res = await ask(id);
+    // Cleared or ended meanwhile (the settings changed): the message starts a new conversation.
+    if (res.status === 404 || res.status === 410) {
+      id = await begin();
+      if (!id) return;
+      res = await ask(id);
     }
-    const res = await fetch(`${API}/agent/sessions/${id}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: message }),
-    });
     if (!res.ok) {
       setError(await detail(res));
       return;
@@ -497,15 +532,7 @@ export default function ChatPage() {
             <PageArt kind="assistant" />
           </div>
           <div className="chat-header-actions">
-            <StatusBadge status={status} />
-            <Link
-              to="/assistant/settings"
-              className="chat-quiet chat-settings"
-              aria-label="Assistant settings"
-              data-tip={"Assistant settings\nThe agent, the model, vision"}
-            >
-              <SlidersIcon size={15} />
-            </Link>
+            <StatusBadge status={status} onClick={settings.open} />
             <button
               ref={toggleRef}
               className={
@@ -611,9 +638,9 @@ export default function ChatPage() {
               The rest of PAC works without it.
             </p>
             <span className="chat-unavailable-actions">
-              <Link to="/assistant/settings" className="chat-quiet">
+              <button className="chat-quiet" onClick={settings.open}>
                 Open the assistant&apos;s settings
-              </Link>
+              </button>
               <button className="chat-quiet" onClick={checkStatus}>
                 Check again
               </button>
@@ -621,7 +648,7 @@ export default function ChatPage() {
           </div>
         )}
         {status?.available && turns.length === 0 && (
-          <Welcome onPick={start} mode={status.mode ?? "guided"} />
+          <Welcome onPick={start} mode={status.mode ?? "workflow"} />
         )}
         {turns.map((turn, i) => (
           <TurnView
@@ -697,7 +724,8 @@ export default function ChatPage() {
   );
 }
 
-function StatusBadge({ status }: { status: AgentStatus | null }) {
+// The assistant's state, its mode and model: a click opens its settings.
+function StatusBadge({ status, onClick }: { status: AgentStatus | null; onClick: () => void }) {
   const ready = status?.available === true;
   const mode = status?.mode ? `${MODE_NAMES[status.mode]} · ` : "";
   const label =
@@ -706,20 +734,24 @@ function StatusBadge({ status }: { status: AgentStatus | null }) {
       : ready
         ? `${mode}${status.model ?? "Ready"}`
         : "Unavailable";
+  const said =
+    ready && status?.mode === "autonomous"
+      ? "Autonomous mode: the model works on its own\n"
+      : ready && status?.mode === "workflow"
+        ? "Workflow mode: PACo guides the model\n"
+        : "";
   return (
-    <span
+    <button
+      type="button"
       className="chat-status"
-      data-tip={
-        status?.mode === "autonomous"
-          ? "The autonomous geophysicist\nIt chooses and tries its own settings"
-          : status?.mode === "guided"
-            ? "The guided workflow\nPACo leads the model step by step"
-            : undefined
-      }
+      aria-haspopup="dialog"
+      data-tip={`${said}Click for the assistant's settings`}
+      onClick={onClick}
     >
       <span className={ready ? "chat-status-dot ready" : "chat-status-dot"} />
       {label}
-    </span>
+      <SlidersIcon size={13} />
+    </button>
   );
 }
 

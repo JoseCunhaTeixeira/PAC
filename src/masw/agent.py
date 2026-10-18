@@ -1,8 +1,8 @@
-"""PACo's agents in PAC: the chat page's conversations, each an agent in this process whose tools
-are PACo's, called in-process on PAC's own folders, so that its runs are PAC's runs. Two agents,
-as the assistant's settings say (masw.assistant, PACO_AGENT_MODE): PACo's guided workflow, made
-for a small model (Qwen3-14B served by vLLM), or its autonomous geophysicist, which chooses its own
-settings and experiments, made for a frontier model with a long context. The model is any
+"""PACo's agent in PAC: the chat page's conversations, each an agent in this process whose tools
+are PACo's, called in-process on PAC's own folders, so that its runs are PAC's runs. In one of two
+modes, as the assistant's settings say (masw.assistant, PACO_AGENT_MODE): workflow, PACo leading a
+small model (Qwen3-14B served by vLLM) step by step, or autonomous, the model choosing its own
+settings and experiments, for a frontier model with a long context. The same model either way, any
 provider's (PACO_LLM_*: PACo's paco.llm), served elsewhere.
 
 PACo is optional (PAC's `agent` extra): without it, without a model, or with a model server that
@@ -33,19 +33,22 @@ import anyio.to_thread
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from masw.assistant import Mode
+from masw import assistant
+from masw.assistant import Mode, dotenv
 from masw.io.paths import INPUT_DIR, OUTPUT_DIR
 
 if TYPE_CHECKING:
     from mcp.server import MCPServer
     from paco.agent import Agent, AgentSettings, ChatModel
-    from paco.geo.host.loop import Host
+    from paco.autonomous.host.loop import Host
     from paco.stopping import Signal
 
 logger = logging.getLogger(__name__)
 
 # Where the conversations are saved, one JSON file each, when they end.
 LOG_DIR = OUTPUT_DIR / "agent_logs"
+# Why the settings cannot change now.
+ANSWERING = "An answer is running: let it finish, or stop it, then change the settings."
 # Conversations kept at once: a new one past this closes the oldest idle one.
 MAX_SESSIONS = 8
 
@@ -64,9 +67,9 @@ RUN_STAGES: dict[str, RunStage] = {
     "job_status": "inversion",
     "invert_petro": "petro",
 }
-# The geophysicist's tools that work on a run, and what each does there: a commit processes the
-# line and picks it.
-GEO_STAGES: dict[str, tuple[RunStage, ...]] = {
+# The autonomous mode's tools that work on a run, and what each does there: a commit processes
+# the line and picks it.
+AUTONOMOUS_STAGES: dict[str, tuple[RunStage, ...]] = {
     "commit": ("processing", "picking"),
     "pick": ("picking",),
     "decide": ("picking",),
@@ -115,7 +118,7 @@ class AgentStatus(BaseModel):
     available: bool
     reason: str | None = None  # what is missing, and how to fix it
     model: str | None = None
-    # The agent the chat runs (guided, autonomous), and the model's provider.
+    # The mode the chat runs (workflow, autonomous), and the model's provider.
     mode: Mode | None = None
     provider: str | None = None
 
@@ -134,35 +137,34 @@ def installed() -> bool:
 
 
 def status() -> AgentStatus:
-    """Whether the chat can run: PACo installed, its model set and its client made (a cloud's
-    library there), a model server of the user's answering, and the autonomous geophysicist's
-    long context."""
+    """Whether the chat can run: PACo installed, its model set, a model server of the user's
+    answering, and the long context the autonomous mode needs."""
     if not installed():
         return AgentStatus(
             available=False,
             reason="PACo, PAC's agent, is not installed: install PAC with its agent extra "
             "(uv sync --extra agent; with Docker, build with PAC_EXTRAS=agent).",
         )
-    from paco.llm.chat import chat_model
+    try:
+        _, mode, settings = snapshot()
+    except AgentUnavailable as error:
+        return AgentStatus(available=False, reason=str(error), mode=_mode())
+    return _checked(mode, settings)
+
+
+def _checked(mode: Mode, settings: AgentSettings) -> AgentStatus:
+    """Whether a conversation can run in `mode` with the model `settings` name: the long context
+    the autonomous mode needs, a model server of the user's answering."""
     from paco.llm.settings import LOCAL
 
-    mode = _mode()
-    try:
-        settings = _settings()
-    except AgentUnavailable as error:
-        return AgentStatus(available=False, reason=str(error), mode=mode)
     found = AgentStatus(
         available=False, model=settings.llm_model, mode=mode, provider=settings.llm_provider
     )
     if mode == "autonomous":
-        from paco.geo.host.loop import short_context
+        from paco.autonomous.host.loop import short_context
 
         if (short := short_context(settings.context())) is not None:
             return found.model_copy(update={"reason": short})
-    try:
-        chat_model(settings)
-    except ValueError as error:  # a cloud's library or credentials missing
-        return found.model_copy(update={"reason": str(error)})
     if settings.llm_provider in LOCAL and settings.llm_base_url:
         url = settings.llm_base_url.rstrip("/")
         try:
@@ -176,11 +178,51 @@ def status() -> AgentStatus:
             return found.model_copy(
                 update={
                     "reason": f"The model server at {url} does not answer "
-                    f"({type(error).__name__}): start it (docker compose --profile agent up), or "
-                    "set a server that runs on the assistant's settings page."
+                    f"({type(error).__name__}). Start it, or choose another model in the "
+                    "assistant's settings."
                 }
             )
     return found.model_copy(update={"available": True})
+
+
+# How many times the settings PACo runs with changed since PAC started, counted while
+# masw.assistant.LOCK is held: a conversation made with older settings ends.
+_changes = 0
+
+
+def snapshot() -> tuple[int, Mode, AgentSettings]:
+    """The settings a new conversation runs with, read at once, never half of a save: the changes
+    they follow, the mode, and the model's (AgentUnavailable while the model is not set)."""
+    with assistant.LOCK:
+        return _changes, _mode(), _settings()
+
+
+def save_settings(given: assistant.AssistantSettingsIn) -> assistant.AssistantSettings:
+    """`given` saved and applied (masw.assistant), while no conversation answers (SessionBusy
+    otherwise, nothing saved). When they change what PACo runs with (the mode, the model, its
+    address, its key, its context, vision), the conversations are cleared: each deleted, its
+    transcript saved, an answer that started meanwhile stopped first; the next message starts a
+    new conversation with them. Saved unchanged, the conversations go on."""
+    global _changes
+    with assistant.LOCK:
+        if sessions.answering():
+            raise SessionBusy(ANSWERING)
+        before = _in_force()
+        saved = assistant.save(given)
+        changed = _in_force() != before
+        if changed:
+            _changes += 1
+    if changed:
+        sessions.clear()
+    return saved
+
+
+def _in_force() -> tuple[Mode, AgentSettings | None]:
+    """The settings PACo runs with now: the mode, and the model's (None while not set)."""
+    try:
+        return _mode(), _settings()
+    except AgentUnavailable:
+        return _mode(), None
 
 
 def _settings() -> AgentSettings:
@@ -191,29 +233,29 @@ def _settings() -> AgentSettings:
         return AgentSettings()  # pyright: ignore[reportCallIssue]  # from the environment
     except ValidationError as error:
         raise AgentUnavailable(
-            f"The assistant's model is not set: set {missing(error)} on the assistant's settings "
-            "page (the model's provider and name, and its server's address where it needs one)."
+            f"The assistant has no model yet: choose one in its settings ({missing(error)})."
         ) from error
 
 
 def _mode() -> Mode:
-    """The agent the chat runs, as the settings say: the guided workflow unless set."""
+    """The mode the chat runs, as the settings say: the workflow unless set."""
     from paco.modes import ModeSettings
 
     try:
         return ModeSettings().agent_mode
     except ValidationError:
-        return "guided"
+        return "workflow"
 
 
 def _use_pacs_folders() -> None:
     """PACo's tools read PAC's profiles and write PAC's runs; its worker processes, half the
-    machine's cores unless PACO_WORKERS says otherwise."""
+    machine's cores unless PACO_WORKERS says otherwise (the environment, or .env)."""
     from paco.settings import get_settings
 
     os.environ["PACO_INPUT_DIR"] = str(INPUT_DIR)
     os.environ["PACO_OUTPUT_DIR"] = str(OUTPUT_DIR)
-    os.environ.setdefault("PACO_WORKERS", str(max(1, (os.cpu_count() or 2) // 2)))
+    if "PACO_WORKERS" not in os.environ and not dotenv(("PACO_WORKERS",)):
+        os.environ["PACO_WORKERS"] = str(max(1, (os.cpu_count() or 2) // 2))
     get_settings.cache_clear()
 
 
@@ -222,10 +264,17 @@ class Session:
     page polls the events. An answer can be stopped: at once, and everything it started (see
     paco.stopping), what had finished kept, nothing half-written."""
 
-    def __init__(self, model: ChatModel | None = None, mode: Mode | None = None) -> None:
+    def __init__(
+        self,
+        model: ChatModel | None = None,
+        mode: Mode | None = None,
+        settings: AgentSettings | None = None,
+    ) -> None:
         self.id = uuid.uuid4().hex
-        # The agent it runs, for its whole life: a change of the settings is the next one's.
+        # The mode and the model it runs with, for its whole life: the settings when it was made
+        # (masw.agent.snapshot); a change of them clears it (save_settings).
         self.mode: Mode = mode or _mode()
+        self._settings = settings
         self.events: list[Event] = []
         self.busy = False
         self.stopping = False  # a stop was asked, and the answer has not ended yet
@@ -345,7 +394,7 @@ class Session:
         agent: Agent | Host | None = None
         name = "scripted"
         try:
-            settings = _settings() if self._model is None else None
+            settings = (self._settings or _settings()) if self._model is None else None
             vision = False
             if settings is not None:
                 name = settings.llm_model
@@ -367,15 +416,15 @@ class Session:
                 self._loop = anyio.lowlevel.current_token()
             async with Client(_tools_server(self.mode)) as tools:
                 if self.mode == "autonomous":
-                    from paco.geo.host.loop import Host
-                    from paco.geo.host.loop import Limits as GeoLimits
+                    from paco.autonomous.host.loop import Host
+                    from paco.autonomous.host.loop import Limits as HostLimits
                     from paco.settings import get_settings
 
                     agent = await Host.start(
                         tools,
                         model,
                         get_settings(),
-                        limits=GeoLimits.of(settings) if settings is not None else None,
+                        limits=HostLimits.of(settings) if settings is not None else None,
                         vision=vision,
                         on_event=self._on_event,
                     )
@@ -413,7 +462,7 @@ class Session:
                         results = (
                             run_results(done)
                             if isinstance(agent, Agent)
-                            else geo_run_results(done, _line_run(agent))
+                            else autonomous_run_results(done, _line_run(agent))
                         )
                         self._finish(
                             "answer",
@@ -439,19 +488,19 @@ class Session:
 
 
 def _tools_server(mode: Mode) -> MCPServer:
-    """The tools' server of the agent `mode` names: PACo's, or the geophysicist's."""
+    """The tools' server of the mode `mode` names: the workflow's, or the autonomous mode's."""
     if mode == "autonomous":
-        from paco.geo import server as geo
+        from paco.autonomous import server as autonomous
 
-        return geo.server
+        return autonomous.server
     from paco import server
 
     return server.server
 
 
 def _line_run(host: Host) -> str | None:
-    """The run of the geophysicist's line now, in its study; None before its first commit."""
-    from paco.geo.tools.commit import line_of
+    """The run of the autonomous mode's line now, in its study; None before its first commit."""
+    from paco.autonomous.tools.commit import line_of
 
     if host.study is None:
         return None
@@ -465,12 +514,27 @@ class Sessions:
         self._lock = threading.Lock()
 
     def create(self, model: ChatModel | None = None, mode: Mode | None = None) -> Session:
-        """A new conversation, with the agent `mode` names (the settings' when none); raises
-        AgentUnavailable, with the reason, when the chat cannot run (a scripted `model` needs no
-        model server)."""
-        if model is None and not (found := status()).available:
-            raise AgentUnavailable(found.reason or "The agent is not available.")
-        session = Session(model, mode)
+        """A new conversation, with the settings read at once (in the mode `mode` names, the
+        settings' when none); raises AgentUnavailable, with the reason, when the chat cannot run
+        (a scripted `model` needs no model server). Made while the settings changed, it is made
+        again, with them."""
+        session, changes = self._made(model, mode)
+        if changes != _changes:
+            self.close(session.id)
+            session, _ = self._made(model, mode)
+        return session
+
+    def _made(self, model: ChatModel | None, mode: Mode | None) -> tuple[Session, int]:
+        """A new conversation, kept, and the changes of the settings it follows."""
+        changes, settings = _changes, None
+        if model is None:
+            if not installed():
+                raise AgentUnavailable(status().reason or "The agent is not available.")
+            changes, chosen, settings = snapshot()
+            mode = mode or chosen
+            if not (found := _checked(mode, settings)).available:
+                raise AgentUnavailable(found.reason or "The agent is not available.")
+        session = Session(model, mode, settings)
         with self._lock:
             idle = [one for one in self._sessions.values() if not one.busy]
             while len(self._sessions) >= MAX_SESSIONS and idle:
@@ -478,7 +542,7 @@ class Sessions:
                 oldest.close()
                 del self._sessions[oldest.id]
             self._sessions[session.id] = session
-        return session
+        return session, changes
 
     def get(self, session_id: str) -> Session | None:
         return self._sessions.get(session_id)
@@ -488,6 +552,18 @@ class Sessions:
         with self._lock:
             found = list(self._sessions.values())
         return sorted((one.info() for one in found), key=lambda info: info.updated_at, reverse=True)
+
+    def answering(self) -> bool:
+        """Whether a conversation is answering."""
+        with self._lock:
+            return any(one.busy for one in self._sessions.values())
+
+    def clear(self) -> None:
+        """Every conversation deleted, as close deletes one."""
+        with self._lock:
+            found = list(self._sessions)
+        for session_id in found:
+            self.close(session_id)
 
     def close(self, session_id: str) -> bool:
         """Delete conversation `session_id`: its answer stopped first if one runs (its work kept
@@ -522,15 +598,15 @@ def run_results(calls: Sequence[tuple[str, str, str]]) -> tuple[RunResult, ...]:
     return _found(done)
 
 
-def geo_run_results(
+def autonomous_run_results(
     calls: Sequence[tuple[str, str, str]], line_run: str | None
 ) -> tuple[RunResult, ...]:
-    """The runs the geophysicist's tool calls of an answer worked on, each call its name,
+    """The runs the autonomous mode's tool calls of an answer worked on, each call its name,
     arguments and result: the runs its results name (a commit's, a freeze's), else its line's
     now (`line_run`); with what each did."""
     done: dict[str, list[RunStage]] = {}
     for name, _arguments, result in calls:
-        stages = GEO_STAGES.get(name)
+        stages = AUTONOMOUS_STAGES.get(name)
         if stages is None:
             continue
         for run_id in RUN_ID.findall(result) or ([line_run] if line_run else []):

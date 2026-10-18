@@ -34,6 +34,10 @@ MODEL = "Qwen/Qwen3-14B-FP8"
 MIN_VRAM_GIB = 23.0
 # The conversation's tokens that fit beside its weights on that card.
 CONTEXT = 16_384
+# The model's address in PAC's compose network: the `model` service's.
+MODEL_URL = "http://model:8000/v1"
+# How PACo talks to these models, all Qwen3 on a server (vLLM): in its workflow mode.
+SERVED = {"PACO_AGENT_MODE": "workflow", "PACO_LLM_PROVIDER": "server"}
 # vLLM's FP8 kernels on NVIDIA start with Ampere.
 MIN_CUDA_CAPABILITY = 8.0
 # The .env lines the assistant owns: set when it is installed, removed when it is not.
@@ -46,12 +50,8 @@ AGENT_KEYS = (
     "PACO_LLM_MODEL",
     "PACO_LLM_BASE_URL",
     "PACO_LLM_API_KEY",
-    "PACO_LLM_REGION",
-    "PACO_LLM_PROJECT",
     "PACO_LLM_CONTEXT",
     "PACO_LLM_VISION",
-    "PACO_LLM_EFFORT",
-    "VLLM_MAX_MODEL_LEN",
     "MODEL_SSH",
     "MODEL_SSH_PORT",
     "MODEL_SSH_KEY",
@@ -174,8 +174,10 @@ def check(
     settings = {
         "PAC_EXTRAS": "agent",
         "COMPOSE_PROFILES": "agent",
+        **SERVED,
+        "PACO_LLM_BASE_URL": MODEL_URL,
         "PACO_LLM_MODEL": MODEL,
-        "VLLM_MAX_MODEL_LEN": str(CONTEXT),
+        "PACO_LLM_CONTEXT": str(CONTEXT),
     }
     if gpu.vendor == "amd":
         settings["COMPOSE_FILE"] = "docker-compose.yml:docker-compose.rocm.yml"
@@ -243,7 +245,7 @@ def remote_settings(
             "PAC (--with), or reach another machine through SSH (--tunnel USER@HOST)"
         )
     model = checked_model(url, model, api_key, models)
-    settings = {"PAC_EXTRAS": "agent", "PACO_LLM_BASE_URL": url, "PACO_LLM_MODEL": model}
+    settings = {"PAC_EXTRAS": "agent", **SERVED, "PACO_LLM_BASE_URL": url, "PACO_LLM_MODEL": model}
     if api_key:
         settings["PACO_LLM_API_KEY"] = api_key
     return settings, model
@@ -316,6 +318,7 @@ def tunnel_settings(
         "MODEL_SSH_PORT": str(port),
         "MODEL_SSH_KEY": str(key),
         "MODEL_SSH_KNOWN_HOSTS": str(known_hosts),
+        **SERVED,
         "PACO_LLM_BASE_URL": "http://tunnel:8001/v1",
         "PACO_LLM_MODEL": model,
     }

@@ -51,8 +51,11 @@ def test_a_24_gb_card_runs_the_model(tmp_path: Path) -> None:
     assert verdict.settings == {
         "PAC_EXTRAS": "agent",
         "COMPOSE_PROFILES": "agent",
+        "PACO_AGENT_MODE": "workflow",
+        "PACO_LLM_PROVIDER": "server",
+        "PACO_LLM_BASE_URL": "http://model:8000/v1",
         "PACO_LLM_MODEL": "Qwen/Qwen3-14B-FP8",
-        "VLLM_MAX_MODEL_LEN": "16384",
+        "PACO_LLM_CONTEXT": "16384",
     }
 
 
@@ -130,6 +133,8 @@ def test_a_remote_model_is_checked_first() -> None:
     assert model == MODEL and asked == [("https://gpu.example.org/v1", "key")]
     assert settings == {
         "PAC_EXTRAS": "agent",
+        "PACO_AGENT_MODE": "workflow",
+        "PACO_LLM_PROVIDER": "server",
         "PACO_LLM_BASE_URL": "https://gpu.example.org/v1",
         "PACO_LLM_MODEL": MODEL,
         "PACO_LLM_API_KEY": "key",

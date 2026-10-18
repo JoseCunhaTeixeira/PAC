@@ -1,0 +1,252 @@
+/* The assistant's settings popup: a modal dialog over any page, its head and buttons fixed, its
+   settings scrolling between them. */
+
+.settings-dialog {
+  width: min(620px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.settings-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-dialog::backdrop {
+  background: rgba(10, 14, 20, 0.5);
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.settings-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-head h2 {
+  margin: 0;
+  font-size: var(--fs-h2);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.settings-head p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+
+.settings-close {
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  margin: -4px -6px 0 0;
+}
+
+.settings-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* The settings, locked while an answer runs. */
+.settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.settings-choice:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.settings-body section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-body h3 {
+  margin: 0;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* Options as cards: none chosen until the user picks one. */
+.settings-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.settings-choices.compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.settings-choice {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 11px 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.settings-choice:hover {
+  border-color: var(--text-faint);
+}
+
+.settings-choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.settings-choice:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.settings-choice:has(input:focus-visible) {
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.settings-choice strong {
+  font-size: var(--fs-body);
+  font-weight: 650;
+}
+
+.settings-choice:has(input:checked) strong {
+  color: var(--accent-fg);
+}
+
+.settings-choice span {
+  font-size: var(--fs-small);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.settings-choices.compact .settings-choice {
+  align-items: center;
+  padding: 8px 10px;
+}
+
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px 16px;
+}
+
+.settings-fields .field-label svg {
+  vertical-align: -2px;
+  margin-right: 3px;
+}
+
+/* The footer's left: the connection test and what it found; its right: cancel and save. */
+.settings-test {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+/* PAC's secondary buttons look the same disabled: here, they look it. */
+.settings-dialog button.secondary:disabled {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text-faint);
+}
+
+/* The countdown's figures keep their width: the button stays put while it counts. */
+.settings-test button {
+  min-width: 172px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-tested {
+  font-size: var(--fs-small);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.settings-tested.ok {
+  color: var(--success-text);
+}
+
+.settings-tested.bad {
+  color: var(--danger-text);
+}
+
+/* A switch and what its choice means, on one line. */
+.settings-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+
+.settings-note {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--text-muted);
+}
+
+.settings-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 560px) {
+  .settings-head,
+  .settings-body,
+  .settings-foot {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

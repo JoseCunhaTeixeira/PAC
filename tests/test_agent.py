@@ -134,7 +134,9 @@ def test_an_empty_model_is_one_not_set(monkeypatch: pytest.MonkeyPatch) -> None:
 
     found = client.get("/agent/status").json()
 
-    assert not found["available"] and "set PACO_LLM_MODEL" in found["reason"]
+    assert not found["available"] and found["reason"] == (
+        "The assistant has no model yet: choose one in its settings (PACO_LLM_MODEL)."
+    )
 
 
 def test_a_model_server_that_does_not_answer_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -373,7 +375,7 @@ def test_an_answer_that_asks_to_choose_is_said_to_the_menu() -> None:
     assert (listed[session]["answers"], listed[session]["asks"]) == (1, True), said
 
 
-def test_the_geophysicists_answer_says_the_runs_it_worked_on() -> None:
+def test_the_autonomous_answer_says_the_runs_it_worked_on() -> None:
     run = OUTPUT_DIR / "shots" / "20261018-120000-abcd"
     run.mkdir(parents=True, exist_ok=True)
     (run / "run.json").write_text("{}")
@@ -385,7 +387,7 @@ def test_the_geophysicists_answer_says_the_runs_it_worked_on() -> None:
     ]
 
     try:
-        (result,) = agent.geo_run_results(calls, "20261018-120000-abcd")
+        (result,) = agent.autonomous_run_results(calls, "20261018-120000-abcd")
     finally:
         shutil.rmtree(run)
 
@@ -393,15 +395,15 @@ def test_the_geophysicists_answer_says_the_runs_it_worked_on() -> None:
     assert result.stages == ("processing", "picking", "inversion")
 
 
-def test_each_mode_has_its_agents_tools() -> None:
-    guided = anyio.run(agent._tools_server("guided").list_tools)  # pyright: ignore[reportPrivateUsage]
+def test_each_mode_has_its_tools() -> None:
+    workflow = anyio.run(agent._tools_server("workflow").list_tools)  # pyright: ignore[reportPrivateUsage]
     autonomous = anyio.run(agent._tools_server("autonomous").list_tools)  # pyright: ignore[reportPrivateUsage]
 
-    assert {"run_processing", "judge"} <= {tool.name for tool in guided}
+    assert {"run_processing", "judge"} <= {tool.name for tool in workflow}
     assert {"try_settings", "commit", "freeze"} <= {tool.name for tool in autonomous}
 
 
-def test_the_autonomous_geophysicist_needs_a_long_context(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_autonomous_mode_needs_a_long_context(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PACO_AGENT_MODE", "autonomous")
     monkeypatch.setenv("PACO_LLM_BASE_URL", "http://127.0.0.1:9/v1")
     monkeypatch.setenv("PACO_LLM_MODEL", "Qwen/Qwen3-14B-FP8")
@@ -411,17 +413,18 @@ def test_the_autonomous_geophysicist_needs_a_long_context(monkeypatch: pytest.Mo
 
     # A server of the user's: a small model's context unless set, too short for it.
     assert (found["available"], found["mode"]) == (False, "autonomous")
-    assert found["reason"].startswith("The autonomous geophysicist needs a model with a long")
+    assert found["reason"].startswith("The autonomous mode needs a model with a long")
 
 
-# ---------------------------------------------------------------- the assistant's settings page
+# --------------------------------------------------------------- the assistant's settings popup
 
 
 @pytest.fixture
-def fresh_settings(monkeypatch: pytest.MonkeyPatch) -> Path:
-    """No settings saved, none in the environment: as a new install."""
+def fresh_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """No settings saved, none in the environment or in a .env: as a new install."""
     from masw import assistant
 
+    monkeypatch.chdir(tmp_path)  # away from a developer's own .env
     assistant.SETTINGS_FILE.unlink(missing_ok=True)
     for name in (*assistant.NAMES.values(), assistant.KEY):
         monkeypatch.delenv(name, raising=False)
@@ -431,11 +434,16 @@ def fresh_settings(monkeypatch: pytest.MonkeyPatch) -> Path:
 def test_the_settings_are_saved_applied_and_the_key_never_shown(
     fresh_settings: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    providers = {one["name"]: one for one in client.get("/agent/providers").json()}
-    assert (
-        providers["anthropic-vertex"]["key"] == "none" and providers["vllm"]["address"] == "needed"
-    )
-    assert client.get("/agent/settings").json()["key_set"] is False
+    # Nothing set: nothing shown, no mode or provider made up.
+    assert client.get("/agent/settings").json() == {
+        "mode": None,
+        "provider": None,
+        "model": "",
+        "base_url": "",
+        "context": None,
+        "vision": False,
+        "key_set": False,
+    }
 
     sent = {
         "mode": "autonomous",
@@ -465,7 +473,7 @@ def test_the_settings_are_saved_applied_and_the_key_never_shown(
         "anthropic",
     )
     # Saved again without a key: the key kept.
-    again = client.put("/agent/settings", json={**sent, "api_key": None, "mode": "guided"})
+    again = client.put("/agent/settings", json={**sent, "api_key": None, "mode": "workflow"})
     assert again.json()["key_set"] is True and os.environ["PACO_LLM_API_KEY"] == "sk-ant-secret"
     for name in (
         "PACO_AGENT_MODE",
@@ -480,11 +488,25 @@ def test_the_settings_are_saved_applied_and_the_key_never_shown(
 def test_settings_paco_refuses_are_not_saved(fresh_settings: Path) -> None:
     # A vLLM server without its address.
     refused = client.put(
-        "/agent/settings", json={"provider": "vllm", "model": "Qwen/Qwen3-14B-FP8"}
+        "/agent/settings",
+        json={"mode": "workflow", "provider": "server", "model": "Qwen/Qwen3-14B-FP8"},
+    )
+    # No mode chosen.
+    no_mode = client.put(
+        "/agent/settings",
+        json={
+            "provider": "server",
+            "model": "Qwen/Qwen3-14B-FP8",
+            "base_url": "http://gpu:8001/v1",
+        },
     )
 
     assert refused.status_code == 422
     assert refused.json()["detail"].startswith("Set PACO_LLM_BASE_URL (")
+    assert (no_mode.status_code, no_mode.json()["detail"]) == (
+        422,
+        "Choose a mode: autonomous or workflow.",
+    )
     assert not fresh_settings.exists()
 
 
@@ -493,7 +515,7 @@ def test_a_connection_test_says_why_it_failed() -> None:
     tried = client.post(
         "/agent/settings/test",
         json={
-            "provider": "vllm",
+            "provider": "server",
             "model": "Qwen/Qwen3-14B-FP8",
             "base_url": "http://127.0.0.1:9/v1",
         },
@@ -504,8 +526,95 @@ def test_a_connection_test_says_why_it_failed() -> None:
     assert body["ok"] is False and body["error"].startswith("APIConnectionError")
 
 
+# The settings a save applies, then others.
+SERVED = {
+    "mode": "workflow",
+    "provider": "server",
+    "model": "Qwen/Qwen3-14B-FP8",
+    "base_url": "http://gpu.test:8001/v1",
+}
+OTHER = {**SERVED, "mode": "autonomous"}
+
+
+class Thinking(FillsForms):
+    """Thinks until told to answer: an answer running for as long as a test needs."""
+
+    def __init__(self) -> None:
+        super().__init__(LOOK)
+        self.thinking = threading.Event()
+        self.done = threading.Event()
+
+    async def __call__(
+        self,
+        messages: list[ChatCompletionMessageParam],
+        tools: list[ChatCompletionFunctionToolParam],
+    ) -> Reply:
+        del messages, tools
+        self.thinking.set()
+        while not self.done.is_set():
+            await anyio.sleep(0.05)
+        return Reply(content="Done.", tool_calls=())
+
+
 @pytest.mark.usefixtures("fresh_settings")
-def test_the_pages_settings_win_over_a_dotenv(
+def test_new_settings_clear_the_conversations_unchanged_ones_keep_them() -> None:
+    assert client.put("/agent/settings", json=SERVED).status_code == 200
+    session = agent.sessions.create(ScriptedModel()).id
+    client.post(f"/agent/sessions/{session}/messages", json={"text": "What is there?"})
+    _events(session)
+
+    # Saved unchanged: the conversation goes on.
+    assert client.put("/agent/settings", json=SERVED).status_code == 200
+    assert session in {one["id"] for one in client.get("/agent/sessions").json()}
+    # Changed: the conversations are cleared.
+    assert client.put("/agent/settings", json=OTHER).status_code == 200
+
+    assert session not in {one["id"] for one in client.get("/agent/sessions").json()}
+    assert client.get(f"/agent/sessions/{session}/events").status_code == 404
+
+
+def test_the_settings_cannot_change_while_an_answer_runs() -> None:
+    model = Thinking()
+    session = agent.sessions.create(model).id
+    client.post(f"/agent/sessions/{session}/messages", json={"text": "Think it over."})
+    assert model.thinking.wait(20)
+
+    refused = client.put("/agent/settings", json=OTHER)
+
+    assert (refused.status_code, refused.json()["detail"]) == (409, agent.ANSWERING)
+    # Nothing saved, the answer goes on.
+    model.done.set()
+    assert _events(session)["events"][-1]["kind"] == "answer"
+    agent.sessions.close(session)
+
+
+def test_a_conversation_made_while_the_settings_change_is_made_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    made: list[agent.Session] = []
+
+    class SavedMeanwhile(agent.Session):
+        """A conversation the settings change under, while it is made."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+            super().__init__(*args, **kwargs)
+            made.append(self)
+            changes = agent._changes  # pyright: ignore[reportPrivateUsage]
+            monkeypatch.setattr(agent, "_changes", changes + 1)
+
+    monkeypatch.setattr(agent, "Session", SavedMeanwhile)
+
+    session = agent.sessions.create(ScriptedModel())
+
+    # The first, made with the settings before, deleted; the second kept.
+    listed = {one["id"] for one in client.get("/agent/sessions").json()}
+    assert [one.id for one in made] == [made[0].id, session.id]
+    assert made[0].id not in listed and session.id in listed
+    agent.sessions.close(session.id)
+
+
+@pytest.mark.usefixtures("fresh_settings")
+def test_the_popups_settings_win_over_a_dotenv(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # PAC run from a folder whose .env sets a small model's context, as install_assistant.py writes.
@@ -524,17 +633,32 @@ def test_the_pages_settings_win_over_a_dotenv(
     }
     assert client.put("/agent/settings", json=sent).status_code == 200
 
-    # The page left the context empty: the provider's own, not .env's.
+    # The popup left the context empty: the provider's own, not .env's.
     assert AgentSettings().context() == 131_072  # pyright: ignore[reportCallIssue]
     for name in (
         "PACO_AGENT_MODE",
         "PACO_LLM_PROVIDER",
         "PACO_LLM_MODEL",
         "PACO_LLM_BASE_URL",
-        "PACO_LLM_REGION",
-        "PACO_LLM_PROJECT",
         "PACO_LLM_CONTEXT",
         "PACO_LLM_VISION",
         "PACO_LLM_API_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
+
+
+def test_the_workers_set_in_dotenv_are_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    monkeypatch.delenv("PACO_WORKERS", raising=False)
+    monkeypatch.chdir(tmp_path)
+    # No .env: half the machine's cores.
+    agent._use_pacs_folders()  # pyright: ignore[reportPrivateUsage]
+    assert os.environ["PACO_WORKERS"] == str(max(1, (os.cpu_count() or 2) // 2))
+    # Set in .env: left to PACo, which reads it there.
+    monkeypatch.delenv("PACO_WORKERS")
+    (tmp_path / ".env").write_text("PACO_WORKERS=3\n")
+    agent._use_pacs_folders()  # pyright: ignore[reportPrivateUsage]
+    assert "PACO_WORKERS" not in os.environ
