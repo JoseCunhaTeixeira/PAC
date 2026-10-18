@@ -76,6 +76,7 @@ AUTONOMOUS_STAGES: dict[str, tuple[RunStage, ...]] = {
     "freeze": ("picking",),
     "invert": ("inversion",),
     "job_status": ("inversion",),
+    "invert_petro": ("petro",),
 }
 # A run's id, as PACo names runs; an inversion job's id (inv-<run's form>) is none.
 RUN_ID = re.compile(r"(?<![\w-])\d{8}-\d{6}-[0-9a-f]{4}(?![\w-])")

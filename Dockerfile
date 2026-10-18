@@ -45,6 +45,8 @@ COPY --from=builder --chown=app:app /app /app
 RUN chown app:app /app
 COPY --chown=app:app docker-entrypoint.sh ./docker-entrypoint.sh
 ENV PATH="/app/.venv/bin:$PATH"
+# The app user has no home: Matplotlib's cache in /tmp, written once, not at every import.
+ENV MPLCONFIGDIR=/tmp/matplotlib
 USER app
 
 EXPOSE 8000

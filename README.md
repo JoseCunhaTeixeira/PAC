@@ -179,7 +179,7 @@ The **Visualization** page shows one run: how it was made (by you or the assista
 
 To process your own data, simply drop a profile folder like the above into `data/input/` — no restart needed.
 
-**About the test profiles:** an empty `data/input` (a freshly created folder, as in Option 1) gets seeded on first start with two test profiles, so there's something to try immediately: `active_test_profile` (33 shots on 96 receivers) and `passive_test_profile` (2 records of ambient noise on the same receivers), light copies of real lines. A `data/input` that already has content — your own profile folders, or the test profiles committed with the source code in Option 2 — is left untouched; add your own profile folders alongside or instead of the test profiles.
+**About the test profiles:** an empty `data/input` (a freshly created folder, as in Option 1) gets seeded on first start with two test profiles, so there's something to try immediately: `active_test_profile` (25 shots on 96 receivers) and `passive_test_profile` (10 records of ambient noise on the same receivers), light copies of real lines. A `data/input` that already has content — your own profile folders, or the test profiles committed with the source code in Option 2 — is left untouched; add your own profile folders alongside or instead of the test profiles.
 
 **About your results:** they are written to `data/output` on your computer, so stopping or removing the containers keeps them.
 

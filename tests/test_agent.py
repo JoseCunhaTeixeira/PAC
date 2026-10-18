@@ -380,10 +380,11 @@ def test_the_autonomous_answer_says_the_runs_it_worked_on() -> None:
     run.mkdir(parents=True, exist_ok=True)
     (run / "run.json").write_text("{}")
     calls = [
-        ("survey", "{}", "active line, 28 shots"),
+        ("survey", "{}", "active line, 25 shots"),
         ("commit", "{}", "L1 made run 20261018-120000-abcd. 7 windows picked."),
         ("decide", "{}", "Accepted 18.75."),  # the line's run, as the study keeps it
         ("invert", "{}", "Job inv-20261018-130000-ef01 started on 7 windows."),  # a job, no run
+        ("invert_petro", "{}", '{"run_id": "20261018-120000-abcd", "summary": "7 soils."}'),
     ]
 
     try:
@@ -392,7 +393,7 @@ def test_the_autonomous_answer_says_the_runs_it_worked_on() -> None:
         shutil.rmtree(run)
 
     assert result.folder == "shots/20261018-120000-abcd"
-    assert result.stages == ("processing", "picking", "inversion")
+    assert result.stages == ("processing", "picking", "inversion", "petro")
 
 
 def test_each_mode_has_its_tools() -> None:
