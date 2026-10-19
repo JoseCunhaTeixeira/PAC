@@ -471,14 +471,14 @@ def fresh_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def test_the_settings_are_saved_applied_and_the_key_never_shown(
     fresh_settings: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Nothing set: nothing shown, no mode or provider made up.
+    # Nothing set: nothing shown, no mode or provider made up; vision on, PACo's default.
     assert client.get("/agent/settings").json() == {
         "mode": None,
         "provider": None,
         "model": "",
         "base_url": "",
         "context": None,
-        "vision": False,
+        "vision": True,
         "key_set": False,
     }
 
@@ -500,6 +500,8 @@ def test_the_settings_are_saved_applied_and_the_key_never_shown(
         True,
     )
     assert "sk-ant-secret" not in saved.text
+    # Vision turned off: kept off.
+    assert body["vision"] is False
     # Kept for the next start, readable by its owner alone; in force now.
     assert fresh_settings.stat().st_mode & 0o777 == 0o600
     assert "PACO_LLM_API_KEY=sk-ant-secret" in fresh_settings.read_text()

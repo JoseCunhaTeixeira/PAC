@@ -42,14 +42,15 @@ TRUE = ("1", "true", "yes", "on")
 
 class AssistantSettings(BaseModel):
     """The settings in force, as the popup shows them: those set (saved by the popup, in the
-    environment or in .env), none made up; the key never, only whether one is set."""
+    environment or in .env), none made up but vision, on unless set off, as PACo takes it; the key
+    never, only whether one is set."""
 
     mode: Mode | None = None
     provider: str | None = None
     model: str = ""
     base_url: str = ""
     context: int | None = None
-    vision: bool = False
+    vision: bool = True
     key_set: bool = False
 
 
@@ -62,7 +63,7 @@ class AssistantSettingsIn(BaseModel):
     model: str = ""
     base_url: str = ""
     context: int | None = Field(default=None, ge=1)
-    vision: bool = False
+    vision: bool = True
     api_key: str | None = None
 
 
@@ -93,14 +94,14 @@ def current() -> AssistantSettings:
     def setting(name: str) -> str:
         return os.environ[name] if name in os.environ else file.get(name, "")
 
-    mode, context = setting(NAMES["mode"]), setting(NAMES["context"])
+    mode, context, vision = (setting(NAMES[name]) for name in ("mode", "context", "vision"))
     return AssistantSettings(
         mode=mode if mode in MODES else None,
         provider=setting(NAMES["provider"]) or None,
         model=setting(NAMES["model"]),
         base_url=setting(NAMES["base_url"]),
         context=int(context) if context.isdigit() and int(context) > 0 else None,
-        vision=setting(NAMES["vision"]).lower() in TRUE,
+        vision=vision.lower() in TRUE if vision else True,
         key_set=setting(KEY) not in ("", NO_KEY),
     )
 

@@ -58,7 +58,7 @@ interface Form {
   vision: boolean;
 }
 
-const EMPTY: Form = { mode: null, way: null, api: null, model: "", baseUrl: "", context: "", vision: false };
+const EMPTY: Form = { mode: null, way: null, api: null, model: "", baseUrl: "", context: "", vision: true };
 
 // A connection test (POST /agent/settings/test): one short call, never a figure.
 interface Tested {
@@ -248,10 +248,11 @@ function SettingsForm({
     setSaving(true);
     setError(null);
     try {
+      // Vision kept as chosen in either mode: off stays off when the workflow mode is saved.
       const res = await fetch(`${API}/agent/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body()),
+        body: JSON.stringify({ ...body(), vision: form.vision }),
       });
       if (!res.ok) throw new Error(await detail(res));
     } catch (err) {

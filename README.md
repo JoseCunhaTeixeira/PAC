@@ -218,17 +218,17 @@ The page shows each step the assistant takes (the tools it calls, in small grey 
 
 ### The assistant's settings
 
-On the **AI assistant** page, a click on the assistant's state (its mode and model, beside **Conversations**) opens its settings in a popup. The popup also opens by itself when PAC starts while the settings are incomplete, as when `.env` gives none. Nothing is chosen for you: it shows only what you saved, or what `.env` sets.
+On the **AI assistant** page, a click on the assistant's state (its mode and model, beside **Conversations**) opens its settings in a popup. The popup also opens by itself when PAC starts while the settings are incomplete, as when `.env` gives none. Nothing is chosen for you but vision, on until you turn it off: the popup shows what you saved, or what `.env` sets.
 
 - **The mode.** *Autonomous*: the model surveys the line, tries its own settings and judges them with the gates, decides each window, then inverts. Its journal is on the run's card in **Visualization**. It needs a frontier model with a long context (128k tokens or more), and uses many more tokens: hundreds of thousands for a line, which an online service bills. *Workflow*: PACo leads the model step by step, and its quality gates check each stage. A small model on your own GPU is enough, such as Qwen3-14B.
-- **Vision.** Off by default. When on, the figures the model looks at (records, dispersion images, curves) go to its provider. Leave it off if your data must stay on your machines: the model then reads tables and measures. Only the autonomous mode uses figures.
+- **Vision.** On by default: the figures the model looks at (records, dispersion images, curves) go to its provider. Turn it off if your data must stay on your machines: the model then reads tables and measures. Only the autonomous mode uses figures.
 - **The model**, the same for both modes, in one of two places: *a provider's API* (Claude, OpenAI, Gemini or Mistral: the model's name and your key), or *your server*, any server speaking OpenAI's chat API (vLLM, Ollama, LM Studio, OpenRouter, a company's gateway: its address, the model's name, its context). **Test the connection** makes one short call to the model, and counts down the minute it may take.
 
 The popup keeps its settings in `data/settings/assistant.env`, the API key with them, readable by you alone (never share or commit it), and applies them over `.env`'s. The settings cannot change while an answer runs: let it finish, or stop it. Saving new settings clears the conversations (their transcripts stay in `data/output/agent_logs`), and your next message starts a new one with them. Unchanged settings cannot be saved: the button then reads *Current settings*.
 
 ### What the model's provider receives
 
-Your messages to the assistant, the descriptions of PACo's tools, and what the tools return, that is the quality gates' summaries (profile and run names, settings, verdicts, velocities and depths). Your records, dispersion images and models stay on your computer, unless you turn vision on in the autonomous mode: its figures then go to the model too. With a provider's API, check that this suits your data's rules. Providers charge by use: one request, such as processing and picking a profile, takes a few tens of thousands of tokens in the workflow mode, and hundreds of thousands in the autonomous mode.
+Your messages to the assistant, the descriptions of PACo's tools, and what the tools return, that is the quality gates' summaries (profile and run names, settings, verdicts, velocities and depths). In the autonomous mode, vision is on by default: its figures (records, dispersion images, models) go to the model too. Turn it off to keep them on your computer. With a provider's API, check that this suits your data's rules. Providers charge by use: one request, such as processing and picking a profile, takes a few tens of thousands of tokens in the workflow mode, and hundreds of thousands in the autonomous mode.
 
 ### If something goes wrong
 
