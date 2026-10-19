@@ -29,6 +29,8 @@ const METRIC_LABELS: Record<string, string> = {
   band_at_fmax: "Coherent band reaches fmax",
   competing_ridges: "Columns with a second ridge",
   aliased_ridges: "Second ridges below the aliasing limit",
+  background: "Background off the ridge",
+  stripes: "Background's stripes",
   band_share_of_usable: "Coherent band / usable band",
   // a passive window's segments, by its fk selection
   fk_segments: "Segments the fk selection judged",

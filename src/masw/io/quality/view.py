@@ -236,6 +236,8 @@ _COVERS = {
     "band_at_fmax": "the coherent band against the image's highest frequency",
     "competing_ridges": "the coherent columns: a second ridge",
     "aliased_ridges": "the columns with a second ridge: under 2 dx f",
+    "background": "the coherent columns: the level off the ridge, over its peak",
+    "stripes": "that level's jumps between neighbouring columns",
     "band_share_of_usable": "the coherent band over the records' usable band",
     "virtual_shot_snr_db": "the stacked correlations",
     "fk_segments": "the window's segments",
