@@ -34,6 +34,16 @@
   background: rgba(255, 255, 255, 0.14);
 }
 
+/* The band stays dark in both themes: the state's dot keeps dark mode's colours. */
+.chat-hero .chat-status-dot {
+  background: #6c778a;
+}
+
+.chat-hero .chat-status-dot.ready {
+  background: #6fd690;
+  box-shadow: 0 0 0 3px #11301d;
+}
+
 .chat-hero .chat-quiet {
   background: rgba(8, 20, 34, 0.55);
   color: #ffffff;
