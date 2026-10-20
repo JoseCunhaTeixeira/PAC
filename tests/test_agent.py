@@ -172,6 +172,27 @@ def test_a_conversation_runs_pacos_tools_on_pacs_folders() -> None:
     assert client.get(f"/agent/sessions/{session}/events").status_code == 404
 
 
+def test_a_closed_conversation_empties_pacos_images_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    def closed(answering: bool) -> Path:
+        """A conversation's answer, an image kept in PACo's cache, then the conversation deleted
+        while another conversation answers or not: the image."""
+        session = agent.sessions.create(ScriptedModel())
+        client.post(f"/agent/sessions/{session.id}/messages", json={"text": "What can I process?"})
+        _events(session.id)
+        kept = OUTPUT_DIR / ".cache" / "ab" / "ab12"
+        kept.mkdir(parents=True, exist_ok=True)
+        (kept / "image.h5").write_bytes(b"x" * 100)
+        monkeypatch.setattr(agent.sessions, "answering", lambda: answering)
+        assert client.delete(f"/agent/sessions/{session.id}").status_code == 204
+        session._thread.join(20)  # pyright: ignore[reportPrivateUsage]  # its end, tidied
+        return kept
+
+    # Another conversation answering: its images may be in use, the cache stays.
+    assert closed(answering=True).exists()
+    # None: only the results stay after a session.
+    assert not closed(answering=False).exists()
+
+
 def test_one_message_at_a_time(monkeypatch: pytest.MonkeyPatch) -> None:
     session = agent.sessions.create(ScriptedModel())
     monkeypatch.setattr(session, "busy", True)

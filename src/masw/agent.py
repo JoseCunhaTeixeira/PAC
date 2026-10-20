@@ -511,12 +511,18 @@ class Session:
                     save_transcript(transcript, LOG_DIR)
                 except Exception:
                     logger.exception("Could not save the conversation of session %s", self.id)
-            if agent is not None and not isinstance(agent, Agent):
-                # Only the results stay after a session: the study's working files removed.
-                try:
+            # Only the results stay after a session: its study's working files removed and,
+            # while no other conversation answers, PACo's images' cache emptied.
+            try:
+                if agent is not None and not isinstance(agent, Agent):
                     agent.close()
-                except Exception:
-                    logger.exception("Could not tidy the study of session %s", self.id)
+                if not sessions.answering():
+                    from paco.runs import clear_image_cache
+                    from paco.settings import get_settings
+
+                    clear_image_cache(get_settings())
+            except Exception:
+                logger.exception("Could not tidy after session %s", self.id)
 
 
 def _tokens(steps: Sequence[object]) -> Tokens | None:

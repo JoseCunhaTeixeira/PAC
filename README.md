@@ -246,7 +246,7 @@ uv run uvicorn masw.api.main:app --host 127.0.0.1 --port 8000
 ```
 and the web app with `npm install && npm run dev` in `frontend/`. Set the assistant's model in its settings popup, or in a `.env` file in the `PAC` folder, which the backend reads when started from there (`PACO_LLM_PROVIDER`, `PACO_LLM_MODEL`, `PACO_LLM_API_KEY` or `PACO_LLM_BASE_URL`, `PACO_LLM_CONTEXT`); the popup's settings win.
 
-The assistant's processing uses half of the computer's cores (`PACO_WORKERS` to change it), and keeps the windows' images it makes in `data/output/.cache`, at most 2 GB, to take them again when a run makes the same ones (`PACO_CACHE_GB=0` keeps none).
+The assistant's processing uses half of the computer's cores (`PACO_WORKERS` to change it), and keeps the windows' images it makes in `data/output/.cache`, at most 2 GB, to take them again when a run makes the same ones (`PACO_CACHE_GB=0` keeps none). When a conversation ends, the assistant removes its working files and empties that cache: only the results stay.
 
 ## License
 This project is under Creative Commons Attribution 4.0 International license, allowing re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited.
