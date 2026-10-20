@@ -21,8 +21,8 @@ interface Choice<T extends string> {
 }
 
 const MODES: Choice<Mode>[] = [
-  { value: "autonomous", label: "Autonomous", note: "The model works on its own. It needs a frontier model with vision." },
-  { value: "workflow", label: "Workflow", note: "PACo guides the model step by step. A small model on your GPU is enough." },
+  { value: "autonomous", label: "Autonomous", note: "Better results, but costly: the model looks at every image itself. It needs a frontier model with vision." },
+  { value: "workflow", label: "Workflow", note: "Cheaper, but less good results: PACo guides the model step by step. A small model on your GPU is enough." },
 ];
 
 const WAYS: Choice<Way>[] = [
