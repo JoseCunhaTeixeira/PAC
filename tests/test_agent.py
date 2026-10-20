@@ -453,6 +453,31 @@ def test_the_autonomous_mode_needs_a_long_context(monkeypatch: pytest.MonkeyPatc
     assert found["reason"].startswith("The autonomous mode needs a model with a long")
 
 
+def test_the_autonomous_mode_refuses_a_model_that_takes_no_images(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from paco.llm import chat
+
+    async def blind(_: object) -> str:
+        return "claude-opus-5-5 takes no images: the autonomous mode judges every image by eye."
+
+    monkeypatch.setenv("PACO_AGENT_MODE", "autonomous")
+    monkeypatch.setenv("PACO_LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("PACO_LLM_MODEL", "claude-opus-5-5")
+    monkeypatch.setenv("PACO_LLM_API_KEY", "sk-ant-test")
+    monkeypatch.setattr(chat, "blind", blind)
+
+    session = agent.sessions.create().id
+    client.post(f"/agent/sessions/{session}/messages", json={"text": "Give me the Vs."})
+    said = _events(session)["events"][-1]
+
+    # Its reason alone, before any call to the model.
+    assert (said["kind"], said["text"]) == (
+        "error",
+        "claude-opus-5-5 takes no images: the autonomous mode judges every image by eye.",
+    )
+
+
 # --------------------------------------------------------------- the assistant's settings popup
 
 
@@ -471,14 +496,13 @@ def fresh_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def test_the_settings_are_saved_applied_and_the_key_never_shown(
     fresh_settings: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Nothing set: nothing shown, no mode or provider made up; vision on, PACo's default.
+    # Nothing set: nothing shown, no mode or provider made up.
     assert client.get("/agent/settings").json() == {
         "mode": None,
         "provider": None,
         "model": "",
         "base_url": "",
         "context": None,
-        "vision": True,
         "key_set": False,
     }
 
@@ -487,7 +511,6 @@ def test_the_settings_are_saved_applied_and_the_key_never_shown(
         "provider": "anthropic",
         "model": "claude-opus-5-5",
         "api_key": "sk-ant-secret",
-        "vision": False,
     }
     saved = client.put("/agent/settings", json=sent)
 
@@ -500,8 +523,7 @@ def test_the_settings_are_saved_applied_and_the_key_never_shown(
         True,
     )
     assert "sk-ant-secret" not in saved.text
-    # Vision turned off: kept off.
-    assert body["vision"] is False
+    assert "vision" not in body
     # Kept for the next start, readable by its owner alone; in force now.
     assert fresh_settings.stat().st_mode & 0o777 == 0o600
     assert "PACO_LLM_API_KEY=sk-ant-secret" in fresh_settings.read_text()
@@ -519,7 +541,6 @@ def test_the_settings_are_saved_applied_and_the_key_never_shown(
         "PACO_LLM_PROVIDER",
         "PACO_LLM_MODEL",
         "PACO_LLM_API_KEY",
-        "PACO_LLM_VISION",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -680,7 +701,6 @@ def test_the_popups_settings_win_over_a_dotenv(
         "PACO_LLM_MODEL",
         "PACO_LLM_BASE_URL",
         "PACO_LLM_CONTEXT",
-        "PACO_LLM_VISION",
         "PACO_LLM_API_KEY",
     ):
         monkeypatch.delenv(name, raising=False)

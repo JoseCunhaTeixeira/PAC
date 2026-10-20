@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { API } from "./api";
-import { Callout, Segmented, type SegmentOption } from "./components/kit";
+import { Callout } from "./components/kit";
 import { CrossIcon, LockIcon } from "./components/icons";
 import type { AssistantSettings } from "./components/assistantSettings";
 import "./AssistantSettings.css";
@@ -21,7 +21,7 @@ interface Choice<T extends string> {
 }
 
 const MODES: Choice<Mode>[] = [
-  { value: "autonomous", label: "Autonomous", note: "The model works on its own. It needs a frontier model." },
+  { value: "autonomous", label: "Autonomous", note: "The model works on its own. It needs a frontier model with vision." },
   { value: "workflow", label: "Workflow", note: "PACo guides the model step by step. A small model on your GPU is enough." },
 ];
 
@@ -37,11 +37,6 @@ const APIS: Choice<Api>[] = [
   { value: "mistral", label: "Mistral" },
 ];
 
-const VISION: SegmentOption<"off" | "on">[] = [
-  { value: "off", label: "Off" },
-  { value: "on", label: "On" },
-];
-
 // A connection test's limit, in seconds, as the backend's (TEST_S): the button counts it down.
 const TEST_S = 60;
 // The context the autonomous mode needs, and the one a server is taken to serve when none is set.
@@ -55,10 +50,9 @@ interface Form {
   model: string;
   baseUrl: string;
   context: string; // as typed; empty: none
-  vision: boolean;
 }
 
-const EMPTY: Form = { mode: null, way: null, api: null, model: "", baseUrl: "", context: "", vision: true };
+const EMPTY: Form = { mode: null, way: null, api: null, model: "", baseUrl: "", context: "" };
 
 // A connection test (POST /agent/settings/test): one short call, never a figure.
 interface Tested {
@@ -77,7 +71,6 @@ function formOf(settings: AssistantSettings): Form {
     model: settings.model,
     baseUrl: settings.base_url,
     context: settings.context === null ? "" : String(settings.context),
-    vision: settings.vision,
   };
 }
 
@@ -99,7 +92,6 @@ function bodyOf(form: Form) {
     model: form.model.trim(),
     base_url: atServer ? form.baseUrl.trim() : "",
     context: atServer ? contextOf(form) : null,
-    vision: form.mode === "autonomous" && form.vision,
   };
 }
 
@@ -198,6 +190,8 @@ function SettingsForm({
     (atServer || key.trim() !== "" || keyKept) &&
     contextOk;
   const short = form.mode === "autonomous" && atServer && contextOk && (context ?? SERVER_CONTEXT) < LONG_CONTEXT;
+  // The tested model sees no images, which the autonomous mode judges.
+  const blind = form.mode === "autonomous" && tested?.images === false;
 
   // The settings as the backend takes them: the key typed, else the one set (null) for the same
   // provider, never another provider's ("").
@@ -248,11 +242,10 @@ function SettingsForm({
     setSaving(true);
     setError(null);
     try {
-      // Vision kept as chosen in either mode: off stays off when the workflow mode is saved.
       const res = await fetch(`${API}/agent/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...body(), vision: form.vision }),
+        body: JSON.stringify(body()),
       });
       if (!res.ok) throw new Error(await detail(res));
     } catch (err) {
@@ -291,22 +284,6 @@ function SettingsForm({
               <Choices name="mode" label="Mode" options={MODES} value={form.mode} onChange={(mode) => change({ mode })} />
             </section>
 
-            {form.mode === "autonomous" && (
-              <section>
-                <h3>Vision</h3>
-                <div className="settings-switch">
-                  <Segmented
-                    label="Vision"
-                    value={form.vision ? "on" : "off"}
-                    options={VISION}
-                    onChange={(value) => change({ vision: value === "on" })}
-                  />
-                  <span className="settings-note">
-                    {form.vision ? "Figures go to the model's provider." : "Figures stay on this machine."}
-                  </span>
-                </div>
-              </section>
-            )}
 
             <section>
               <h3>Model</h3>
@@ -400,10 +377,14 @@ function SettingsForm({
             {testing ? `Testing… ${left} s` : "Test the connection"}
           </button>
           {tested && (
-            <span className={tested.ok ? "settings-tested ok" : "settings-tested bad"} role="status">
+            <span className={tested.ok && !blind ? "settings-tested ok" : "settings-tested bad"} role="status">
               {tested.ok
                 ? `Connected: the model answered in ${tested.seconds ?? "?"} s.` +
-                  (tested.images === null ? "" : tested.images ? " It can see images." : " It cannot see images: vision stays off.")
+                  (tested.images === null
+                    ? ""
+                    : tested.images
+                      ? " It can see images."
+                      : " It cannot see images: the autonomous mode, which judges every image, needs a model that does.")
                 : tested.error}
             </span>
           )}

@@ -9,7 +9,6 @@ export interface AssistantSettings {
   model: string;
   base_url: string;
   context: number | null;
-  vision: boolean;
   key_set: boolean;
 }
 

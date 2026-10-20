@@ -23,7 +23,6 @@ services:
       PACO_LLM_MODEL: ${PACO_LLM_MODEL:-}
       PACO_LLM_API_KEY: ${PACO_LLM_API_KEY:-}
       PACO_LLM_CONTEXT: ${PACO_LLM_CONTEXT:-}
-      PACO_LLM_VISION: ${PACO_LLM_VISION:-}
       # Worker processes of the assistant's runs.
       PACO_WORKERS: ${PACO_WORKERS:-4}
       # Where the assistant's settings popup keeps its settings (the mode, the model, its key),

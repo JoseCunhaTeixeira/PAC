@@ -1,5 +1,5 @@
 """The chat page: conversations with PACo's agent (masw.agent), polled like PAC's jobs; and the
-assistant's settings popup: the mode, the model and its test, vision (masw.assistant)."""
+assistant's settings popup: the mode, the model and its test (masw.assistant)."""
 
 import logging
 import time
@@ -115,7 +115,7 @@ def close_session(session_id: str) -> Response:
 
 class TestOut(BaseModel):
     """A connection test: whether the model answered, how long it took, whether it takes images
-    (asked when vision is on), or the error."""
+    (the autonomous mode needs them), or the error."""
 
     ok: bool
     seconds: float | None = None
@@ -145,8 +145,8 @@ def put_settings(given: assistant.AssistantSettingsIn) -> assistant.AssistantSet
 
 @router.post("/agent/settings/test")
 async def test_settings(given: assistant.AssistantSettingsIn) -> TestOut:
-    """One short call to the model the popup's settings name (saved or not), and, with vision on,
-    whether it takes images: what the popup says of the connection. A few tokens, never a figure."""
+    """One short call to the model the popup's settings name (saved or not), and whether it takes
+    images: what the popup says of the connection. A few tokens, never a figure."""
     from paco.llm.chat import chat_model, tried
 
     settings = _model_settings(given)
@@ -156,7 +156,7 @@ async def test_settings(given: assistant.AssistantSettingsIn) -> TestOut:
         with anyio.fail_after(TEST_S):
             chat = chat_model(settings, reconnect_s=0)
             await tried(chat)
-            images = await chat.takes_images() if given.vision else None
+            images = await chat.takes_images()
     except TimeoutError:
         return TestOut(ok=False, error=f"No answer within {TEST_S:g} s.")
     except Exception as exc:  # a key refused, a model not there, a server down: said as such
@@ -178,7 +178,6 @@ def _model_settings(given: assistant.AssistantSettingsIn) -> ModelSettings:
             llm_base_url=values[assistant.NAMES["base_url"]] or None,
             llm_api_key=values[assistant.KEY] or assistant.NO_KEY,  # pyright: ignore[reportArgumentType]
             llm_context=given.context,
-            llm_vision=given.vision,
         )
     except ValidationError as exc:
         problems = "; ".join(

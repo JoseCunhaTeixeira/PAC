@@ -2,8 +2,8 @@
 are PACo's, called in-process on PAC's own folders, so that its runs are PAC's runs. In one of two
 modes, as the assistant's settings say (masw.assistant, PACO_AGENT_MODE): workflow, PACo leading a
 small model step by step, or autonomous, the model choosing its own settings and experiments, for
-a frontier model with a long context. The same model either way, a provider's API or the user's
-server (PACO_LLM_*: PACo's paco.llm).
+a frontier model with vision and a long context. The same model either way, a provider's API or
+the user's server (PACO_LLM_*: PACo's paco.llm).
 
 Without a model, or with a model server that does not answer, `status` says what is missing and
 the rest of PAC is unaffected. With masw.assistant, the only module of PAC that knows PACo, which
@@ -208,7 +208,7 @@ def snapshot() -> tuple[int, Mode, AgentSettings]:
 def save_settings(given: assistant.AssistantSettingsIn) -> assistant.AssistantSettings:
     """`given` saved and applied (masw.assistant), while no conversation answers (SessionBusy
     otherwise, nothing saved). When they change what PACo runs with (the mode, the model, its
-    address, its key, its context, vision), the conversations are cleared: each deleted, its
+    address, its key, its context), the conversations are cleared: each deleted, its
     transcript saved, an answer that started meanwhile stopped first; the next message starts a
     new conversation with them. Saved unchanged, the conversations go on."""
     global _changes
@@ -410,7 +410,7 @@ class Session:
         from paco import stopping
         from paco.agent import Agent, Limits, save_transcript
         from paco.agent.record import ToolStep
-        from paco.llm.chat import chat_model, seeing
+        from paco.llm.chat import blind, chat_model
 
         agent: Agent | Host | None = None
         name = "scripted"
@@ -420,8 +420,9 @@ class Session:
             if settings is not None:
                 name = settings.llm_model
                 chat = chat_model(settings)
-                if self.mode == "autonomous" and (said := await seeing(chat)) is not None:
-                    logger.info("Session %s: %s", self.id, said)
+                # The autonomous mode judges every image by eye: no model blind to them.
+                if self.mode == "autonomous" and (said := await blind(chat)) is not None:
+                    raise AgentUnavailable(said)
                 model: ChatModel = chat
                 vision = chat.vision
             else:
@@ -494,6 +495,8 @@ class Session:
                             asks=isinstance(agent, Agent) and bool(agent.offers),
                             tokens=spent,
                         )
+        except AgentUnavailable as error:
+            self._finish("error", str(error))
         except Exception as error:
             logger.exception("The agent's session %s stopped", self.id)
             self._finish("error", f"{type(error).__name__}: {error}")
