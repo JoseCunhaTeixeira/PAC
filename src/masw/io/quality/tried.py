@@ -606,22 +606,11 @@ def _base(
     return base
 
 
-def _search_intro(search: SearchDone, then: str | None = None) -> tuple[str, ...]:
-    """What the search did, a line each: what it made, dropped and judged by eye, how; `then`,
-    what came of its finalists, when it says more than the table."""
-    dropped = [f"{search.dropped} dropped as obviously bad"] if search.dropped else []
-    seen = (
-        f", each on {search.places} dispersion images spread along the line"
-        if search.places
-        else " on their dispersion images"
-    )
+def _search_intro(search: SearchDone) -> tuple[str, ...]:
+    """What the search did, in short: how many combinations the eye compared, then its best."""
     return (
-        f"{search.variants} combinations of settings made",
-        *dropped,
-        f"{search.variants - search.dropped} judged by the assistant by eye{seen}",
-        f"In groups of 12, the best of each kept and grouped again until "
-        f"{len(search.finalists)} were left",
-        *([then] if then else []),
+        f"{search.variants - search.dropped} combinations of settings compared by eye",
+        f"The {len(search.finalists)} best",
     )
 
 
@@ -663,15 +652,9 @@ def _searched(
                 images=images is not None and (images / f"{one.label}.npz").exists(),
             )
         )
-    then = (
-        f"The best of those {len(search.finalists)} chosen by eye"
-        if search.best is not None
-        else f"Those {len(search.finalists)} below"
-    )
     return TriedTable(
-        title="Search", intro=_search_intro(search, then), columns=columns, rows=tuple(rows),
-        by="agent",
-    )  # fmt: skip
+        title="Search", intro=_search_intro(search), columns=columns, rows=tuple(rows), by="agent"
+    )
 
 
 def _tried_finalists(
