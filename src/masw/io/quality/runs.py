@@ -1,8 +1,8 @@
-"""The runs Visualization offers, and each run's card: who made it (the assistant, or PAC), the
-settings its windows were built and imaged with, each with where it comes from (a rule the
-assistant applied to the data, the request, the preset's default, or PAC's form), how far each
-stage went, and the line's geometry for the profile plot: every receiver, every shot, every
-window's receivers."""
+"""The runs Visualization offers, and each run's card: who made it (PAC's pages by hand, PACo's
+workflow, or its autonomous mode), the settings its windows were built and imaged with, each with
+where it comes from (the user, the workflow, the agent, or the preset's default), what was tried
+to choose them, the run's history step by step, how far each stage went, and the line's geometry
+for the profile plot: every receiver, every shot, every window's receivers."""
 
 import math
 from collections import Counter
@@ -22,20 +22,29 @@ from masw.io.quality.files import (
     read_manifest,
     shot_distances,
 )
-from masw.io.quality.journal import JournalEntry, run_journal
+from masw.io.quality.journal import JournalEntry, SearchDone, journal_of, search_of, study_of
 from masw.io.quality.log import (
-    COHERENCE_FILE,
     LINE,
-    LINE_LOOP_FILE,
     LOG_FILE,
-    MUTE_FILE,
-    SEGMENTS_FILE,
     QCLog,
     config_section,
+    given_settings,
+    is_autonomous,
     line_receivers,
     read_log,
 )
 from masw.io.quality.sources import near_field
+from masw.io.quality.tried import (
+    MUTE_NAMES,
+    LengthChoice,
+    TriedTable,
+    changes_text,
+    length_choice,
+    line_tried,
+    mutes_tried,
+    segments_tried,
+    tried_tables,
+)
 from masw.io.quality.view import REFUSALS, Origin, Setting, flag_text, number, plural, span
 from sigpipe.masw.inversion.section import is_inverted
 from sigpipe.masw.petro.window import MODEL_FILE
@@ -43,14 +52,20 @@ from sigpipe.masw.picks import CURVES_FILE
 from sigpipe.masw.presets.making import make_preset
 from sigpipe.masw.runs import RunManifest, window_folders, xmid_of
 
-type Maker = Literal["assistant", "pac"]
+# Who made a run: PAC's pages, PACo's workflow, or its autonomous mode.
+type Maker = Literal["manual", "workflow", "autonomous"]
 type StageKey = Literal["records", "dispersion", "inversion", "petro"]
 
-GIVEN = "given in the request (by you, or chosen by the assistant)"
+GIVEN = "given in your request"
+# A workflow run's request, which the assistant writes: the user's values, or its own choices.
+REQUESTED = "given in the request: by you, or chosen by the assistant"
 DEFAULT = "the preset's default"
 PAC = "set by hand"
-MIN_PASS_SHARE = 0.8  # the assistant's default: the trial windows a window length must pass
-MAX_UNCERTAINTY = 0.2  # the assistant's default: picks precise enough to stop at a length
+# How the autonomous agent's commits give a setting the user gave, in the line's notes.
+USER_REASON = "given by the user"
+ALL_RECORDS = "every record, none left out"
+MIN_PASS_SHARE = 0.8  # the workflow's default: the trial windows a window length must pass
+MAX_UNCERTAINTY = 0.2  # the workflow's default: picks precise enough to stop at a length
 # The preset's entries the card says apart from the preprocessing's stages.
 OWN_ENTRIES = ("mode", "masw", "dispersion")
 # What asked for a stage to run again, other than a check's flag, in words.
@@ -62,77 +77,6 @@ _CAUSES = {
 }
 
 
-class LengthTrial(BaseModel):
-    """One window length the assistant tried on a few trial windows along the line."""
-
-    model_config = ConfigDict(frozen=True, extra="ignore")
-
-    length: int  # receivers
-    metres: float = 0.0
-    xmids: tuple[float, ...] = ()
-    passed: int  # trial windows G3 passed
-    windows: int = 0  # windows the line gets at this length
-    wavelengths_m: tuple[float, float] | None = None  # median shortest and longest passed
-    flags: tuple[str, ...] = ()
-    uncertainty: float | None = None  # the passed curves' median velocity uncertainty
-    compared: bool = False  # tried past the length kept, to compare
-
-
-class LengthChoice(BaseModel):
-    """The window length the assistant kept for the line (coherence.json), and its trials."""
-
-    model_config = ConfigDict(frozen=True, extra="ignore")
-
-    length: int
-    trials: tuple[LengthTrial, ...]
-    notes: tuple[str, ...] = ()
-
-
-class MuteTried(BaseModel):
-    """One mute the assistant's mute trial tried on trial windows along the line (mute.json):
-    none, the standard one, or the gathers' cone, widened or tight."""
-
-    model_config = ConfigDict(frozen=True, extra="ignore")
-
-    candidate: str
-    muting: dict[str, Any] | None = None  # None: no mute
-    passed: int  # trial windows G3 passed
-    verdicts: tuple[str, ...] = ()  # one a trial window
-    wavelengths_m: tuple[float, float] | None = None  # median shortest and longest passed
-    kept: bool = False
-
-
-class SegmentsTried(BaseModel):
-    """One segment length and FK selection the assistant tried on a passive line's trial windows
-    (segments.json): the line's own first."""
-
-    model_config = ConfigDict(frozen=True, extra="ignore")
-
-    segment_s: float
-    threshold: float | None = None  # the FK selection's; None: no selection
-    wavelength_span: float | None = None  # the picks' longest wavelength over their shortest
-    coherence: float | None = None  # the images' along the picks
-    kept: bool = False
-    own: bool = False  # the line's own settings, which the others are judged against
-
-
-class LineTried(BaseModel):
-    """One change of the line's settings the assistant's line loop tried (line_loop.json): the
-    change, the check that asked it and how many windows asked, the trial windows passing G3
-    with the line's settings before it and with it, and whether it was kept for the line."""
-
-    model_config = ConfigDict(frozen=True, extra="ignore")
-
-    change: str = ""  # an older line_loop.json says it in the note alone
-    flag: str
-    asked_by: int
-    xmids: tuple[float, ...] = ()
-    before: int
-    after: int
-    kept: bool
-    note: str = ""
-
-
 class RunEntry(BaseModel):
     """A run in the selector."""
 
@@ -142,7 +86,7 @@ class RunEntry(BaseModel):
     run_id: str | None  # None: a folder of the older layout
     started_at: datetime | None
     mode: str | None
-    by: Maker | None
+    made_by: Maker | None
     windows: int
     window_length: int | None = None  # receivers per window; None: not said (the older layout)
 
@@ -178,6 +122,22 @@ class LineWindow(BaseModel):
     last: float
 
 
+class Step(BaseModel):
+    """A step of how the run was made, in order: an entry of its study's journal (the autonomous
+    agent's), its search, or what its files say was done (the settings the user gave, a stage,
+    a trial), by whom."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str = ""  # the journal's (O1, E3, L2, H1...), or the search's (S1)
+    kind: str
+    by: Origin
+    at: datetime | None = None
+    text: str
+    detail: str = ""  # more on hover: a commit's reasons
+    of: tuple[str, ...] = ()  # the entries it rests on
+
+
 class RunCard(BaseModel):
     """What the page says of a run above its stages, and draws the profile from."""
 
@@ -187,28 +147,27 @@ class RunCard(BaseModel):
     profile: str
     run_id: str | None
     mode: str | None
-    by: Maker | None
+    made_by: Maker | None
     started_at: datetime | None
     finished_at: datetime | None
     records: bool  # the profile's records are in the input folder: they can be shown
     settings: tuple[Setting, ...]
-    trials: tuple[LengthTrial, ...]  # the window lengths the assistant tried, when it chose one
-    mutes: tuple[MuteTried, ...] = ()  # the mutes its mute trial tried
-    segments: tuple[SegmentsTried, ...] = ()  # a passive line's segments it tried
-    line_tries: tuple[LineTried, ...] = ()  # the changes of the line's settings it tried
+    tried: tuple[TriedTable, ...] = ()  # what was tried to choose them
+    history: tuple[Step, ...] = ()
     stages: tuple[StageCount, ...]
     receivers: tuple[float, ...]  # every receiver's x
     sources: dict[str, float]  # each record's shot x, by file name; none on a passive line
     windows: tuple[LineWindow, ...]
     # The shots a window stacks: from, to this far from its middle (to None: any distance).
     reach: tuple[float, float | None] | None
-    # The journal of PACo's autonomous mode, when it made the run.
-    journal: tuple[JournalEntry, ...] = ()
 
 
-def maker(run_folder: Path) -> Maker:
-    """Who made the run: the assistant, which logs its checks there, or PAC."""
-    return "assistant" if (run_folder / LOG_FILE).exists() else "pac"
+def made_by(run_folder: Path) -> Maker:
+    """Who made the run: PAC's pages, PACo's workflow, which logs its checks there, or its
+    autonomous mode, whose study's line the run is."""
+    if not (run_folder / LOG_FILE).exists():
+        return "manual"
+    return "autonomous" if is_autonomous(run_folder) else "workflow"
 
 
 def list_runs() -> tuple[ProfileRuns, ...]:
@@ -238,121 +197,53 @@ def run_card(folder: str) -> RunCard:
         return _older_card(folder, run_folder)
     line = line_geometry(run_folder, manifest)
     masw = preset_stage(manifest, "masw")
-    choice = length_choice(run_folder)
+    log = read_log(run_folder)
+    settings = processing_settings(run_folder, manifest, log, length_choice(run_folder))
+    stages = _stages(run_folder, manifest)
+    maker = made_by(run_folder)
+    study = study_of(run_folder.parent, run_folder.name) if maker == "autonomous" else None
+    journal = journal_of(study) if study is not None else ()
+    search = search_of(study) if study is not None else None
+    records = next(one for one in settings if one.key == "records")
     return RunCard(
         folder=folder,
         profile=manifest.profile.name,
         run_id=manifest.run_id,
         mode=manifest.preset.mode,
-        by=maker(run_folder),
+        made_by=maker,
         started_at=manifest.started_at,
         finished_at=manifest.finished_at,
         records=(INPUT_DIR / manifest.profile.name).is_dir(),
-        settings=processing_settings(run_folder, manifest, read_log(run_folder), choice),
-        trials=choice.trials if choice is not None else (),
-        mutes=mutes_tried(run_folder),
-        segments=segments_tried(run_folder),
-        line_tries=line_tried(run_folder),
-        stages=_stages(run_folder, manifest),
+        settings=settings,
+        tried=tried_tables(run_folder, journal, search),
+        history=_study_history(journal, search)
+        if study is not None
+        else _run_history(run_folder, manifest, log, records, stages),
+        stages=stages,
         receivers=line.receivers,
         sources=line.sources,
         windows=_windows(manifest, line.receivers),
         reach=shot_distances(masw) if line.sources else None,
-        journal=run_journal(run_folder.parent, manifest.run_id),
     )
-
-
-def length_choice(run_folder: Path) -> LengthChoice | None:
-    path = run_folder / COHERENCE_FILE
-    return LengthChoice.model_validate_json(path.read_text()) if path.exists() else None
-
-
-class _MuteFile(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="ignore")
-
-    chosen: str | None = None
-    trials: tuple[MuteTried, ...] = ()
-
-
-class _SegmentsFile(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="ignore")
-
-    baseline: SegmentsTried | None = None
-    candidates: tuple[SegmentsTried, ...] = ()
-    chosen: SegmentsTried | None = None
-
-
-class _LineLoopFile(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="ignore")
-
-    trials: tuple[LineTried, ...] = ()
-
-
-def mutes_tried(run_folder: Path) -> tuple[MuteTried, ...]:
-    """The mutes the run's mute trial tried, the one kept said; none without a trial."""
-    path = run_folder / MUTE_FILE
-    if not path.exists():
-        return ()
-    found = _MuteFile.model_validate_json(path.read_text())
-    return tuple(
-        one.model_copy(update={"kept": one.candidate == found.chosen}) for one in found.trials
-    )
-
-
-def segments_tried(run_folder: Path) -> tuple[SegmentsTried, ...]:
-    """The segments a passive run's trial tried, the line's own first, the one kept said."""
-    path = run_folder / SEGMENTS_FILE
-    if not path.exists():
-        return ()
-    found = _SegmentsFile.model_validate_json(path.read_text())
-    own, chosen = found.baseline, found.chosen
-    tried = ([own] if own is not None else []) + [one for one in found.candidates if one != own]
-    return tuple(
-        one.model_copy(
-            update={"own": one is own, "kept": one == chosen if chosen is not None else one is own}
-        )
-        for one in tried
-    )
-
-
-def line_tried(run_folder: Path) -> tuple[LineTried, ...]:
-    """The changes of the line's settings the run's line loop tried, in order."""
-    path = run_folder / LINE_LOOP_FILE
-    if not path.exists():
-        return ()
-    trials = _LineLoopFile.model_validate_json(path.read_text()).trials
-    return tuple(
-        one if one.change else one.model_copy(update={"change": _change_of(one.note)})
-        for one in trials
-    )
-
-
-# How the line loop words a change it did not keep; one it kept, the change then ": the line loop".
-_NOT_KEPT = "Tried for the line, not kept: "
-
-
-def _change_of(note: str) -> str:
-    """The change a try's note words, for a line_loop.json older than its `change`."""
-    if note.startswith(_NOT_KEPT):
-        return note.removeprefix(_NOT_KEPT).split(", asked by ")[0]
-    return note.split(": the line loop")[0]
 
 
 def processing_settings(
     run_folder: Path, manifest: RunManifest, log: QCLog | None, choice: LengthChoice | None
 ) -> tuple[Setting, ...]:
     """The run's windows and the settings of each stage, as run.json has them, each with where
-    it comes from: the assistant's rules (its notes on the line), the request, the preset's
-    default, or PAC's form."""
+    it comes from: the line's notes (the workflow's rules, the agent's reasons, the user's
+    settings among them), the request, the preset's default, or PAC's form."""
     preset: dict[str, Any] = manifest.preset.model_dump(mode="json")
     defaults: dict[str, Any] = make_preset(manifest.preset.mode).model_dump(mode="json")
     line = log.latest(LINE, "phase_shift") if log is not None else None
     changed: dict[str, Any] = line.parameters if line is not None else {}
     notes = line.notes if line is not None else ()
+    chooser: Origin = log.chooser if log is not None else "you"
 
     def origin(stages: Iterable[str], keys: Iterable[str] | None = None) -> tuple[Origin, str]:
-        """Where the values of `stages` (their `keys`, or all) come from, when no rule set them:
-        the preset's default as the units' cards say it, else the request or PAC's form."""
+        """Where the values of `stages` (their `keys`, or all) come from, when the line's
+        settings did not change them: the preset's default as the units' cards say it, else the
+        request or PAC's form."""
         same = all(
             _same(preset[stage].get(key), defaults.get(stage, {}).get(key))
             for stage in stages
@@ -360,22 +251,25 @@ def processing_settings(
         )
         if same:
             return "default", DEFAULT
-        return ("given", GIVEN) if log is not None else ("pac", PAC)
+        return "you", given_why(log)
 
-    def rule(stage: str, key: str) -> str | None:
-        """The assistant's reason for the value it set on the line, from its note."""
-        if key not in cast(Mapping[str, Any], changed.get(stage, {})):
+    def rule(stage: str, key: str | None = None) -> tuple[Origin, str] | None:
+        """Who set the value of `stage`'s `key` (or of any of its keys) the line's settings
+        changed, and why, from the line's note; None when they did not change it."""
+        values = changed.get(stage)
+        if not isinstance(values, Mapping) or (key is not None and key not in values):
             return None
-        note = next((note for note in notes if note.startswith(f"{stage} {key}")), None)
-        return note.split(": ", 1)[1].rstrip(".") if note is not None else "set by its rules"
+        who, reason = noted(notes, stage if key is None else f"{stage} {key}", chooser)
+        return who, reason or "chosen by the checks on the line"
 
     spacing = manifest.profile.receiver_spacing_m
     masw: dict[str, Any] = preset["masw"]
     length, step = int(masw["length"]), int(masw["step"])
     if choice is not None and choice.length == length:
-        where, why = "rule", _length_rule(choice, config_section(run_folder, "coherence"))
+        where, why = chooser, _length_rule(choice, config_section(run_folder, "coherence"))
     else:
-        where, why = origin(["masw"], ["length"])
+        where, why = rule("masw", "length") or origin(["masw"], ["length"])
+    stepped, step_why = rule("masw", "step") or origin(["masw"], ["step"])
     settings = [
         Setting(
             key="length",
@@ -390,8 +284,8 @@ def processing_settings(
             label="Window step",
             value=f"{number(step * spacing, 4)} m",
             detail=plural(step, "receiver"),
-            why=origin(["masw"], ["step"])[1],
-            origin=origin(["masw"], ["step"])[0],
+            why=step_why,
+            origin=stepped,
         ),
     ]
     xmids = [window.xmid for window in manifest.windows]
@@ -405,23 +299,20 @@ def processing_settings(
             why=f"one every {plural(step, 'receiver')} along the "
             f"{plural(manifest.profile.n_receivers, 'receiver')}"
             + (f"; {plural(missing, 'position')} without a shot to stack" if missing > 0 else ""),
-            origin="rule",
+            origin=stepped,
         )
     )
     if manifest.profile.kind == "active":
-        near, far = rule("near_field", "distance_m"), rule("masw", "distance_max")
-        if near is None and far is None:
+        ends = {
+            "nearest": rule("near_field", "distance_m"),
+            "farthest": rule("masw", "distance_max"),
+        }
+        set_by = {end: one for end, one in ends.items() if one is not None}
+        if not set_by:
             where, why = origin(["masw"], ["distance_min", "distance_max"])
         else:
-            where = "rule"
-            why = "; ".join(
-                part
-                for part in (
-                    f"nearest, {near}" if near else "",
-                    f"farthest, {far}" if far else "",
-                )
-                if part
-            )
+            where = _shared([who for who, _ in set_by.values()])
+            why = "; ".join(f"{end}, {reason}" for end, (_, reason) in set_by.items())
         settings.append(
             Setting(
                 key="reach",
@@ -439,8 +330,7 @@ def processing_settings(
         )
     settings.append(_records(manifest, log))
     dispersion: dict[str, Any] = preset["dispersion"]
-    band = rule("dispersion", "fmax") or rule("dispersion", "fmin")
-    where, why = ("rule", band) if band is not None else origin(["dispersion"])
+    where, why = rule("dispersion", "fmax") or rule("dispersion", "fmin") or origin(["dispersion"])
     narrowed = _again(log, "phase_shift", "window")
     settings.append(
         Setting(
@@ -453,14 +343,14 @@ def processing_settings(
         )
     )
     stages = [name for name in preset if name not in OWN_ENTRIES]
-    # A record step the checks chose for the whole line (the mute trial's muting, logged with
-    # the line's images).
-    chosen = [name for name in stages if name in changed]
-    where, why = (
-        ("rule", f"the checks chose its {', '.join(chosen)} on the line")
-        if chosen
-        else origin(stages)
-    )
+    # A record step chosen for the whole line (the mute trial's muting, logged with the line's
+    # images; the agent's commits).
+    chosen = {name: one for name in stages if (one := rule(name)) is not None}
+    if chosen:
+        where = _shared([who for who, _ in chosen.values()])
+        why = "; ".join(f"its {name}, {reason}" for name, (_, reason) in chosen.items())
+    else:
+        where, why = origin(stages)
     redone = _again(log, "preprocessing", "record")
     settings.append(
         Setting(
@@ -474,8 +364,39 @@ def processing_settings(
     return tuple(settings)
 
 
+def given_why(log: QCLog | None) -> str:
+    """Why a value of the run's request is the user's: PAC's form (no log), the user's settings
+    as the autonomous mode locks them, or the workflow's request, which the assistant writes."""
+    if log is None:
+        return PAC
+    return GIVEN if log.chooser == "agent" else REQUESTED
+
+
+def noted(notes: Iterable[str], name: str, chooser: Origin) -> tuple[Origin, str | None]:
+    """Who set setting `name` ('<stage> <key>', or a stage) on the line, and the reason the
+    line's note on it gives (None: no note): the user, when the agent's commit gives it as
+    theirs, else the checks' chooser."""
+    note = next(
+        (note for note in notes if note.startswith((f"{name}:", f"{name} "))),
+        None,
+    )
+    if note is None:
+        return chooser, None
+    reason = note.split(": ", 1)[1].rstrip(".")
+    return ("you" if reason.startswith(USER_REASON) else chooser), reason
+
+
+def _shared(origins: Iterable[Origin]) -> Origin:
+    """One origin for values set together: the user's when they set them all, else the
+    other's."""
+    for one in origins:
+        if one != "you":
+            return one
+    return "you"
+
+
 def _length_rule(choice: LengthChoice, rules: Mapping[str, Any]) -> str:
-    """Why the assistant kept `choice.length`, in a line: the trials are in their table."""
+    """Why the workflow kept `choice.length`, in a line: the trials are in their table."""
     share = float(rules.get("min_pass_share", MIN_PASS_SHARE))
     precision = float(rules.get("max_uncertainty", MAX_UNCERTAINTY))
     kept = next(trial for trial in choice.trials if trial.length == choice.length)
@@ -487,7 +408,7 @@ def _length_rule(choice: LengthChoice, rules: Mapping[str, Any]) -> str:
         how = f"the first passing {share:.0%} of its trials with picks within {precision:.0%}"
     else:
         how = f"the most precise passing {share:.0%} of its trials"
-    return f"the assistant's choice: {how} (every trial under Every setting)"
+    return f"the length trial's choice: {how} (each length tried below)"
 
 
 def _reach(masw: Mapping[str, Any]) -> str:
@@ -533,8 +454,12 @@ def _records(manifest: RunManifest, log: QCLog | None) -> Setting:
         label="Records",
         value=f"{used} of {total}",
         detail="used",
-        why="; ".join(said) or "every record, none left out",
-        origin="pac" if log is None else "rule" if excluded or traces or receivers else "default",
+        why="; ".join(said) or ALL_RECORDS,
+        origin="you"
+        if log is None
+        else log.chooser
+        if excluded or traces or receivers
+        else "default",
     )
 
 
@@ -694,7 +619,7 @@ def _entry(folder: str, path: Path, manifest: RunManifest | None) -> RunEntry:
             run_id=None,
             started_at=None,
             mode=None,
-            by=None,
+            made_by=None,
             windows=len(window_folders(path)),
         )
     length = preset_stage(manifest, "masw").get("length")
@@ -703,7 +628,7 @@ def _entry(folder: str, path: Path, manifest: RunManifest | None) -> RunEntry:
         run_id=manifest.run_id,
         started_at=manifest.started_at,
         mode=manifest.preset.mode,
-        by=maker(path),
+        made_by=made_by(path),
         windows=len(manifest.windows),
         window_length=int(length) if length is not None else None,
     )
@@ -717,12 +642,11 @@ def _older_card(folder: str, run_folder: Path) -> RunCard:
         profile=folder,
         run_id=None,
         mode=None,
-        by=None,
+        made_by=None,
         started_at=None,
         finished_at=None,
         records=(INPUT_DIR / folder).is_dir(),
         settings=(),
-        trials=(),
         stages=_counts([run_folder / unit for unit in units]),
         receivers=(),
         sources={},
@@ -732,3 +656,223 @@ def _older_card(folder: str, run_folder: Path) -> RunCard:
         ),
         reach=None,
     )
+
+
+# The journal's entries the user made: what they asked, the settings they gave, a request after
+# the report; the agent made the others (its reasoning, and code's record of what it did).
+_USER_KINDS = frozenset({"objective", "settings", "reopen"})
+
+
+def _study_history(journal: Iterable[JournalEntry], search: SearchDone | None) -> tuple[Step, ...]:
+    """The history of a run the autonomous mode made: its study's journal, the search at its
+    time."""
+    steps = [
+        Step(
+            id=entry.id,
+            kind=entry.kind,
+            by="you" if entry.kind in _USER_KINDS else "agent",
+            at=entry.at,
+            text=text,
+            detail=detail,
+            of=entry.of,
+        )
+        for entry in journal
+        for text, detail in [_entry_text(entry)]
+    ]
+    if search is not None:
+        made = Step(id="S1", kind="search", by="agent", at=search.at, text=_search_text(search))
+        later = next((n for n, one in enumerate(steps) if one.at and one.at > search.at), None)
+        steps.insert(len(steps) if later is None else later, made)
+    return tuple(steps)
+
+
+def _entry_text(entry: JournalEntry) -> tuple[str, str]:
+    """A journal entry in words, and more on hover: a commit's changes, their reasons on hover;
+    an experiment's variants with their passes; else its text without its id."""
+    data = entry.data
+    changes, reasons = data.get("changes"), data.get("reasons")
+    if entry.kind == "commit" and isinstance(changes, dict) and changes:
+        how = "Made run" if data.get("new_run") else "Changed the line in run"
+        said = changes_text(cast(dict[str, Any], changes))
+        why = cast(dict[str, Any], reasons) if isinstance(reasons, dict) else {}
+        return (
+            f"{how} {data.get('run_id', '')}: {said}",
+            "; ".join(f"{key}: {reason}" for key, reason in why.items()),
+        )
+    variants = data.get("variants")
+    if entry.kind == "experiment" and isinstance(variants, list) and variants:
+        tried = [cast(dict[str, Any], one) for one in cast(list[Any], variants)]
+        count = max(int(one.get("windows", 0)) for one in tried)
+        return (
+            f"On {plural(count, 'trial window')}: "
+            + "; ".join(_variant_text(one) for one in tried),
+            "",
+        )
+    return entry.text.removeprefix(entry.id).strip(), ""
+
+
+def _variant_text(variant: Mapping[str, Any]) -> str:
+    """An experiment's variant in a line: "2, masw length 36: 9 of 12 passing"."""
+    passing = f"{variant.get('passing', 0)} of {variant.get('windows', 0)} passing"
+    if variant.get("label") == "current":
+        return f"the line's settings, {passing}"
+    changes = cast(Mapping[str, Any], variant.get("changes") or {})
+    return f"{variant.get('label')}, {changes_text(changes)}: {passing}"
+
+
+def _search_text(search: SearchDone) -> str:
+    """The search in a line: the grid's variants, those too poor to show, how the eye judged
+    the others, the finalists."""
+    said = (
+        f"{plural(search.variants, 'variant')} of the grid over "
+        f"{plural(search.settings, 'setting')}"
+    )
+    if search.dropped:
+        said += (
+            f", {search.dropped} too poor to show (no image, or under a quarter of the windows "
+            "passing)"
+        )
+    if search.sheets:
+        said += (
+            f"; the others judged by eye in {plural(search.sheets, 'sheet')} over "
+            f"{plural(search.rounds, 'round')}"
+        )
+    if search.finalists and search.experiment:
+        said += (
+            f"; the finalists {', '.join(search.finalists)} tried side by side in "
+            f"{search.experiment}"
+        )
+    return said
+
+
+def _run_history(
+    run_folder: Path,
+    manifest: RunManifest,
+    log: QCLog | None,
+    records: Setting,
+    stages: Iterable[StageCount],
+) -> tuple[Step, ...]:
+    """The history of a run PAC or the workflow made, from its files: the settings the user gave
+    before each stage, the records used, the workflow's trials on the line, the windows imaged,
+    picked, inverted and inverted to soil columns, each by who did it."""
+    done = {count.key: count for count in stages}
+    given = given_settings(run_folder)
+
+    def gave(family: str) -> list[Step]:
+        return [
+            Step(
+                kind="given",
+                by="you",
+                at=one.at,
+                text=f"Your settings for the {family}: {changes_text(one.values)}",
+            )
+            for one in given
+            if one.family == family
+        ]
+
+    def stage(kind: str, log_stage: str, text: str, unit: str = "window") -> Step:
+        attempts = [one for one in log.attempts if one.stage == log_stage] if log else []
+        again = _again(log, log_stage, unit)
+        return Step(
+            kind=kind,
+            by=log.chooser if log is not None and attempts else "you",
+            at=min((one.started_at for one in attempts), default=None),
+            text=text + (f"; done again: {again}" if again else ""),
+        )
+
+    steps = gave("processing")
+    used = records.value.split(" of ")
+    left_out = f": {records.why}" if records.why != ALL_RECORDS else ""
+    steps.append(
+        stage(
+            "records",
+            "preprocessing",
+            f"{used[0]} of {plural(int(used[-1]), 'record')} used{left_out}",
+            "record",
+        ).model_copy(update={"at": manifest.started_at})
+    )
+    steps += _trials(run_folder)
+    imaged = len(manifest.windows)
+    steps.append(stage("images", "phase_shift", f"{plural(imaged, 'window')} imaged"))
+    steps += _line_tries(run_folder)
+    steps += gave("picking")
+    picked = done["dispersion"]
+    steps.append(
+        stage("picks", "picking", f"{picked.done} of {plural(picked.total, 'window')} picked")
+    )
+    steps += gave("inversion")
+    for key, log_stage, what in (
+        ("inversion", "inversion", "inverted"),
+        ("petro", "petro_inversion", "inverted to a soil column"),
+    ):
+        count = done[key]
+        if count.done:
+            steps.append(
+                stage(key, log_stage, f"{count.done} of {plural(count.total, 'window')} {what}")
+            )
+    return tuple(steps)
+
+
+def _trials(run_folder: Path) -> list[Step]:
+    """The workflow's trials before the line's windows: the window length, the mute, a passive
+    line's segments, each with the one kept."""
+    steps: list[Step] = []
+    choice = length_choice(run_folder)
+    if choice is not None and choice.trials:
+        steps.append(
+            Step(
+                kind="length",
+                by="workflow",
+                text=f"{plural(len(choice.trials), 'length')} tried, "
+                f"{plural(choice.length, 'receiver')} kept",
+            )
+        )
+    mutes = mutes_tried(run_folder)
+    if mutes:
+        kept = next((one.candidate for one in mutes if one.kept), None)
+        steps.append(
+            Step(
+                kind="mute",
+                by="workflow",
+                text=f"{plural(len(mutes), 'mute')} tried, {_mute_kept(kept)}",
+            )
+        )
+    segments = segments_tried(run_folder)
+    if segments:
+        kept_segments = next((one for one in segments if one.kept), None)
+        steps.append(
+            Step(
+                kind="segments",
+                by="workflow",
+                text=f"{plural(len(segments), 'segment length')} tried, "
+                + (
+                    f"{number(kept_segments.segment_s)} s kept"
+                    if kept_segments is not None
+                    else "none kept"
+                ),
+            )
+        )
+    return steps
+
+
+def _mute_kept(candidate: str | None) -> str:
+    """The mute a trial kept, in words."""
+    if candidate is None:
+        return "none kept"
+    return "no mute kept" if candidate == "none" else f"{MUTE_NAMES.get(candidate, candidate)} kept"
+
+
+def _line_tries(run_folder: Path) -> list[Step]:
+    """The workflow's changes of the line's settings, asked by the windows whose curve failed."""
+    tries = line_tried(run_folder)
+    if not tries:
+        return []
+    kept = [one.change for one in tries if one.kept]
+    return [
+        Step(
+            kind="line",
+            by="workflow",
+            text=f"{plural(len(tries), 'change')} of the line's settings tried, {len(kept)} kept"
+            + (f" ({'; '.join(kept)})" if kept else ""),
+        )
+    ]

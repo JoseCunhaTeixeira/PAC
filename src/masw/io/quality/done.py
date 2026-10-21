@@ -12,7 +12,7 @@ from typing import Any
 
 from masw.io.quality.files import merged, preset_stage
 from masw.io.quality.log import LINE, LINE_RULES, Attempt, QCLog
-from masw.io.quality.runs import DEFAULT, GIVEN, PAC, is_default
+from masw.io.quality.runs import DEFAULT, given_why, is_default, noted
 from masw.io.quality.view import Origin, Setting, number, plural, span
 from sigpipe.masw.presets import make_preset
 from sigpipe.masw.runs import RunManifest, xmid_of
@@ -92,11 +92,12 @@ def trigger_text(attempt: Attempt) -> str:
 
 class _Origins:
     """Where a unit's settings of one log stage come from: its own retries (their history), the
-    line's (a window's; a record's, the line's mute trial), else the run's (the preset's
-    default, the request, PAC's form)."""
+    line's (a window's; a record's, the line's mute trial; the agent's commits), else the run's
+    (the preset's default, the request, PAC's form)."""
 
     def __init__(self, manifest: RunManifest, log: QCLog | None, unit: str, log_stage: str) -> None:
         self.log = log
+        self.chooser: Origin = log.chooser if log is not None else "you"
         # A change of the line's that made the unit again says what it changed, the line's.
         self.own = (
             [
@@ -125,12 +126,20 @@ class _Origins:
                 + (_values(one.parameters[stage]) or str(one.parameters[stage].get("method")))
                 for one in changed
             )
-            return "rule", f"the checks changed it on this unit: {history}"
-        if any(line is not None and stage in line.parameters for line in (self.line, self.trial)):
-            return "rule", "the checks changed it on the line"
+            return self.chooser, f"the checks changed it on this unit: {history}"
+        line = next(
+            (one for one in (self.line, self.trial) if one is not None and stage in one.parameters),
+            None,
+        )
+        if line is not None:
+            who, reason = noted(line.notes, stage, self.chooser)
+            return (
+                who,
+                f"set on the line: {reason}" if reason else "the checks changed it on the line",
+            )
         if is_default(self.preset.get(stage), self.defaults.get(stage)):
             return "default", DEFAULT
-        return ("given", GIVEN) if self.log is not None else ("pac", PAC)
+        return "you", given_why(self.log)
 
     def causes(self, stage: str) -> list[str]:
         """What asked the unit's own retries that changed `stage`, in words, in order."""
@@ -356,7 +365,7 @@ def _together(
         )
     origin = Counter(one.origin for _, one in group).most_common(1)[0][0]
     why = first.why
-    if len({one.why for _, one in group}) > 1 and origin == "rule":
+    if len({one.why for _, one in group}) > 1 and origin in ("workflow", "agent"):
         asked = sorted({cause for unit, _ in group for cause in causes[unit].get(key, ())})
         why = f"the checks changed it on {plural(len(group), noun)}" + (
             f" ({', '.join(asked)})" if asked else ""

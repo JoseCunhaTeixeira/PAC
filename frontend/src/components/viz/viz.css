@@ -126,10 +126,6 @@
   white-space: nowrap;
 }
 
-.viz-chip.blue {
-  background: var(--blue-soft);
-  color: var(--blue);
-}
 
 .viz-tiles {
   display: grid;
@@ -180,12 +176,22 @@
   color: var(--text-muted);
 }
 
-.viz-origin.rule {
+/* Who set a setting, and who made a run, in one colour each: you (the app's indigo, as by hand),
+   PACo's workflow, its autonomous agent; the preset's default in grey. */
+.viz-origin.you,
+.viz-chip.manual {
+  background: var(--accent-soft);
+  color: var(--accent-fg);
+}
+
+.viz-origin.workflow,
+.viz-chip.workflow {
   background: var(--blue-soft);
   color: var(--blue);
 }
 
-.viz-origin.given {
+.viz-origin.agent,
+.viz-chip.autonomous {
   background: var(--warn-soft);
   color: var(--warn);
 }
@@ -263,8 +269,37 @@
   font-size: var(--fs-small);
 }
 
-.viz-trials {
-  margin-top: 6px;
+/* What was tried for a choice: its title with who tried it, on what, then each try. */
+.viz-tried {
+  margin-top: 16px;
+}
+
+.viz-tried-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+}
+
+.viz-tried-title .viz-origin {
+  margin-top: 0;
+}
+
+.viz-tried-about {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+
+.viz-kept {
+  margin-left: 7px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: var(--fs-caption);
+  font-weight: 650;
+  background: var(--ok-soft);
+  color: var(--ok);
 }
 
 /* The stages: a segmented control. */
@@ -994,36 +1029,46 @@
   flex: 0 1 320px;
 }
 
-/* The autonomous mode's journal on a run's card: an entry a line, its id in the margin; its
-   reasoning (hypotheses, conclusions, decisions) apart from what code wrote. */
-.viz-journal {
+/* A run's history: a step a line, its id or its kind in the margin in the colour of who made it;
+   the agent's reasoning (hypotheses, conclusions, decisions) apart from what code wrote. */
+.viz-history {
   list-style: none;
   margin: 8px 0 0;
   padding: 0;
   display: grid;
-  gap: 6px;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 12px;
   font-size: var(--fs-small);
   line-height: 1.45;
 }
 
-.viz-journal li {
-  display: grid;
-  grid-template-columns: 3.2em 1fr;
-  gap: 8px;
+.viz-history li {
+  display: contents;
   color: var(--text-muted);
 }
 
-.viz-journal li.reasoning {
+.viz-history li.reasoning {
   color: var(--text);
 }
 
-.viz-journal-id {
+.viz-history-id {
   font-family: var(--font-mono);
   font-size: var(--fs-caption);
-  color: var(--accent-fg);
   padding-top: 1px;
 }
 
-.viz-journal-of {
+.viz-history-id.you {
+  color: var(--accent-fg);
+}
+
+.viz-history-id.workflow {
+  color: var(--blue);
+}
+
+.viz-history-id.agent {
+  color: var(--warn);
+}
+
+.viz-history-of {
   color: var(--text-faint);
 }

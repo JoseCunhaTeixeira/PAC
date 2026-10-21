@@ -23,9 +23,10 @@ from masw.io.paths import OUTPUT_DIR, workspace
 from masw.io.quality.dispersion import curve_metrics
 from masw.io.quality.done import in_common, record_settings, records_in_common
 from masw.io.quality.files import read_manifest
+from masw.io.quality.journal import journal_of, search_of, study_of
 from masw.io.quality.log import LINE, Attempt, QCLog
 from masw.io.quality.records import before_muting, signal_metrics, thresholds_of
-from masw.io.quality.runs import processing_settings
+from masw.io.quality.runs import USER_REASON, processing_settings
 from masw.io.quality.view import DASH, Setting
 from sigpipe.base import (
     Coordinate,
@@ -111,7 +112,7 @@ def test_the_runs_are_listed_by_profile(run: str) -> None:
     assert set(profiles) >= {"shots", "noise"}
     assert profiles["noise"]["runs"] == [] and profiles["noise"]["records"] is True
     entry = next(one for one in profiles["shots"]["runs"] if one["folder"] == run)
-    assert entry["by"] == "pac" and entry["mode"] == "active" and entry["windows"] == 3
+    assert entry["made_by"] == "manual" and entry["mode"] == "active" and entry["windows"] == 3
     assert entry["window_length"] == 6  # receivers, as the run's form set them
     started = [one["started_at"] for one in profiles["shots"]["runs"]]
     assert started == sorted(started, reverse=True)  # the newest first
@@ -120,7 +121,7 @@ def test_the_runs_are_listed_by_profile(run: str) -> None:
 def test_a_pac_run_card_says_its_windows_came_from_pacs_form(run: str) -> None:
     card = client.get(f"/quality/run/{run}").json()
 
-    assert (card["profile"], card["by"], card["records"]) == ("shots", "pac", True)
+    assert (card["profile"], card["made_by"], card["records"]) == ("shots", "manual", True)
     settings = {one["key"]: one for one in card["settings"]}
     assert list(settings) == [
         "length",
@@ -133,12 +134,21 @@ def test_a_pac_run_card_says_its_windows_came_from_pacs_form(run: str) -> None:
     ]
     assert (settings["length"]["value"], settings["length"]["detail"]) == ("5 m", "6 receivers")
     assert (settings["step"]["value"], settings["step"]["detail"]) == ("3 m", "3 receivers")
-    assert settings["length"]["origin"] == "pac" and "set by hand" in settings["length"]["why"]
+    assert settings["length"]["origin"] == "you" and "set by hand" in settings["length"]["why"]
     # The phase shift as the preset has it: the preset's default, as the windows' cards say.
     assert settings["band"]["origin"] == "default"
     assert settings["reach"]["value"] == "any distance"
     assert settings["records"]["value"] == "2 of 2"
-    assert card["trials"] == []
+    # Nothing tried; its history, every step by hand: the records, the windows imaged, picked
+    # and inverted.
+    assert card["tried"] == []
+    assert [(step["kind"], step["by"], step["text"]) for step in card["history"]] == [
+        ("records", "you", "2 of 2 records used"),
+        ("images", "you", "3 windows imaged"),
+        ("picks", "you", "2 of 3 windows picked"),
+        ("inversion", "you", "2 of 3 windows inverted"),
+        ("petro", "you", "2 of 3 windows inverted to a soil column"),
+    ]
     # The line: every receiver, both shots, each window's first and last receivers.
     assert card["receivers"] == [float(x) for x in range(12)]
     assert card["sources"] == {"1.mseed": -2.0, "2.mseed": 13.0}
@@ -386,7 +396,7 @@ def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:
     assert card["picked_by"] == "hand" and [one["label"] for one in card["curves"]] == ["M0"]
     # Who picked it, among its settings, with how the line's other windows differ.
     picking = next(one for one in card["settings"] if one["key"] == "picking")
-    assert (picking["value"], picking["origin"]) == ("by hand", "pac")
+    assert (picking["value"], picking["origin"]) == ("by hand", "you")
     assert picking["spread"] == "along the line: none on xmid 8.5 m"
     low, high = card["band_hz"]
     assert low < 20 < high
@@ -437,7 +447,7 @@ def test_a_pac_inversion_saves_its_measures_as_the_assistant_does(run: str) -> N
     settings = {one["key"]: one for one in card["settings"]}
     assert (settings["layers"]["value"], settings["layers"]["detail"]) == ("1", "over a half-space")
     assert settings["depth"]["value"] == "5 m"  # the sum of the thickness_max as run
-    assert all(one["origin"] == "pac" and not one["spread"] for one in settings.values())
+    assert all(one["origin"] == "you" and not one["spread"] for one in settings.values())
     assert path.stat().st_mtime_ns == saved
 
 
@@ -562,7 +572,7 @@ def test_every_card_says_what_was_done_and_why(run: str) -> None:
     assert labels["petro"] == ["Silex model"]
     # PAC's own run, its form's settings or the preset's defaults: none a check changed.
     origins = {one["origin"] for card in cards.values() for one in card["settings"]}
-    assert origins <= {"pac", "default"}
+    assert origins <= {"you", "default"}
 
 
 def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> None:
@@ -659,7 +669,7 @@ def test_a_pac_petrophysical_inversion_shows_its_soil_column_and_fit(run: str) -
     card = client.get(f"/quality/petro/card/{run}/2.5").json()
     (setting,) = card["settings"]
     assert setting["value"] == model and setting["detail"].startswith("trained on ")
-    assert setting["origin"] == "pac" and not setting["spread"]
+    assert setting["origin"] == "you" and not setting["spread"]
     assert card["model"] == model and card["fit"]["model"] == "petro"
     column = card["column"]
     assert len(column["soils"]) == len(column["thicknesses_m"]) == len(column["ns"])
@@ -868,18 +878,25 @@ def judged(run: str) -> str:
 def test_an_assistant_run_card_says_why_its_windows_are_what_they_are(judged: str) -> None:
     card = client.get(f"/quality/run/{judged}").json()
 
-    assert card["by"] == "assistant"
+    assert card["made_by"] == "workflow"
     settings = {one["key"]: one for one in card["settings"]}
     length = settings["length"]
     # The rule in a line; the trials in their table.
-    assert length["origin"] == "rule" and "the shortest passing 80% of its trials" in length["why"]
-    assert [(trial["length"], trial["passed"]) for trial in card["trials"]] == [(6, 2)]
-    assert settings["step"]["origin"] == "given"  # 3, not the preset's 1
+    assert length["origin"] == "workflow"
+    assert "the shortest passing 80% of its trials" in length["why"]
+    (lengths,) = card["tried"]
+    assert (lengths["title"], lengths["by"]) == ("Window lengths tried", "workflow")
+    assert [(row["label"], row["passed"], row["kept"]) for row in lengths["rows"]] == [
+        ("6 receivers (5 m)", "2 of 2", True)
+    ]
+    assert lengths["rows"][0]["measures"] == f"wavelengths 2{DASH}12 m, 3 windows on the line"
+    # 3, not the preset's 1: the request the assistant writes, the user's value or its own.
+    assert settings["step"]["origin"] == "you"
+    assert settings["step"]["why"] == "given in the request: by you, or chosen by the assistant"
     assert settings["band"]["origin"] == "default"
     assert settings["preprocessing"]["why"].endswith(
         "done again for 1 record (G1: 1 shifted trigger)"
     )
-    assert card["trials"][0]["wavelengths_m"] == [2.0, 12.0]
 
 
 def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
@@ -925,19 +942,29 @@ def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
         (target / "line_loop.json").unlink()
 
     # Each trial of the line in its table: what was tried, how many trial windows passed, kept.
-    assert [(one["candidate"], one["passed"], one["kept"]) for one in card["mutes"]] == [
-        ("none", 2, True),
-        ("standard", 1, False),
+    tables = {table["title"]: table for table in card["tried"]}
+    assert list(tables) == ["Window lengths tried", "Mutes tried", "Changes of the line tried"]
+    assert [
+        (one["label"], one["passed"], one["kept"]) for one in tables["Mutes tried"]["rows"]
+    ] == [
+        ("none", "2 of 2", True),
+        (f"standard, 80{DASH}1,500 m/s", "1 of 2", False),
     ]
-    line, older = card["line_tries"]
-    assert (line["change"], line["before"], line["after"], line["kept"]) == (
+    line, older = tables["Changes of the line tried"]["rows"]
+    assert (line["label"], line["passed"], line["kept"]) == (
         "muting mute 80 to 1500 m/s, width 0.05 s",
-        0,
-        2,
+        "0 → 2 of 2",
         True,
     )
-    assert (older["change"], older["kept"]) == ("trigger t0 0.003 s", False)
-    assert card["segments"] == []
+    assert line["measures"] == "asked by 3 windows (weak coherence)"
+    assert (older["label"], older["kept"]) == ("trigger t0 0.003 s", False)
+    # And in its history, with the length trial: each in a step, the one kept said.
+    steps = {step["kind"]: step for step in card["history"]}
+    assert steps["length"]["text"] == "1 length tried, 6 receivers kept"
+    assert steps["mute"]["text"] == "2 mutes tried, no mute kept"
+    assert steps["line"]["text"] == (
+        "2 changes of the line's settings tried, 1 kept (muting mute 80 to 1500 m/s, width 0.05 s)"
+    )
 
 
 def test_a_record_made_again_by_a_change_of_the_lines_settings_is_the_lines(run: str) -> None:
@@ -954,7 +981,7 @@ def test_a_record_made_again_by_a_change_of_the_lines_settings_is_the_lines(run:
 
     setting = next(one for one in record_settings(manifest, log, "1.mseed") if one.key == "muting")
 
-    assert (setting.origin, setting.why) == ("rule", "the checks changed it on the line")
+    assert (setting.origin, setting.why) == ("workflow", "the checks changed it on the line")
 
 
 def test_an_assistant_run_shows_g1_and_what_it_redid(judged: str) -> None:
@@ -990,7 +1017,7 @@ def test_an_assistant_run_shows_g2_g3_g4(judged: str) -> None:
 
     card = client.get(f"/quality/dispersion/card/{judged}/2.5").json()
     picking = next(one for one in card["settings"] if one["key"] == "picking")
-    assert (picking["value"], picking["origin"]) == ("automatic", "rule")
+    assert (picking["value"], picking["origin"]) == ("automatic", "workflow")
     assert card["picked_by"] == "auto" and card["band_hz"] == [8.0, 55.0]  # G2's, as it judged it
     gates = {gate["gate"]: gate for gate in card["gates"]}
     assert [gates[gate]["verdict"] for gate in ("G2", "G3", "G4")] == ["pass"] * 3
@@ -1089,7 +1116,7 @@ def test_an_assistant_run_shows_g5_and_what_each_attempt_changed(judged: str) ->
     assert card["status"] == "pass"
     # The assistant's rules; the sampling, as its retry changed it, with that retry.
     settings = {one["key"]: one for one in card["settings"]}
-    assert all(one["origin"] == "rule" for one in settings.values())
+    assert all(one["origin"] == "workflow" for one in settings.values())
     assert settings["effort"]["why"].endswith(
         "; the checks changed it on this window: attempt 2 (G5 not converged)"
     )
@@ -1356,7 +1383,7 @@ def test_a_windows_records_muted_each_with_its_own_pulse_are_said_together(run: 
         "mute",
         f"vmin 80 m/s, vmax 1,500 m/s, width 0.035{DASH}0.094 s",
     )
-    assert muting.origin == "rule" and not muting.spread
+    assert muting.origin == "workflow" and not muting.spread
     assert muting.why == "the checks changed it on 2 records (G2 weak coherence)"
     # The run's card counts a redo's fresh attempts as done again.
     card = {one.key: one for one in processing_settings(OUTPUT_DIR / run, manifest, log, None)}
@@ -1387,7 +1414,7 @@ def test_a_window_says_the_muting_most_of_its_records_ran_with() -> None:
             value="mute",
             detail=f"vmin 80 m/s, vmax 1,500 m/s, width {width} s",
             why=f"the checks changed it on this unit: attempt 1 (G2 weak coherence): width {width} s",
-            origin="rule",
+            origin="workflow",
         )
 
     unmuted = Setting(
@@ -1419,47 +1446,192 @@ def test_a_records_muting_the_mute_trial_chose_comes_from_the_data(run: str) -> 
 
     muting = next(one for one in record_settings(manifest, log, "1.mseed") if one.key == "muting")
 
-    assert (muting.origin, muting.why) == ("rule", "the checks changed it on the line")
+    assert (muting.origin, muting.why) == ("workflow", "the checks changed it on the line")
 
 
-def test_a_run_the_autonomous_mode_made_has_its_journal(tmp_path: Path) -> None:
-    from masw.io.quality.journal import run_journal
+def _lines(path: Path, records: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(one) + "\n" for one in records))
 
-    profile = tmp_path / "shots"
-    study = profile / "studies" / "20261018-110000-aaaa"
+
+def _study(profile: Path, run_id: str) -> Path:
+    """A study of PACo's autonomous mode whose line is run `run_id`: its journal (the
+    objective, a hypothesis, an experiment testing it, the commit it led to, a conclusion) and
+    its search, a sheet judged by an earlier search among those of its own."""
+    study = profile / "studies" / "20261021-145900-0000"
     study.mkdir(parents=True)
-    commits = [
-        {"number": 1, "run_id": "20261018-120000-abcd"},
-        {"number": 2, "run_id": "20261018-130000-ef01"},
-    ]
-    (study / "line.json").write_text(
-        json.dumps({"run_id": "20261018-130000-ef01", "commits": commits})
-    )
-    entries = [
+    commit = {"number": 1, "run_id": run_id}
+    (study / "line.json").write_text(json.dumps({"run_id": run_id, "commits": [commit]}))
+    variants: list[dict[str, Any]] = [
+        {"label": "current", "changes": {}, "passing": 5, "windows": 12, "depth_m": 12.0},
         {
-            "id": "O1",
-            "kind": "objective",
-            "at": "2026-10-18T11:00:00Z",
-            "text": "O1 a velocity section to 20 m",
+            "label": "1",
+            "changes": {"masw": {"length": 6}},
+            "passing": 9,
+            "windows": 12,
+            "gained": [1.5, 2.5, 3.5, 4.5],
+            "lost": [],
+            "depth_m": 15.0,
         },
         {
-            "id": "H1",
-            "kind": "hypothesis",
-            "at": "2026-10-18T11:05:00Z",
-            "text": "longer windows",
-            "of": ["E1"],
+            "label": "2",
+            "changes": {"masw": {"length": 8}},
+            "passing": 4,
+            "windows": 12,
+            "gained": [],
+            "lost": [2.5],
+            "depth_m": 16.0,
+            "dominated_by": "1",
         },
     ]
-    (study / "journal.jsonl").write_text(
-        "".join(json.dumps(one) + "\n" for one in entries) + "not json\n"
+    changes = {"masw": {"length": 6}, "dispersion": {"fmax": 60}}
+    reasons = {"masw length": "the most windows passing in E1", "dispersion fmax": USER_REASON}
+    _lines(
+        study / "journal.jsonl",
+        [
+            {"id": "O1", "kind": "objective", "at": "2026-10-21T14:59:00Z", "text": "O1 to 20 m"},
+            {
+                "id": "H1",
+                "kind": "hypothesis",
+                "at": "2026-10-21T15:02:00Z",
+                "text": "Longer windows sharpen the low band",
+            },
+            {
+                "id": "E1",
+                "kind": "experiment",
+                "at": "2026-10-21T15:05:00Z",
+                "text": "on spread:12: current 5/12; ...",
+                "of": ["H1"],
+                "data": {"windows": "spread:12", "variants": variants},
+            },
+            {
+                "id": "L1",
+                "kind": "commit",
+                "at": "2026-10-21T15:10:00Z",
+                "text": "L1 made run ...",
+                "of": ["E1"],
+                "data": {"run_id": run_id, "changes": changes, "reasons": reasons, "new_run": True},
+            },
+            {
+                "id": "C1",
+                "kind": "conclusion",
+                "at": "2026-10-21T15:12:00Z",
+                "text": "C1 Six receivers hold the low band",
+                "of": ["E1", "L1"],
+            },
+        ],
     )
+    rows = [{"label": f"g{n}", "length": 6} for n in (1, 2, 3)]
+    axes = {"masw length": ["6", "8"], "masw distance_max": ["0.5", "1"]}
+    search = {"made_at": "2026-10-21T15:00:00+00:00", "rows": rows, "dropped": 1, "axes": axes}
+    (study / "searches").mkdir()
+    (study / "searches" / "S1.json").write_text(json.dumps(search))
+    knockout = {"round": 2, "sheets": [], "finalists": ["g1", "g2"], "experiment": "E1"}
+    (study / "searches" / "S1_knockout.json").write_text(json.dumps(knockout))
+    _lines(
+        study / "searches" / "S1_judged.jsonl",
+        [
+            {"round": 1, "sheet": 1, "kept": ["g3"], "at": "2026-10-21T14:00:00+00:00"},
+            {"round": 1, "sheet": 1, "kept": ["g1"], "at": "2026-10-21T15:01:00+00:00"},
+            {"round": 1, "sheet": 2, "kept": ["g2"], "at": "2026-10-21T15:01:00+00:00"},
+            {"round": 2, "sheet": 1, "kept": ["g1", "g2"], "at": "2026-10-21T15:01:30+00:00"},
+        ],
+    )
+    return study
 
-    # A run of its line, now or at a commit: the study's journal, a line unread left out.
-    for run_id in ("20261018-130000-ef01", "20261018-120000-abcd"):
-        found = run_journal(profile, run_id)
-        assert [(one.id, one.kind, one.of) for one in found] == [
-            ("O1", "objective", ()),
-            ("H1", "hypothesis", ("E1",)),
-        ]
-    assert run_journal(profile, "20261018-140000-0000") == ()
-    assert run_journal(tmp_path / "noise", "20261018-120000-abcd") == ()
+
+def test_a_study_is_read_for_the_runs_its_line_was(tmp_path: Path) -> None:
+    profile = tmp_path / "shots"
+    study = _study(profile, "20261021-151000-abcd")
+    (study / "journal.jsonl").write_text((study / "journal.jsonl").read_text() + "not json\n")
+
+    # A run of its line: the study, its journal (a line unread left out) and its search, the
+    # sheets judged since it was made alone.
+    assert study_of(profile, "20261021-151000-abcd") == study
+    assert [one.id for one in journal_of(study)] == ["O1", "H1", "E1", "L1", "C1"]
+    search = search_of(study)
+    assert search is not None
+    assert (search.variants, search.settings, search.dropped) == (3, 2, 1)
+    assert (search.sheets, search.rounds, search.finalists) == (3, 2, ("g1", "g2"))
+    assert study_of(profile, "20261021-160000-0000") is None
+    assert study_of(tmp_path / "noise", "20261021-151000-abcd") is None
+
+
+def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: str) -> None:
+    folder = "shots/20261021-151000-abcd"
+    target = OUTPUT_DIR / folder
+    shutil.copytree(OUTPUT_DIR / judged, target)
+    (target / "coherence.json").unlink()
+    study = _study(target.parent, target.name)
+    # The line's settings as the agent's commit logs them: its own with its reason, the user's
+    # as theirs.
+    notes = (
+        "masw length: the most windows passing in E1 (L1, E1)",
+        f"dispersion fmax: {USER_REASON} (L1)",
+    )
+    lines = (target / "qc_log.jsonl").read_text().splitlines()[:-1]  # its last line cut short
+    committed = {"masw": {"length": 6}, "dispersion": {"fmax": 60}}
+    now = datetime.now(UTC).isoformat()
+    lines.append(_attempt("line", "phase_shift", 1, "initial", {}, committed, notes, at=now))
+    (target / "qc_log.jsonl").write_text("\n".join(lines) + "\n")
+    try:
+        card = client.get(f"/quality/run/{folder}").json()
+        dispersion = client.get(f"/quality/dispersion/card/{folder}/2.5").json()
+        runs = client.get("/quality/runs").json()
+    finally:
+        shutil.rmtree(target)
+        shutil.rmtree(study.parent)
+
+    assert card["made_by"] == "autonomous"
+    entry = next(one for profile in runs for one in profile["runs"] if one["folder"] == folder)
+    assert entry["made_by"] == "autonomous"
+    # The agent's choices said as its, with its reasons; the user's as theirs.
+    settings = {one["key"]: one for one in card["settings"]}
+    assert (settings["length"]["origin"], settings["length"]["why"]) == (
+        "agent",
+        "the most windows passing in E1 (L1, E1)",
+    )
+    assert (settings["band"]["origin"], settings["band"]["why"]) == ("you", f"{USER_REASON} (L1)")
+    assert (settings["step"]["origin"], settings["step"]["why"]) == ("you", "given in your request")
+    picking = next(one for one in dispersion["settings"] if one["key"] == "picking")
+    assert picking["origin"] == "agent"
+    # Its experiment in its table, the variant its commit took kept.
+    (experiment,) = card["tried"]
+    assert (experiment["title"], experiment["by"]) == (
+        "E1: the search's finalists, side by side",
+        "agent",
+    )
+    assert experiment["about"].startswith("H1: Longer windows sharpen the low band. On 12 trial")
+    assert [(one["label"], one["passed"], one["kept"]) for one in experiment["rows"]] == [
+        ("the line's settings", "5 of 12", False),
+        ("1: masw length 6", "9 of 12", True),
+        ("2: masw length 8", "4 of 12", False),
+    ]
+    assert experiment["rows"][1]["measures"] == "4 gained, 0 lost, depth 15 m"
+    assert experiment["rows"][2]["note"].startswith("dominated: variant 1 as good or better")
+    # Its history: the journal, the search at its time, each step by who made it.
+    steps = card["history"]
+    assert [(one["id"], one["kind"], one["by"]) for one in steps] == [
+        ("O1", "objective", "you"),
+        ("S1", "search", "agent"),
+        ("H1", "hypothesis", "agent"),
+        ("E1", "experiment", "agent"),
+        ("L1", "commit", "agent"),
+        ("C1", "conclusion", "agent"),
+    ]
+    said = {one["id"]: one for one in steps}
+    assert said["O1"]["text"] == "to 20 m"
+    assert said["S1"]["text"] == (
+        "3 variants of the grid over 2 settings, 1 too poor to show (no image, or under a "
+        "quarter of the windows passing); the others judged by eye in 3 sheets over 2 rounds; "
+        "the finalists g1, g2 tried side by side in E1"
+    )
+    assert said["E1"]["text"] == (
+        "On 12 trial windows: the line's settings, 5 of 12 passing; 1, masw length 6: 9 of 12 "
+        "passing; 2, masw length 8: 4 of 12 passing"
+    )
+    assert said["L1"]["text"] == f"Made run {target.name}: masw length 6; dispersion fmax 60"
+    assert said["L1"]["detail"] == (
+        f"masw length: the most windows passing in E1; dispersion fmax: {USER_REASON}"
+    )
+    assert said["C1"]["of"] == ["E1", "L1"]

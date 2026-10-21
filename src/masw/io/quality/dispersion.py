@@ -620,7 +620,7 @@ def _picking_setting(
             why="in the Dispersion picking page"
             if picked_by == "hand"
             else "PAC's automatic picking, in the Dispersion picking page",
-            origin="pac",
+            origin="you",
         )
     again = [one for one in log.of(unit, "picking") if one.attempt > 1]
     asked = Counter(flag_text(one.triggered_by.partition(":")[2]) for one in again)
@@ -637,7 +637,7 @@ def _picking_setting(
         value="automatic",
         detail=f"picked {len(again) + 1} times" if again else "",
         why=why,
-        origin="rule",
+        origin=log.chooser,
     )
 
 

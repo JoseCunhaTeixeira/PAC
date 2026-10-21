@@ -16,9 +16,10 @@ from masw.io.quality.log import LINE, Flag, GateResult, Metric, QCLog, Verdict
 type Status = Literal["pass", "warn", "fail", "none"]
 # A sentence's badge; "info" says what was done, without judging it.
 type Mark = Literal["pass", "warn", "fail", "info"]
-# Where a setting comes from: a rule on the data (the assistant's), the request, the preset's
-# default, or PAC's form.
-type Origin = Literal["rule", "given", "default", "pac"]
+# Where a setting comes from: the user (their request, or PAC's form), PACo's workflow (its rules
+# on the data, its checks' changes), its autonomous agent (its choices, its checks' changes), or
+# the preset's default.
+type Origin = Literal["you", "workflow", "agent", "default"]
 
 STATUS_OF: dict[Verdict, Status] = {"pass": "pass", "retry": "warn", "reject": "fail"}
 DASH = "\u2013"  # an en dash, between a range's ends

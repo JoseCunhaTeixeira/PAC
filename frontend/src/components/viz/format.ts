@@ -1,4 +1,4 @@
-import type { Metric, Origin, RunEntry, StageKey, Status } from "./types";
+import type { Maker, Metric, Origin, RunEntry, StageKey, Status } from "./types";
 
 // How Visualization says things: the gates' metrics (a name a geophysicist reads, and the value
 // in the unit it is judged in), numbers, dates, and where a setting comes from.
@@ -263,10 +263,17 @@ function shown(name: string, value: unknown): string {
 
 /** Where a setting comes from, in two words. */
 export const ORIGIN_LABELS: Record<Origin, string> = {
-  rule: "from the data",
-  given: "given",
-  default: "default",
-  pac: "set by hand",
+  you: "You",
+  workflow: "Workflow",
+  agent: "Agent",
+  default: "Default",
+};
+
+// Who made a run, in the assistant's settings' words.
+export const MAKER_LABELS: Record<Maker, string> = {
+  manual: "Manual",
+  workflow: "Workflow",
+  autonomous: "Autonomous",
 };
 
 /** What a unit's state means for what comes after it, stage by stage: `full` on its card's
@@ -321,9 +328,9 @@ export function runDate(iso: string | null): string {
 /** A run in a selector: when, by whom, how many windows. */
 export function runLabel(run: RunEntry): string {
   if (run.run_id === null) return `${run.folder} (older layout)`;
-  const by = run.by === "assistant" ? "assistant" : "by hand";
   const length = run.window_length ? ` of ${run.window_length} receivers` : "";
-  return `${runDate(run.started_at)} · ${by} · ${run.windows} windows${length}`;
+  const by = run.made_by ? MAKER_LABELS[run.made_by] : null;
+  return [runDate(run.started_at), by, `${run.windows} windows${length}`].filter(Boolean).join(" · ");
 }
 
 /** A window's folder as its position: "xmid_103.50" as 103.5. */

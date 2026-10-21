@@ -3,7 +3,11 @@
 
 export type Status = "pass" | "warn" | "fail" | "none";
 export type Mark = "pass" | "warn" | "fail" | "info";
-export type Origin = "rule" | "given" | "default" | "pac";
+// Where a setting comes from: you (your request, or PAC's form), PACo's workflow, its autonomous
+// agent, or the preset's default.
+export type Origin = "you" | "workflow" | "agent" | "default";
+// Who made a run: PAC's pages, PACo's workflow, or its autonomous mode.
+export type Maker = "manual" | "workflow" | "autonomous";
 export type Verdict = "pass" | "retry" | "reject";
 export type StageKey = "records" | "dispersion" | "inversion" | "petro";
 export type ModelName = "best" | "smooth_best" | "median" | "smooth_median" | "ensemble";
@@ -13,7 +17,7 @@ export interface RunEntry {
   run_id: string | null;
   started_at: string | null;
   mode: string | null;
-  by: "assistant" | "pac" | null;
+  made_by: Maker | null;
   windows: number;
   /** Receivers per window; null: not said (the older layout). */
   window_length: number | null;
@@ -36,48 +40,34 @@ export interface Setting {
   spread?: string;
 }
 
-export interface LengthTrial {
-  length: number;
-  metres: number;
-  xmids: number[];
-  passed: number;
-  windows: number;
-  wavelengths_m: [number, number] | null;
-  flags: string[];
-  uncertainty: number | null; // the passed curves' median velocity uncertainty
-  compared: boolean;
-}
-
-// A mute the assistant's mute trial tried on trial windows along the line.
-export interface MuteTried {
-  candidate: string; // none, standard, wider, cone, tight
-  muting: Record<string, unknown> | null;
-  passed: number;
-  verdicts: string[]; // one a trial window
-  wavelengths_m: [number, number] | null;
-  kept: boolean;
-}
-
-// A passive line's segments and FK selection the assistant tried, the line's own first.
-export interface SegmentsTried {
-  segment_s: number;
-  threshold: number | null; // null: no selection
-  wavelength_span: number | null;
-  coherence: number | null;
-  kept: boolean;
-  own: boolean;
-}
-
-// A change of the line's settings the assistant's line loop tried.
-export interface LineTried {
-  change: string;
-  flag: string; // the check that asked it most: "G2:weak_coherence"
-  asked_by: number; // windows asking it
-  xmids: number[]; // the trial windows
-  before: number; // trial windows passing G3 with the line's settings before it
-  after: number; // with it
+// One thing tried to choose a setting: what, how many trial windows passed with it, its
+// measures, whether it was kept, and more on hover.
+export interface Tried {
+  label: string;
+  passed: string; // "5 of 6"; "" when none was judged on its own
+  measures: string;
   kept: boolean;
   note: string;
+}
+
+// What was tried for one choice, by whom, and on what.
+export interface TriedTable {
+  title: string;
+  about: string;
+  by: "workflow" | "agent";
+  rows: Tried[];
+}
+
+// A step of how the run was made, in order: an entry of its study's journal, its search, or
+// what its files say was done (the settings you gave, a stage, a trial), by whom.
+export interface Step {
+  id: string; // the journal's (O1, E3, L2, H1...), the search's (S1); "" for a stage
+  kind: string;
+  by: Origin;
+  at: string | null;
+  text: string;
+  detail: string; // more on hover: a commit's reasons
+  of: string[]; // the entries it rests on
 }
 
 export interface StageCount {
@@ -98,34 +88,20 @@ export interface RunCard {
   profile: string;
   run_id: string | null;
   mode: string | null;
-  by: "assistant" | "pac" | null;
+  made_by: Maker | null;
   started_at: string | null;
   finished_at: string | null;
   records: boolean;
   settings: Setting[];
-  trials: LengthTrial[];
-  mutes?: MuteTried[];
-  segments?: SegmentsTried[];
-  line_tries?: LineTried[];
+  // What was tried to choose them, and the run's history; absent from an older backend.
+  tried?: TriedTable[];
+  history?: Step[];
   stages: StageCount[];
   receivers: number[];
   sources: Record<string, number>;
   windows: LineWindow[];
   // The shots a window stacks: from, to this far from its middle (to null: any distance).
   reach: [number, number | null] | null;
-  // The journal of the assistant's autonomous mode (PACo's), when it made the run;
-  // absent from an older backend.
-  journal?: JournalEntry[];
-}
-
-// One entry of the journal: its id (E3, L2, H1...), its kind, when, what it says,
-// and the entries it rests on.
-export interface JournalEntry {
-  id: string;
-  kind: string;
-  at: string;
-  text: string;
-  of: string[];
 }
 
 export type Use = "used" | "part" | "excluded" | "failed" | "inside" | "near" | "far" | "traces";

@@ -8,6 +8,7 @@ import { PetroPanel } from "./components/viz/PetroPanel";
 import { ProfilePlot } from "./components/viz/ProfilePlot";
 import { Gather, RecordsPanel } from "./components/viz/RecordsPanel";
 import { RECORDS_ONLY, RunPicker } from "./components/viz/RunPicker";
+import { RunMaker } from "./components/viz/maker";
 import { RunSummary } from "./components/viz/RunSummary";
 import { StepArrows } from "./components/viz/panel";
 import { Steady } from "./components/viz/Steady";
@@ -480,7 +481,9 @@ export default function VisualizationPage() {
             )}
             {/* Stepping along the line, the page's end never rises (Steady). */}
             <div className="viz-section">
-              <Steady reset={`${folder}|${tab}`}>{panel}</Steady>
+              <Steady reset={`${folder}|${tab}`}>
+                <RunMaker.Provider value={run.made_by ?? null}>{panel}</RunMaker.Provider>
+              </Steady>
             </div>
           </>
         )}

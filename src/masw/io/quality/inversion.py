@@ -448,7 +448,7 @@ def window_inversion_settings(
             else ""
         )
 
-    origin: Origin = "rule" if assistant else "pac"
+    origin: Origin = log.chooser if assistant and log is not None else "you"
     free = parameters.free if parameters.layering == "free" else None
     if free is not None:
         layers = ("chosen by the data", f"{free.max_layers} at most")

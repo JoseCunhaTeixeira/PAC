@@ -17,12 +17,14 @@ import type {
   GateView,
   Mark,
   Metric,
+  Origin,
   PartState,
   Sentence,
   Setting,
   Status,
   Verdict,
 } from "./types";
+import { useRunMaker } from "./maker";
 import type { SavedFigure } from "./runFigures";
 import "./viz.css";
 
@@ -144,17 +146,21 @@ export function Sentences({ sentences }: { sentences: Sentence[] }) {
   );
 }
 
-// Where a setting came from, on hover.
-const ORIGIN_MEANINGS: Record<Setting["origin"], string> = {
-  rule: "Set by the assistant's rules, from the data.",
-  given: "Given in the request: by you, or chosen by the assistant.",
+// Where a setting came from, on hover; on a workflow run, a value of the request the assistant
+// writes, yours or its own.
+const ORIGIN_MEANINGS: Record<Origin, string> = {
+  you: "Yours: given in your request, or set by hand in PAC.",
+  workflow: "PACo's workflow: its rules chose it from the data, or its checks changed it.",
+  agent: "The autonomous agent: its choice, with its reason, or its checks' change.",
   default: "The preset's default.",
-  pac: "Set by hand.",
 };
+const REQUESTED = "Given in the request: by you, or chosen by the assistant; or set by hand in PAC.";
 
-export function OriginTag({ origin }: { origin: Setting["origin"] }) {
+export function OriginTag({ origin }: { origin: Origin }) {
+  const maker = useRunMaker();
+  const meaning = origin === "you" && maker === "workflow" ? REQUESTED : ORIGIN_MEANINGS[origin];
   return (
-    <span className={`viz-origin ${origin}`} data-tip={`${capitalized(ORIGIN_LABELS[origin])}\n${ORIGIN_MEANINGS[origin]}`}>
+    <span className={`viz-origin ${origin}`} data-tip={`${ORIGIN_LABELS[origin]}\n${meaning}`}>
       {ORIGIN_LABELS[origin]}
     </span>
   );

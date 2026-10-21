@@ -1,12 +1,21 @@
-import { capitalized, num, range, runDate, triggerLabel } from "./format";
+import { capitalized, MAKER_LABELS, ORIGIN_LABELS, runDate } from "./format";
 import { FolderIcon } from "../icons";
-import type { JournalEntry, LengthTrial, LineTried, MuteTried, RunCard, SegmentsTried, Setting } from "./types";
+import { RunMaker } from "./maker";
+import type { Maker, RunCard, Setting, Step, TriedTable } from "./types";
 import { Fold, OriginTag, SettingsList } from "./ui";
 
-// A run at a glance: who made it and when, its windows' length and step and the shots they
-// stack, the band imaged, and folded under them every setting with why.
+// A run at a glance, alike whoever made it: who made it and when, its windows' length and step
+// and the shots they stack, the band imaged; folded under them how each setting was chosen
+// (every setting with why, and what was tried), and the run's history step by step.
 
 const TILES = ["length", "step", "windows", "reach", "band"];
+
+// Who made a run, on hover.
+const MAKER_MEANINGS: Record<Maker, string> = {
+  manual: "Made in PAC's pages, by hand",
+  workflow: "Made by the assistant in the workflow mode\nPACo's rules chose the settings; its checks judged each stage",
+  autonomous: "Made by the assistant in the autonomous mode\nThe agent chose the settings by eye; its reasoning under History",
+};
 
 function Tile({ setting }: { setting: Setting }) {
   return (
@@ -19,179 +28,86 @@ function Tile({ setting }: { setting: Setting }) {
   );
 }
 
-function Trials({ trials, kept }: { trials: LengthTrial[]; kept: number | null }) {
+/** What was tried for one choice, by whom: each row what, how many trial windows passed with
+ * it, its measures, the one kept. */
+function Tried({ table }: { table: TriedTable }) {
   return (
-    <div className="viz-table-wrap viz-trials">
-      <table className="viz-table">
-        <thead>
-          <tr>
-            <th>Length tried</th>
-            <th className="num">Passed</th>
-            <th className="num" data-tip={"Picks ±\nThe passed curves' median velocity uncertainty"}>Picks ±</th>
-            <th className="num">Wavelengths</th>
-            <th className="num">Windows</th>
-          </tr>
-        </thead>
-        <tbody>
-          {trials.map((trial) => (
-            <tr key={trial.length}>
-              <td>
-                {trial.length} receivers ({trial.metres} m)
-                {trial.length === kept ? " · kept" : trial.compared ? " · to compare" : ""}
-              </td>
-              <td className="num">
-                {trial.passed} of {trial.xmids.length}
-              </td>
-              <td className="num">{trial.uncertainty != null ? `${Math.round(trial.uncertainty * 100)} %` : "—"}</td>
-              <td className="num">
-                {trial.wavelengths_m ? `${trial.wavelengths_m[0]}–${trial.wavelengths_m[1]} m` : "—"}
-              </td>
-              <td className="num">{trial.windows}</td>
+    <div className="viz-tried">
+      <div className="viz-tried-title">
+        <span>{table.title}</span>
+        <OriginTag origin={table.by} />
+      </div>
+      {table.about && <div className="viz-tried-about">{table.about}</div>}
+      <div className="viz-table-wrap">
+        <table className="viz-table">
+          <thead>
+            <tr>
+              <th>Tried</th>
+              <th className="num">Passed</th>
+              <th>Measures</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-const MUTE_NAMES: Record<string, string> = {
-  none: "none",
-  standard: "standard",
-  wider: "wider cone",
-  cone: "cone",
-  tight: "tight cone",
-};
-
-function Mutes({ mutes }: { mutes: MuteTried[] }) {
-  return (
-    <div className="viz-table-wrap viz-trials">
-      <table className="viz-table">
-        <thead>
-          <tr>
-            <th data-tip={"Mute tried\nEach on the same trial windows, at the line's length"}>Mute tried</th>
-            <th className="num">Passed</th>
-            <th className="num">Wavelengths</th>
-          </tr>
-        </thead>
-        <tbody>
-          {mutes.map((mute) => {
-            const muting = mute.muting as { vmin?: number; vmax?: number } | null;
-            const bounds = muting?.vmin != null && muting.vmax != null ? `, ${num(muting.vmin)}–${num(muting.vmax)} m/s` : "";
-            return (
-              <tr key={mute.candidate}>
+          </thead>
+          <tbody>
+            {table.rows.map((row, index) => (
+              <tr key={index} className={row.kept ? "kept" : undefined} data-tip={row.note || undefined}>
                 <td>
-                  {MUTE_NAMES[mute.candidate] ?? mute.candidate}
-                  {bounds}
-                  {mute.kept ? " · kept" : ""}
+                  {row.label}
+                  {row.kept && <span className="viz-kept">kept</span>}
                 </td>
-                <td className="num">
-                  {mute.passed} of {mute.verdicts.length}
-                </td>
-                <td className="num">{range(mute.wavelengths_m, "m")}</td>
+                <td className="num">{row.passed || "—"}</td>
+                <td>{row.measures || "—"}</td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
-function Segments({ segments }: { segments: SegmentsTried[] }) {
-  return (
-    <div className="viz-table-wrap viz-trials">
-      <table className="viz-table">
-        <thead>
-          <tr>
-            <th>Segments tried</th>
-            <th>Selection</th>
-            <th className="num" data-tip={"Span\nThe picks' longest wavelength over their shortest"}>Span</th>
-            <th className="num" data-tip={"Coherence\nThe images' along the picks"}>Coherence</th>
-          </tr>
-        </thead>
-        <tbody>
-          {segments.map((one, index) => (
-            <tr key={index}>
-              <td>
-                {num(one.segment_s)} s{one.own ? " · the line's" : ""}
-                {one.kept ? " · kept" : ""}
-              </td>
-              <td>{one.threshold == null ? "none" : `FK ${num(one.threshold)}`}</td>
-              <td className="num">{num(one.wavelength_span)}</td>
-              <td className="num">{num(one.coherence)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function LineTries({ tries }: { tries: LineTried[] }) {
-  return (
-    <div className="viz-table-wrap viz-trials">
-      <table className="viz-table">
-        <thead>
-          <tr>
-            <th data-tip={"Change tried\nOn the whole line, asked by the checks of windows whose curve failed"}>
-              Change tried
-            </th>
-            <th className="num">Asked by</th>
-            <th className="num" data-tip={"Passed\nTrial windows passing G3: the line's settings, then with the change"}>
-              Passed
-            </th>
-            <th>Line</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tries.map((one, index) => (
-            <tr key={index} data-tip={one.note}>
-              <td>{one.change}</td>
-              <td className="num" data-tip={triggerLabel(one.flag)}>
-                {one.asked_by} windows
-              </td>
-              <td className="num">
-                {one.before} → {one.after} of {one.xmids.length}
-              </td>
-              <td>{one.kept ? "kept" : "not kept"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// What each kind of entry is, in the journal's margin: code writes what happened, the model its
-// reasoning.
-const JOURNAL_KINDS: Record<string, string> = {
-  objective: "objective",
-  settings: "your settings",
-  experiment: "experiment",
-  commit: "commit",
-  freeze: "freeze",
-  inversion: "inversion",
-  report: "report",
-  hypothesis: "hypothesis",
-  conclusion: "conclusion",
-  decision: "decision",
+// What each kind of step is: in the margin when it has no id (a stage's), and on hover.
+const STEP_KINDS: Record<string, string> = {
+  objective: "Objective",
+  settings: "Your settings",
+  search: "Search",
+  experiment: "Experiment",
+  commit: "Commit",
+  freeze: "Freeze",
+  report: "Report",
+  reopen: "Reopened",
+  hypothesis: "Hypothesis",
+  conclusion: "Conclusion",
+  decision: "Decision",
+  given: "Given",
+  records: "Records",
+  length: "Length",
+  mute: "Mute",
+  segments: "Segments",
+  images: "Images",
+  line: "Line",
+  picks: "Picks",
+  inversion: "Inversion",
+  petro: "Soils",
 };
+// The agent's own reasoning, apart from what code wrote.
 const REASONING = new Set(["hypothesis", "conclusion", "decision"]);
 
-function Journal({ entries }: { entries: JournalEntry[] }) {
+/** The run's history: a step a line, its id or its kind in the margin in the colour of who made
+ * it, the entries it rests on after it. */
+function History({ steps }: { steps: Step[] }) {
   return (
-    <ol className="viz-journal">
-      {entries.map((entry) => {
-        const text = entry.text.startsWith(entry.id) ? entry.text.slice(entry.id.length).trim() : entry.text;
+    <ol className="viz-history">
+      {steps.map((step, index) => {
+        const kind = STEP_KINDS[step.kind] ?? capitalized(step.kind);
+        const when = step.at ? `\n${runDate(step.at)}` : "";
         return (
-          <li key={entry.id} className={REASONING.has(entry.kind) ? "reasoning" : undefined}>
-            <span className="viz-journal-id" data-tip={JOURNAL_KINDS[entry.kind] ?? entry.kind}>
-              {entry.id}
+          <li key={step.id || index} className={REASONING.has(step.kind) ? "reasoning" : undefined}>
+            <span className={`viz-history-id ${step.by}`} data-tip={`${kind} · ${ORIGIN_LABELS[step.by]}${when}`}>
+              {step.id || kind}
             </span>
-            <span>
-              {text}
-              {entry.of.length > 0 && <span className="viz-journal-of"> (from {entry.of.join(", ")})</span>}
+            <span data-tip={step.detail || undefined}>
+              {step.text}
+              {step.of.length > 0 && <span className="viz-history-of"> (from {step.of.join(", ")})</span>}
             </span>
           </li>
         );
@@ -204,59 +120,45 @@ export function RunSummary({ card }: { card: RunCard }) {
   const tiles = TILES.map((key) => card.settings.find((one) => one.key === key)).filter(
     (one): one is Setting => one !== undefined,
   );
-  const length = card.settings.find((one) => one.key === "length");
-  const kept = length ? Number(length.detail.split(" ")[0]) : null;
   // A backend before these lists sends none of them.
-  const mutes = card.mutes ?? [];
-  const segments = card.segments ?? [];
-  const lineTries = card.line_tries ?? [];
-  const journal = card.journal ?? [];
-  // The assistant's autonomous mode made it when it has a journal.
-  const by = card.by === "assistant" ? (journal.length > 0 ? "by the autonomous mode" : "by the assistant") : "by hand";
+  const tried = card.tried ?? [];
+  const history = card.history ?? [];
   return (
-    <section className="viz-card">
-      <div className="viz-run-title">
-        <span className="card-icon">
-          <FolderIcon size={17} />
-        </span>
-        <strong>{card.profile}</strong>
-        {card.mode && (
-          <span className="viz-chip" data-tip={"Processing mode"}>
-            {card.mode}
+    <RunMaker.Provider value={card.made_by ?? null}>
+      <section className="viz-card">
+        <div className="viz-run-title">
+          <span className="card-icon">
+            <FolderIcon size={17} />
           </span>
+          <strong>{card.profile}</strong>
+          {card.mode && (
+            <span className="viz-chip" data-tip={"Processing mode"}>
+              {card.mode}
+            </span>
+          )}
+          {card.made_by && (
+            <span className={`viz-chip ${card.made_by}`} data-tip={MAKER_MEANINGS[card.made_by]}>
+              {MAKER_LABELS[card.made_by]}
+            </span>
+          )}
+          {card.started_at && <span className="viz-chip">{runDate(card.started_at)}</span>}
+          {card.run_id === null && <span className="viz-chip">older layout: no run.json</span>}
+        </div>
+        {tiles.length > 0 && <div className="viz-tiles">{tiles.map((one) => <Tile key={one.key} setting={one} />)}</div>}
+        {card.settings.length > 0 && (
+          <Fold title="How it was chosen">
+            <SettingsList settings={card.settings} />
+            {tried.map((table, index) => (
+              <Tried key={index} table={table} />
+            ))}
+          </Fold>
         )}
-        {card.by && (
-          <span
-            className="viz-chip blue"
-            data-tip={
-              card.by !== "assistant"
-                ? "By hand"
-                : journal.length > 0
-                  ? "By the assistant's autonomous mode\nIts experiments and decisions in its journal"
-                  : "By the assistant\nChecked stage by stage"
-            }
-          >
-            {by}
-          </span>
+        {history.length > 0 && (
+          <Fold title={`History: ${history.length} steps`}>
+            <History steps={history} />
+          </Fold>
         )}
-        {card.started_at && <span className="viz-chip">{runDate(card.started_at)}</span>}
-        {card.run_id === null && <span className="viz-chip">older layout: no run.json</span>}
-      </div>
-      {tiles.length > 0 && <div className="viz-tiles">{tiles.map((one) => <Tile key={one.key} setting={one} />)}</div>}
-      {card.settings.length > 0 && (
-        <Fold title="All settings, and why">
-          <SettingsList settings={card.settings} />
-          {card.trials.length > 0 && <Trials trials={card.trials} kept={kept} />}
-          {mutes.length > 0 && <Mutes mutes={mutes} />}
-          {segments.length > 0 && <Segments segments={segments} />}
-          {lineTries.length > 0 && <LineTries tries={lineTries} />}
-        </Fold>
-      )}
-      {journal.length > 0 && (
-        <Fold title={`The journal: ${journal.length} entries`}>
-          <Journal entries={journal} />
-        </Fold>
-      )}
-    </section>
+      </section>
+    </RunMaker.Provider>
   );
 }

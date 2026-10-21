@@ -1,8 +1,10 @@
 """PACo's records in a run folder, read as plain JSON: PACo is PAC's optional extra, and a run it
 judged is read without it. The QC log (qc_log.jsonl: one line per attempt of a stage on a unit, a
 record, a window or the line, the last line of an attempt its current state), the thresholds its
-gates used (qc_config.json) and the window length its coherence ladder chose (coherence.json).
-A run without a QC log is PAC's own: no gate judged it."""
+gates used (qc_config.json), the settings the user gave (the log's "given" events) and the window
+length its coherence ladder chose (coherence.json). A run without a QC log is PAC's own: no gate
+judged it. What the checks changed is PACo's workflow's, or its autonomous agent's when a study's
+line is the run."""
 
 import json
 from collections.abc import Sequence
@@ -12,6 +14,7 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from masw.io.quality.journal import study_of
 from sigpipe.masw.runs.history import log_entries
 
 LOG_FILE = "qc_log.jsonl"
@@ -26,6 +29,8 @@ LINE_RULES = ("mute trial", "line change")
 LINE = "line"  # the unit of a line-level result
 
 type Verdict = Literal["pass", "retry", "reject"]
+# Who chose what a run's checks changed: PACo's workflow, or its autonomous agent.
+type Chooser = Literal["workflow", "agent"]
 
 
 class Action(BaseModel):
@@ -134,13 +139,19 @@ class AttemptSummary(BaseModel):
 
 
 class QCLog:
-    """A run's attempts, each at its current state, in the order they were first logged; and
-    every state each went through (`history`), where a flag acted on (traces left out) is no
-    longer raised by the attempt's last state."""
+    """A run's attempts, each at its current state, in the order they were first logged; every
+    state each went through (`history`), where a flag acted on (traces left out) is no longer
+    raised by the attempt's last state; and who chose what they changed (`chooser`)."""
 
-    def __init__(self, attempts: Sequence[Attempt], history: Sequence[Attempt] = ()) -> None:
+    def __init__(
+        self,
+        attempts: Sequence[Attempt],
+        history: Sequence[Attempt] = (),
+        chooser: Chooser = "workflow",
+    ) -> None:
         self.attempts = tuple(attempts)
         self.history = tuple(history)
+        self.chooser: Chooser = chooser
 
     def of(self, unit: str, stage: str) -> tuple[Attempt, ...]:
         return tuple(a for a in self.attempts if a.unit == unit and a.stage == stage)
@@ -204,7 +215,42 @@ def read_log(run_folder: Path) -> QCLog | None:
             continue
         current[attempt.unit, attempt.stage, attempt.attempt] = attempt
         history.append(attempt)
-    return QCLog(list(current.values()), history)
+    chooser: Chooser = "agent" if is_autonomous(run_folder) else "workflow"
+    return QCLog(list(current.values()), history, chooser)
+
+
+def is_autonomous(run_folder: Path) -> bool:
+    """Whether PACo's autonomous mode made the run: a study's line is it."""
+    return study_of(run_folder.parent, run_folder.name) is not None
+
+
+class Given(BaseModel):
+    """Settings the user gave for the run, as PACo locked them: one call's, of one family (the
+    processing's overrides, the picking's changes, the inversion's parameters)."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    family: str
+    values: dict[str, Any]
+    at: datetime
+
+
+def given_settings(run_folder: Path) -> tuple[Given, ...]:
+    """Every call's settings the user gave for the run, in order (none: a run PAC made, or one
+    PACo judged before it logged them)."""
+    if not (run_folder / LOG_FILE).exists():
+        return ()
+    given: list[Given] = []
+    for entry in log_entries(run_folder):
+        if entry.get("event") != "given":
+            continue
+        try:
+            one = Given.model_validate(entry)
+        except ValidationError:
+            continue
+        if one.values:
+            given.append(one)
+    return tuple(given)
 
 
 def config_section(run_folder: Path, name: str) -> dict[str, Any]:

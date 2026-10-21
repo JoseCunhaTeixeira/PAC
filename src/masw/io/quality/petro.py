@@ -26,6 +26,7 @@ from masw.io.quality.log import (
 from masw.io.quality.view import (
     Card,
     Cell,
+    Origin,
     Overview,
     Sentence,
     Setting,
@@ -351,16 +352,15 @@ def _model_setting(
         if (curve := fundamental(run_folder / unit)) is not None
     ]
     paco = log is not None and any(attempt.stage == STAGE for attempt in log.attempts)
-    return _settings(card, model, found, paco)
+    return _settings(card, model, found, log.chooser if log is not None and paco else "you")
 
 
 def _settings(
-    card: SilexCard | None, model: str | None, found: list[tuple[RangeGap, ...]], paco: bool
+    card: SilexCard | None, model: str | None, found: list[tuple[RangeGap, ...]], origin: Origin
 ) -> tuple[Setting, ...]:
     if model is None:
         return ()
-    why = "chosen by the assistant" if paco else "set by hand"
-    origin = "rule" if paco else "pac"
+    why = "set by hand" if origin == "you" else "chosen by the assistant"
     if card is None:
         return (Setting(key="model", label="Silex model", value=model, why=why, origin=origin),)
     covered = sum(1 for gaps in found if not gaps)

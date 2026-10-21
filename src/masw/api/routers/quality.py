@@ -1,5 +1,6 @@
-"""What Visualization reads of a run: the runs, a run's card (its settings and why, its line),
-each stage's units along the line, and the selected unit's card."""
+"""What Visualization reads of a run: the runs, a run's card (who made it, its settings and why,
+what was tried, its history, its line), each stage's units along the line, and the selected unit's
+card."""
 
 from collections.abc import Callable
 from typing import Literal
@@ -37,7 +38,8 @@ def get_runs() -> tuple[ProfileRuns, ...]:
 
 @router.get("/quality/run/{folder:path}")
 def get_run(folder: str) -> RunCard:
-    """Who made the run, what its windows and stages ran with and why, and its line."""
+    """Who made the run, what its windows and stages ran with and why, what was tried to choose
+    them, its history, and its line."""
     return _found(lambda: runs.run_card(folder))
 
 
