@@ -1681,7 +1681,7 @@ def test_a_search_shows_its_finalists_the_one_it_chose_first(tmp_path: Path) -> 
     assert table.intro == (
         "4 combinations of settings compared by eye, each on 12 dispersion images spread along "
         "the line",
-        "The 3 best",
+        "The 3 best of them, side by side, the chosen one first",
     )
     assert [
         (row.name, row.kept, row.trial, row.images, row.clear, row.depth) for row in table.rows
@@ -1754,7 +1754,7 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
     assert (experiment["title"], experiment["by"]) == ("Search", "agent")
     assert experiment["intro"] == [
         "2 combinations of settings compared by eye on their dispersion images",
-        "The 2 best",
+        "The 2 best of them, side by side, the chosen one first",
     ]
     assert experiment["columns"] == [
         "Windows",
@@ -1799,7 +1799,7 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
             "search",
             "agent",
             "Chose the processing settings",
-            ["2 combinations compared by eye"],
+            ["2 combinations compared by eye", "The 2 best kept", "The best of them chosen"],
         ),
         (
             "commit",
