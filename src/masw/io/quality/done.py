@@ -126,7 +126,7 @@ class _Origins:
                 + (_values(one.parameters[stage]) or str(one.parameters[stage].get("method")))
                 for one in changed
             )
-            return self.chooser, f"the checks changed it on this unit: {history}"
+            return "checks", f"the checks changed it on this unit: {history}"
         line = next(
             (one for one in (self.line, self.trial) if one is not None and stage in one.parameters),
             None,
@@ -365,7 +365,7 @@ def _together(
         )
     origin = Counter(one.origin for _, one in group).most_common(1)[0][0]
     why = first.why
-    if len({one.why for _, one in group}) > 1 and origin in ("workflow", "agent"):
+    if len({one.why for _, one in group}) > 1 and origin in ("workflow", "agent", "checks"):
         asked = sorted({cause for unit, _ in group for cause in causes[unit].get(key, ())})
         why = f"the checks changed it on {plural(len(group), noun)}" + (
             f" ({', '.join(asked)})" if asked else ""

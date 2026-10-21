@@ -4,8 +4,8 @@
 export type Status = "pass" | "warn" | "fail" | "none";
 export type Mark = "pass" | "warn" | "fail" | "info";
 // Where a setting comes from: you (your request, or PAC's form), PACo's workflow, its autonomous
-// agent, or the preset's default.
-export type Origin = "you" | "workflow" | "agent" | "default";
+// agent, PACo's checks (what they left out or made again), or the preset's default.
+export type Origin = "you" | "workflow" | "agent" | "checks" | "default";
 // Who made a run: PAC's pages, PACo's workflow, or its autonomous mode.
 export type Maker = "manual" | "workflow" | "autonomous";
 export type Verdict = "pass" | "retry" | "reject";
@@ -40,34 +40,57 @@ export interface Setting {
   spread?: string;
 }
 
-// One thing tried to choose a setting: what, how many trial windows passed with it, its
-// measures, whether it was kept, and more on hover.
+// One option compared: its name, its settings (one for each of its table's columns, a setting's
+// parameters " · " apart), how many sample windows gave a curve the checks passed with it, how
+// deep its curves reach, whether it was kept; more on hover.
 export interface Tried {
-  label: string;
-  passed: string; // "5 of 6"; "" when none was judged on its own
-  measures: string;
+  name: string;
+  values: string[];
+  clear: string; // "10 of 12"; "" when none was judged on its own
+  depth: string; // "23.3 m"; "" when not measured
   kept: boolean;
   note: string;
+  // An option of the assistant's comparisons: its trial, the windows it was tried on, whether its
+  // dispersion images can be shown.
+  trial?: string;
+  windows?: number[];
+  images?: boolean;
 }
 
-// What was tried for one choice, by whom, and on what.
+// A window's dispersion image, small: each frequency scaled 0 to 255, rows the velocities from the
+// lowest, columns the frequencies; the frequencies and velocities it spans; its picked curve.
+export interface OptionImage {
+  xmid: number;
+  image: number[][];
+  extent: [number, number, number, number];
+  pick_fs: number[];
+  pick_vs: number[];
+}
+
+// A comparison: what was done, then its settings and its options.
 export interface TriedTable {
   title: string;
-  about: string;
-  by: "workflow" | "agent";
+  intro: string[];
+  columns: string[];
   rows: Tried[];
+  by: "workflow" | "agent";
 }
 
-// A step of how the run was made, in order: an entry of its study's journal, its search, or
-// what its files say was done (the settings you gave, a stage, a trial), by whom.
+// Why a setting is what it is: the assistant's own reason, or the value the user set.
+export interface Reason {
+  setting: string;
+  text: string;
+  by: Origin;
+}
+
+// A step of what was done, in order: its title and its facts, a line each; by whom.
 export interface Step {
-  id: string; // the journal's (O1, E3, L2, H1...), the search's (S1); "" for a stage
   kind: string;
   by: Origin;
   at: string | null;
-  text: string;
-  detail: string; // more on hover: a commit's reasons
-  of: string[]; // the entries it rests on
+  title: string;
+  lines: string[];
+  detail: string; // more on hover
 }
 
 export interface StageCount {
@@ -95,6 +118,7 @@ export interface RunCard {
   settings: Setting[];
   // What was tried to choose them, and the run's history; absent from an older backend.
   tried?: TriedTable[];
+  reasons?: Reason[];
   history?: Step[];
   stages: StageCount[];
   receivers: number[];

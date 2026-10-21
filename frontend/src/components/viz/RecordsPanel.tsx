@@ -4,7 +4,7 @@ import { PlotBox, Segmented } from "../kit";
 import { SpectrumCanvas, type TraceSpectra } from "../SpectrumCanvas";
 import type { Range } from "../useZoom";
 import { LineGather, type GatherData } from "./LineGather";
-import { StageHead, UnitCard } from "./panel";
+import { UnitCard } from "./panel";
 import type { Overview, RecordCard } from "./types";
 import { runFigures, useRunFigures } from "./runFigures";
 import { Details, Empty, GateTables, PlotHead, SavedFigures, Skeleton } from "./ui";
@@ -188,7 +188,6 @@ export function RecordsPanel({
   loading,
   cardError,
   overview,
-  overviewError,
   onSelect,
   extent,
   xZoom,
@@ -201,7 +200,6 @@ export function RecordsPanel({
   loading: boolean;
   cardError: string | null;
   overview: Overview | null;
-  overviewError: string | null;
   onSelect: (key: string) => void;
   extent: Range;
   xZoom: Range | null;
@@ -213,7 +211,6 @@ export function RecordsPanel({
   const passive = card !== null && card.x === null;
   return (
     <>
-      <StageHead overview={overview} error={overviewError} />
       <div className="viz-section">
         <UnitCard
           stage="records"

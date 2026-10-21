@@ -17,9 +17,9 @@ type Status = Literal["pass", "warn", "fail", "none"]
 # A sentence's badge; "info" says what was done, without judging it.
 type Mark = Literal["pass", "warn", "fail", "info"]
 # Where a setting comes from: the user (their request, or PAC's form), PACo's workflow (its rules
-# on the data, its checks' changes), its autonomous agent (its choices, its checks' changes), or
-# the preset's default.
-type Origin = Literal["you", "workflow", "agent", "default"]
+# on the data), its autonomous agent (its choices), PACo's checks (what they left out or made
+# again), or the preset's default.
+type Origin = Literal["you", "workflow", "agent", "checks", "default"]
 
 STATUS_OF: dict[Verdict, Status] = {"pass": "pass", "retry": "warn", "reject": "fail"}
 DASH = "\u2013"  # an en dash, between a range's ends
@@ -436,12 +436,23 @@ def verdict_sentence(unit: str, *results: GateResult | None) -> Sentence | None:
     )
 
 
+# The thousands apart as SI writes them: a narrow space from five digits on, none in four.
+THOUSANDS = "\u202f"
+
+
+def grouped(value: int) -> str:
+    """A whole number as SI writes it: 1000, 12 500."""
+    text = f"{value:,}"
+    return text.replace(",", THOUSANDS if abs(value) >= 10_000 else "")
+
+
 def number(value: float, digits: int = 3) -> str:
-    """`value` with about `digits` significant digits, thousands grouped: 1,000; 0.52; 27.7."""
+    """`value` with about `digits` significant digits, its thousands as SI writes them: 1000;
+    12 500; 0.52; 27.7."""
     if value == 0:
         return "0"
     if abs(value) >= 10 ** (digits - 1):
-        return f"{round(value):,}"
+        return grouped(round(value))
     text = f"{value:.{digits}g}"
     return text if "e" not in text else f"{value:.2f}"
 
@@ -455,6 +466,13 @@ def span(low: float, high: float, unit: str = "", digits: int = 3) -> str:
     return f"{said} {unit}".rstrip()
 
 
+def receivers(count: int, spacing_m: float, length: bool = True) -> str:
+    """Receivers with what they span: "21 receivers (30 m)" for a window's length (`length`: the
+    first to the last), "1 receiver (1.5 m)" for a step."""
+    metres = (count - 1) * spacing_m if length else count * spacing_m
+    return f"{plural(count, 'receiver')} ({number(metres, 4)} m)"
+
+
 def plural(count: int, word: str, many: str | None = None) -> str:
     """ "1 window", "3 windows"."""
-    return f"{count:,} {word if count == 1 else many or word + 's'}"
+    return f"{grouped(count)} {word if count == 1 else many or word + 's'}"

@@ -8,9 +8,10 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from masw.io.quality import dispersion, figures, inversion, petro, records, runs, sources
+from masw.io.quality import dispersion, figures, inversion, options, petro, records, runs, sources
 from masw.io.quality.dispersion import DispersionCard
 from masw.io.quality.inversion import Chains, FigureName, InversionCard
+from masw.io.quality.options import OptionImage
 from masw.io.quality.petro import PetroCard
 from masw.io.quality.records import RecordCard, RecordGather, SavedSpectra
 from masw.io.quality.runs import ProfileRuns, RunCard
@@ -41,6 +42,13 @@ def get_run(folder: str) -> RunCard:
     """Who made the run, what its windows and stages ran with and why, what was tried to choose
     them, its history, and its line."""
     return _found(lambda: runs.run_card(folder))
+
+
+@router.get("/quality/option_images/{folder:path}/{trial}")
+def get_option_images(folder: str, trial: str, line: bool = False) -> tuple[OptionImage, ...]:
+    """An option the assistant compared, its dispersion images, small, at the windows it was
+    tried on; `line`: the option the run was made with."""
+    return _found(lambda: options.option_images(folder, trial, line))
 
 
 @router.get("/quality/sources/{folder:path}/{xmid}")

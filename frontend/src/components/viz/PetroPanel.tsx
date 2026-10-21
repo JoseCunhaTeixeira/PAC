@@ -9,7 +9,7 @@ import { PseudoSectionComparisonCanvas, type PseudoSectionComparisonData } from 
 import { useZoomLink } from "../useZoom";
 import { VelocitySectionCanvas } from "../VelocitySectionCanvas";
 import { xmidOf } from "./format";
-import { StageHead, UnitCard } from "./panel";
+import { UnitCard } from "./panel";
 import { CurveFitPlot, SoilColumnView, type CurveAxis } from "./plots";
 import type { Overview, PetroCard } from "./types";
 import { runFigures, useRunFigures } from "./runFigures";
@@ -40,13 +40,11 @@ export function PetroPanel({
   folder,
   selected,
   overview,
-  overviewError,
   onSelect,
 }: {
   folder: string;
   selected: string | null;
   overview: Overview | null;
-  overviewError: string | null;
   onSelect: (key: string) => void;
 }) {
   const zoomLink = useZoomLink(folder);
@@ -90,7 +88,6 @@ export function PetroPanel({
 
   return (
     <>
-      <StageHead overview={overview} error={overviewError} />
       {overview && !inverted ? (
         <section className="viz-section viz-card">
           <Empty>

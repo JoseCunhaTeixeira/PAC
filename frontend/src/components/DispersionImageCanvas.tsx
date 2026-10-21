@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { gistSternR } from "./colormaps";
+import { dispersionHeatmap } from "./dispersionHeatmap";
 import { CANVAS_FONT, canvasPalette, useTheme } from "../theme";
 import { nearestIndex, useCanvasHover } from "./useCanvasHover";
 import { useContainerWidth } from "./useContainerWidth";
@@ -107,33 +108,7 @@ export function DispersionImageCanvas({
 
   // build the heatmap once per image, at native (nf x nv) resolution
   useEffect(() => {
-    const nf = image.fv_map.length;
-    const nv = nf > 0 ? image.fv_map[0].length : 0;
-    const off = document.createElement("canvas");
-    off.width = nf;
-    off.height = nv;
-    const octx = off.getContext("2d");
-    if (octx && nf > 0 && nv > 0) {
-      const imgData = octx.createImageData(nf, nv);
-      for (let i = 0; i < nf; i++) {
-        const row = image.fv_map[i];
-        let max = 0;
-        for (let j = 0; j < nv; j++) max = Math.max(max, row[j]);
-        if (max <= 0) max = 1;
-        for (let j = 0; j < nv; j++) {
-          const t = (row[j] / max) ** 2;
-          const [r, g, b] = gistSternR(t);
-          const y = nv - 1 - j;
-          const idx = (y * nf + i) * 4;
-          imgData.data[idx] = r;
-          imgData.data[idx + 1] = g;
-          imgData.data[idx + 2] = b;
-          imgData.data[idx + 3] = 255;
-        }
-      }
-      octx.putImageData(imgData, 0, 0);
-    }
-    heatmapRef.current = off;
+    heatmapRef.current = dispersionHeatmap(image.fv_map);
     draw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image, theme, scale, PLOT_W, PLOT_H]);

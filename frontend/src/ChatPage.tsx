@@ -115,12 +115,20 @@ function when(iso: string): string {
 }
 
 // A tool call the agent made. PACo reports it as "-> name(arguments)", followed by
-// " refused: why" when PAC's host refused it; a line "failed: why" follows a call that failed.
+// " refused: why" when PAC's host refused it; a line "failed: why" follows a call that failed,
+// and "<- name: what it did" one that changed the study.
 interface Step {
   tool: string;
   args: Record<string, unknown>;
   state: "done" | "refused" | "failed";
   note: string | null;
+  outcome: string | null;
+}
+
+// Steps that read the same, merged: how many, and the latest of them.
+interface StepGroup {
+  step: Step;
+  count: number;
 }
 
 // A question, the steps taken for it, and the answer, the error, or the stop.
@@ -160,6 +168,7 @@ const EXAMPLES: Record<Mode, string[]> = {
 };
 
 const CALL = /^-> (\w+)\((.*)\)(?: refused: (.*))?$/s;
+const OUTCOME = /^<- (\w+): (.*)$/s;
 
 // Each tool's step when done, under way, and failed or refused; {name} stands for one of the
 // call's arguments.
@@ -214,12 +223,13 @@ const LABELS: Record<string, [string, string, string]> = {
   inspect: ["Looked up the {what}", "Looking up the {what}", "Look up the {what}"],
   // The autonomous mode's own tools.
   survey: ["Surveyed {profile}", "Surveying {profile}", "Survey {profile}"],
+  search: ["Searched the grid", "Searching the grid", "Search the grid"],
   observe: ["Read the checks", "Reading the checks", "Read the checks"],
   look: ["Looked at the {what}", "Looking at the {what}", "Look at the {what}"],
   advise: ["Asked PACo about the {topic}", "Asking PACo about the {topic}", "Ask PACo about the {topic}"],
   try_settings: ["Tried settings", "Trying settings", "Try settings"],
   commit: ["Committed the line", "Committing the line", "Commit the line"],
-  decide: ["Decided windows", "Deciding windows", "Decide windows"],
+  decide: ["Decided", "Deciding", "Decide"],
   freeze: ["Froze the curves", "Freezing the curves", "Freeze the curves"],
   journal: ["Kept the journal", "Keeping the journal", "Keep the journal"],
 };
@@ -818,6 +828,7 @@ function TurnView({
   // thinking about its next step.
   const underWay = live && last?.state === "done";
   const thinking = live && !underWay;
+  const groups = grouped(turn.steps);
   return (
     <section className="chat-turn">
       {turn.question && (
@@ -839,15 +850,18 @@ function TurnView({
           )}
           {(live || unfolded) && (
             <ol className="chat-step-list">
-              {turn.steps.map((step, i) => {
-                const current = underWay && i === count - 1;
+              {groups.map((group, i) => {
+                const current = underWay && i === groups.length - 1;
                 // A tool that reports no progress must not show the previous tool's.
                 const own =
-                  current && progress?.tool === step.tool ? progress : null;
+                  current && progress?.tool === group.step.tool
+                    ? progress
+                    : null;
                 return (
                   <StepRow
                     key={i}
-                    step={step}
+                    step={group.step}
+                    count={group.count}
                     underWay={current}
                     progress={own}
                   />
@@ -978,10 +992,12 @@ function RunLinks({
 
 function StepRow({
   step,
+  count,
   underWay,
   progress,
 }: {
   step: Step;
+  count: number;
   underWay: boolean;
   progress: Progress | null;
 }) {
@@ -1000,6 +1016,10 @@ function StepRow({
       <span className="chat-step-icon">{icon}</span>
       <span>
         {stepLabel(step, underWay)}
+        {count > 1 && <span className="chat-step-count"> ×{count}</span>}
+        {step.outcome && !underWay && (
+          <span className="chat-step-outcome">: {step.outcome}</span>
+        )}
         {progress && (
           <span className="chat-step-progress"> · {progress.text}</span>
         )}
@@ -1041,13 +1061,18 @@ function turnsOf(events: ChatEvent[]): Turn[] {
     if (event.kind === "step") {
       const call = CALL.exec(event.text);
       const last = turn.steps[turn.steps.length - 1];
+      const outcome = OUTCOME.exec(event.text);
       if (call) {
         turn.steps.push({
           tool: call[1],
           args: parseArgs(call[2]),
           state: call[3] ? "refused" : "done",
           note: call[3] ?? null,
+          outcome: null,
         });
+      } else if (outcome) {
+        const made = turn.steps.findLast((step) => step.tool === outcome[1]);
+        if (made) made.outcome = outcome[2];
       } else if (event.text.startsWith("failed:") && last) {
         last.state = "failed";
         last.note = event.text.slice("failed:".length).trim();
@@ -1064,6 +1089,22 @@ function turnsOf(events: ChatEvent[]): Turn[] {
     }
   }
   return turns;
+}
+
+/** The steps that read the same merged, each with how many and the latest of them (its outcome
+ * the latest said), in the order of their last call: the step under way comes last. */
+function grouped(steps: Step[]): StepGroup[] {
+  const found = new Map<string, StepGroup & { at: number }>();
+  steps.forEach((step, at) => {
+    const key = `${step.state}|${stepLabel(step, false)}`;
+    const before = found.get(key);
+    found.set(key, {
+      step: { ...step, outcome: step.outcome ?? before?.step.outcome ?? null },
+      count: (before?.count ?? 0) + 1,
+      at,
+    });
+  });
+  return [...found.values()].sort((a, b) => a.at - b.at);
 }
 
 function parseArgs(text: string): Record<string, unknown> {

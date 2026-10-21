@@ -10,7 +10,7 @@ import { Gather, RecordsPanel } from "./components/viz/RecordsPanel";
 import { RECORDS_ONLY, RunPicker } from "./components/viz/RunPicker";
 import { RunMaker } from "./components/viz/maker";
 import { RunSummary } from "./components/viz/RunSummary";
-import { StepArrows } from "./components/viz/panel";
+import { StageHead, StepArrows } from "./components/viz/panel";
 import { Steady } from "./components/viz/Steady";
 import type {
   Overview,
@@ -333,7 +333,6 @@ export default function VisualizationPage() {
       loading={recordCard.loading}
       cardError={recordCard.error}
       overview={overview.data}
-      overviewError={overview.error}
       onSelect={select}
       extent={extent}
       xZoom={lineX}
@@ -344,7 +343,6 @@ export default function VisualizationPage() {
       folder={folder}
       selected={windowKey}
       overview={overview.data}
-      overviewError={overview.error}
       sources={sources}
       onSelect={select}
     />
@@ -353,7 +351,6 @@ export default function VisualizationPage() {
       folder={folder}
       selected={windowKey}
       overview={overview.data}
-      overviewError={overview.error}
       onSelect={select}
     />
   ) : (
@@ -361,7 +358,6 @@ export default function VisualizationPage() {
       folder={folder}
       selected={windowKey}
       overview={overview.data}
-      overviewError={overview.error}
       onSelect={select}
     />
   );
@@ -418,67 +414,71 @@ export default function VisualizationPage() {
         {run && (
           <>
             <RunSummary card={run} />
-            <nav className="viz-tabs" aria-label="Stages">
-              {TABS.filter((one) =>
-                stages.some((stage) => stage.key === one.key),
-              ).map((one) => {
-                const stage = stages.find((item) => item.key === one.key);
-                return (
-                  <button
-                    key={one.key}
-                    type="button"
-                    className={`viz-tab${tab === one.key ? " active" : ""}`}
-                    onClick={() => update({ tab: one.key })}
-                  >
-                    {one.label}
-                    {stage && (
-                      <small
-                        data-tip={`${one.label}\n${stage.done} of ${stage.total} ${one.key === "records" ? "records used" : "windows with a result"}`}
-                      >
-                        {stage.done}/{stage.total}
-                      </small>
+            {/* The stages' tabs, the line, and the stage along it in a line, in one card. */}
+            <section className="viz-card viz-stage">
+              <nav className="viz-tabs" aria-label="Stages">
+                {TABS.filter((one) =>
+                  stages.some((stage) => stage.key === one.key),
+                ).map((one) => {
+                  const stage = stages.find((item) => item.key === one.key);
+                  return (
+                    <button
+                      key={one.key}
+                      type="button"
+                      className={`viz-tab${tab === one.key ? " active" : ""}`}
+                      onClick={() => update({ tab: one.key })}
+                    >
+                      {one.label}
+                      {stage && (
+                        <small
+                          data-tip={`${one.label}\n${stage.done} of ${stage.total} ${one.key === "records" ? "records used" : "windows with a result"}`}
+                        >
+                          {stage.done}/{stage.total}
+                        </small>
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
+              {(run.windows.length > 0 ||
+                Object.keys(run.sources).length > 0) && (
+                <>
+                  <ProfilePlot
+                    card={run}
+                    cells={overview.data?.cells ?? null}
+                    implies={IMPLIES[tab]}
+                    mode={records ? "records" : "windows"}
+                    selected={records ? recordKey : windowKey}
+                    sources={records ? null : sources}
+                    stacking={records ? (recordCard.shown?.windows ?? null) : null}
+                    onSelect={select}
+                    onShot={
+                      run.records
+                        ? (name) => update({ tab: "records", rec: name })
+                        : undefined
+                    }
+                    onWindow={(key) => update({ tab: "dispersion", x: key })}
+                    xZoom={records ? lineX : null}
+                  />
+                  <LineLegend
+                    overview={overview.data}
+                    windows={!records}
+                    uses={
+                      !records && sources?.shots.length
+                        ? new Set(sources.shots.map((shot) => shot.use))
+                        : null
+                    }
+                    meanings={Object.fromEntries(
+                      Object.entries(STATE_MEANINGS[tab]).map(([status, one]) => [
+                        status,
+                        one.full,
+                      ]),
                     )}
-                  </button>
-                );
-              })}
-            </nav>
-            {(run.windows.length > 0 ||
-              Object.keys(run.sources).length > 0) && (
-              <section className="viz-card">
-                <ProfilePlot
-                  card={run}
-                  cells={overview.data?.cells ?? null}
-                  implies={IMPLIES[tab]}
-                  mode={records ? "records" : "windows"}
-                  selected={records ? recordKey : windowKey}
-                  sources={records ? null : sources}
-                  stacking={records ? (recordCard.shown?.windows ?? null) : null}
-                  onSelect={select}
-                  onShot={
-                    run.records
-                      ? (name) => update({ tab: "records", rec: name })
-                      : undefined
-                  }
-                  onWindow={(key) => update({ tab: "dispersion", x: key })}
-                  xZoom={records ? lineX : null}
-                />
-                <LineLegend
-                  overview={overview.data}
-                  windows={!records}
-                  uses={
-                    !records && sources?.shots.length
-                      ? new Set(sources.shots.map((shot) => shot.use))
-                      : null
-                  }
-                  meanings={Object.fromEntries(
-                    Object.entries(STATE_MEANINGS[tab]).map(([status, one]) => [
-                      status,
-                      one.full,
-                    ]),
-                  )}
-                />
-              </section>
-            )}
+                  />
+                </>
+              )}
+              <StageHead overview={overview.data} error={overview.error} />
+            </section>
             {/* Stepping along the line, the page's end never rises (Steady). */}
             <div className="viz-section">
               <Steady reset={`${folder}|${tab}`}>

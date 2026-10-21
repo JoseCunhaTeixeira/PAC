@@ -5,6 +5,7 @@ import { TipLines } from "../HoverTooltip";
 import type { Tip } from "../tips";
 import { evenTicks, tickDecimals, useZoom, type PlotRect } from "../useZoom";
 import { ZoomSelection } from "../ZoomOverlay";
+import { written } from "../numbers";
 import { num, parameterLabel } from "./format";
 import { vizPalette } from "./palette";
 import type { ChainTraces, Marginal } from "./types";
@@ -152,7 +153,7 @@ export function ChainTracesCanvas({
     for (const t of evenTicks(y0, y1, 3)) ctx.fillText(t.toFixed(yDecimals), ML - 5, yOf(t));
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    for (const t of roundTicks(x0, x1, 5)) ctx.fillText(t.toLocaleString("en-US"), xOf(t), MT + plotH + 4);
+    for (const t of roundTicks(x0, x1, 5)) ctx.fillText(written(t), xOf(t), MT + plotH + 4);
     ctx.fillStyle = axes.title;
     ctx.font = CANVAS_FONT;
     ctx.textBaseline = "bottom";

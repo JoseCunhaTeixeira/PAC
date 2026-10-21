@@ -127,22 +127,56 @@
 }
 
 
+/* The run's settings in one strip on one line, filling it: a setting a cell, as wide as its
+   content asks, its words wrapping (never within one) when the line is short, its origin at its
+   foot, aligned with the others'; two columns on a narrow screen. */
 .viz-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  overflow: hidden;
 }
 
 .viz-tile {
   position: relative;
-  padding: 11px 13px 12px;
-  border-radius: 11px;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1 1 auto;
+  min-width: min-content;
+  padding: 8px 10px 9px;
+}
+
+.viz-tile > :nth-last-child(2) {
+  margin-bottom: 6px;
+}
+
+.viz-tile + .viz-tile {
+  border-left: 1px solid var(--border);
+}
+
+@media (max-width: 700px) {
+  .viz-tiles {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .viz-tile + .viz-tile {
+    border-left: none;
+  }
+
+  .viz-tile:nth-child(even) {
+    border-left: 1px solid var(--border);
+  }
+
+  .viz-tile:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
 }
 
 .viz-tile-label {
-  font-size: var(--fs-micro);
+  font-size: 0.62rem;
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -150,8 +184,8 @@
 }
 
 .viz-tile-value {
-  margin-top: 3px;
-  font-size: var(--fs-value);
+  margin-top: 2px;
+  font-size: var(--fs-body);
   font-weight: 650;
   line-height: 1.3;
   color: var(--text);
@@ -159,9 +193,15 @@
 }
 
 .viz-tile-sub {
-  margin-top: 2px;
-  font-size: var(--fs-small);
+  margin-top: 1px;
+  font-size: var(--fs-caption);
   color: var(--text-muted);
+}
+
+.viz-tile .viz-origin {
+  margin-top: auto;
+  padding: 0 7px;
+  font-size: 0.66rem;
 }
 
 .viz-origin {
@@ -185,23 +225,20 @@
 }
 
 .viz-origin.workflow,
-.viz-chip.workflow {
+.viz-origin.agent,
+.viz-origin.checks,
+.viz-chip.workflow,
+.viz-chip.autonomous {
   background: var(--blue-soft);
   color: var(--blue);
-}
-
-.viz-origin.agent,
-.viz-chip.autonomous {
-  background: var(--warn-soft);
-  color: var(--warn);
 }
 
 /* Folded content: settings, details. */
 
 .viz-fold {
-  margin-top: 12px;
+  margin-top: 18px;
   border-top: 1px solid var(--border);
-  padding-top: 10px;
+  padding-top: 14px;
 }
 
 .viz-fold > summary {
@@ -269,37 +306,229 @@
   font-size: var(--fs-small);
 }
 
-/* What was tried for a choice: its title with who tried it, on what, then each try. */
+/* What was tried for a choice: its title with who tried it, on what, then each try; room
+   between one and the next. */
 .viz-tried {
-  margin-top: 16px;
+  margin-top: 32px;
+}
+
+.viz-fold > .viz-tried:first-of-type {
+  margin-top: 14px;
 }
 
 .viz-tried-title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
   font-weight: 650;
 }
 
-.viz-tried-title .viz-origin {
-  margin-top: 0;
+.viz-tried-intro,
+.viz-step-lines {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  line-height: 1.5;
 }
 
-.viz-tried-about {
-  margin-top: 2px;
+.viz-kept {
+  display: inline-block;
+  width: 1.2em;
+  color: var(--ok);
+  font-weight: 700;
+}
+
+/* Options side by side, a column each, a setting a row: the settings' names on the left, the
+   option kept tinted, a setting's other parameters under its value. */
+.viz table.viz-options th[scope="row"] {
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* A symbol keeps its case: λ, not Λ. */
+.viz table.viz-options th.viz-symbol {
+  text-transform: none;
+}
+
+.viz table.viz-options thead th {
+  white-space: nowrap;
+}
+
+.viz table.viz-options td {
+  white-space: nowrap;
+}
+
+.viz table.viz-options .kept {
+  background: var(--ok-soft);
+  color: var(--text);
+}
+
+.viz table.viz-options thead th.kept,
+.viz table.viz-options td.kept > div:first-child {
+  font-weight: 650;
+}
+
+.viz table.viz-options thead th.shown {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* An option is a column a click shows the dispersion images of. */
+.viz table.viz-options .pickable {
+  cursor: pointer;
+}
+
+.viz table.viz-options .hovered:not(.kept) {
+  background: var(--surface-hover);
+}
+
+/* An option's name, a quiet button: `button.` outweighs the global button's rules. */
+button.viz-option {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+button.viz-option:hover {
+  background: none;
+  color: var(--accent-fg);
+  text-decoration: underline;
+}
+
+button.viz-option:active {
+  transform: none;
+}
+
+.viz-chosen {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: 0.66rem;
+  font-weight: 650;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.6;
+}
+
+.viz-option-images {
+  margin-top: 16px;
+}
+
+.viz-option-images-title {
+  font-size: var(--fs-small);
+  font-weight: 650;
+}
+
+/* An option's dispersion images: six a row, its twelve windows in two rows; three a row on a
+   narrow screen. */
+.viz-option-thumbs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+@media (max-width: 700px) {
+  .viz-option-thumbs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.viz-option-thumbs .viz-thumb {
+  max-width: none;
+  min-width: 0;
+}
+
+.viz-thumbs-loading {
+  margin-top: 6px;
   color: var(--text-muted);
   font-size: var(--fs-small);
 }
 
-.viz-kept {
-  margin-left: 7px;
-  padding: 0 7px;
-  border-radius: 999px;
+.viz table.viz-options tr.viz-measure th,
+.viz table.viz-options tr.viz-measure td {
+  border-top: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-sub {
+  color: var(--text-muted);
   font-size: var(--fs-caption);
+}
+
+/* Dispersion images side by side, sharing the row, wrapping when narrow, each with where it is
+   along the line. */
+.viz-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.viz-thumb {
+  flex: 1 1 0;
+  min-width: 150px;
+  max-width: 260px;
+  margin: 0;
+}
+
+.viz-thumb canvas,
+.viz-thumb-empty {
+  display: block;
+  width: 100%;
+  aspect-ratio: 22 / 15;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.viz-thumb-empty {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+}
+
+.viz-thumb figcaption {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reasons, a setting each: its name, then its reason, aligned. */
+.viz-reasons {
+  margin-top: 32px;
+}
+
+.viz-reasons-title {
   font-weight: 650;
-  background: var(--ok-soft);
-  color: var(--ok);
+}
+
+.viz-reasons dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  margin: 6px 0 0;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+.viz-reasons dt {
+  color: var(--text-muted);
+}
+
+.viz-reasons dd {
+  margin: 0;
+  color: var(--text);
 }
 
 /* The stages: a segmented control. */
@@ -313,6 +542,19 @@
   border-radius: 12px;
   background: var(--surface-hover);
   border: 1px solid var(--border);
+}
+
+/* The stages' card: their tabs first, the line, then the stage along it in a line. */
+.viz-card.viz-stage {
+  margin-top: 22px;
+}
+
+.viz-stage .viz-tabs {
+  margin: 0 0 14px;
+}
+
+.viz-stage-head {
+  margin-top: 16px;
 }
 
 .viz button.viz-tab {
@@ -712,7 +954,7 @@
 
 .viz-table-wrap {
   overflow-x: auto;
-  margin-top: 8px;
+  margin-top: 12px;
 }
 
 .viz table.viz-table {
@@ -1029,46 +1271,96 @@
   flex: 0 1 320px;
 }
 
-/* A run's history: a step a line, its id or its kind in the margin in the colour of who made it;
-   the agent's reasoning (hypotheses, conclusions, decisions) apart from what code wrote. */
-.viz-history {
+/* What was done: a step after another along a line, a column each, its number on the line in
+   the colour of who did it, its title and its facts under it; onto the next row when the line is
+   full, down a line on the left on a narrow screen. */
+.viz-timeline {
   list-style: none;
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   padding: 0;
   display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 6px 12px;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 16px 0;
+}
+
+.viz-step {
+  position: relative;
+  padding-right: 14px;
+}
+
+.viz-step::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 22px;
+  right: 0;
+  height: 2px;
+  background: var(--border);
+}
+
+.viz-step:last-child::before {
+  display: none;
+}
+
+.viz-step-node {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.viz-step-node.you {
+  background: var(--accent);
+}
+
+.viz-step-node.default {
+  background: var(--none);
+}
+
+.viz-step-title {
+  margin-top: 8px;
+  font-weight: 650;
   font-size: var(--fs-small);
-  line-height: 1.45;
+  line-height: 1.35;
 }
 
-.viz-history li {
-  display: contents;
-  color: var(--text-muted);
-}
-
-.viz-history li.reasoning {
-  color: var(--text);
-}
-
-.viz-history-id {
-  font-family: var(--font-mono);
+.viz-step-lines {
+  margin-top: 3px;
   font-size: var(--fs-caption);
-  padding-top: 1px;
 }
 
-.viz-history-id.you {
-  color: var(--accent-fg);
-}
+@media (max-width: 700px) {
+  .viz-timeline {
+    grid-template-columns: 1fr;
+  }
 
-.viz-history-id.workflow {
-  color: var(--blue);
-}
+  .viz-step {
+    padding: 0 0 0 34px;
+  }
 
-.viz-history-id.agent {
-  color: var(--warn);
-}
+  .viz-step-node {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
 
-.viz-history-of {
-  color: var(--text-faint);
+  .viz-step::before {
+    top: 22px;
+    bottom: -16px;
+    left: 10px;
+    right: auto;
+    width: 2px;
+    height: auto;
+  }
+
+  .viz-step-title {
+    margin-top: 2px;
+  }
 }

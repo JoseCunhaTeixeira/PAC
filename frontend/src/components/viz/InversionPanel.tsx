@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { API } from "../../api";
+import { written } from "../numbers";
 import { canvasPalette, useTheme } from "../../theme";
 import { afmhotR, purples, terrain } from "../colormaps";
 import { LayersIcon, StrataIcon } from "../icons";
@@ -14,7 +15,7 @@ import {
 } from "../VelocitySectionCanvas";
 import { ChainLegend, ChainTracesCanvas, MarginalsGrid } from "./ChainPlots";
 import { DEPTH_INFORMED_TIP, MODEL_LABELS, num, parameterLabel, xmidOf } from "./format";
-import { StageHead, UnitCard } from "./panel";
+import { UnitCard } from "./panel";
 import { CurveFitPlot, VsProfilePlot, type CurveAxis } from "./plots";
 import type { Chains, InversionCard, ModelName, Overview } from "./types";
 import { runFigures, useRunFigures } from "./runFigures";
@@ -76,7 +77,7 @@ function ModelTable({ card }: { card: InversionCard }) {
     <div className="viz-section">
       <h3 className="viz-h3">Model, priors and sampling</h3>
       <p className="viz-small viz-muted" style={{ margin: "0 0 6px" }}>
-        {card.parameters?.n_chains} chains, {card.samples_per_chain.toLocaleString("en-US")} samples each kept;
+        {card.parameters?.n_chains} chains, {written(card.samples_per_chain)} samples each kept;
         acceptance by chain: {card.acceptance.map((rate) => `${num(rate)} %`).join(", ")}
         {card.tuning.length > 0 &&
           `; steps tuned in ${card.tuning.length} trial run${card.tuning.length > 1 ? "s" : ""} (${card.tuning
@@ -302,13 +303,11 @@ export function InversionPanel({
   folder,
   selected,
   overview,
-  overviewError,
   onSelect,
 }: {
   folder: string;
   selected: string | null;
   overview: Overview | null;
-  overviewError: string | null;
   onSelect: (key: string) => void;
 }) {
   const model = MODEL;
@@ -354,7 +353,6 @@ export function InversionPanel({
   const inversionCard = card.shown;
   return (
     <>
-      <StageHead overview={overview} error={overviewError} />
       {overview && !inverted ? (
         <section className="viz-section viz-card">
           <Empty>No window inverted yet: invert them in Seismic inversion, or ask the assistant.</Empty>

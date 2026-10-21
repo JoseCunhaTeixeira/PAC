@@ -75,8 +75,18 @@ export function tipOf(...lines: (string | undefined)[]): string | undefined {
   return lines.filter(Boolean).join("\n") || undefined;
 }
 
+/** A number written out, its thousands as SI writes them: a narrow space from five digits on,
+ * none in four (1000, 12 500); a decimal point. */
+export function thousands(text: string): string {
+  const [whole, decimals] = text.split(".");
+  const digits = whole.replace("-", "");
+  const grouped = digits.length > 4 ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, "\u202f") : digits;
+  return (whole.startsWith("-") ? "-" : "") + grouped + (decimals !== undefined ? `.${decimals}` : "");
+}
+
 /** A number as a hover or a field writes it: no trailing zeros, six decimals at most. */
-export const written = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+export const written = (n: number) =>
+  thousands(n.toLocaleString("en-US", { maximumFractionDigits: 6, useGrouping: false }));
 
 const same = (a: number, b: number) => a === b || (Number.isNaN(a) && Number.isNaN(b));
 

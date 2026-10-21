@@ -42,7 +42,7 @@ const STATUS_MEANINGS: Record<Status, string> = {
   fail: "Rejected by a check.",
   none: "No check judged it.",
 };
-const STATUS_TITLES: Record<Status, string> = { pass: "Pass", warn: "Flagged", fail: "Rejected", none: "Not judged" };
+const STATUS_TITLES: Record<Status, string> = { pass: "Passed", warn: "Flagged", fail: "Rejected", none: "Not judged" };
 const GATE_NAMES: Record<string, string> = {
   G1: "the records' signal check",
   G2: "the dispersion image's check",
@@ -150,9 +150,10 @@ export function Sentences({ sentences }: { sentences: Sentence[] }) {
 // writes, yours or its own.
 const ORIGIN_MEANINGS: Record<Origin, string> = {
   you: "Yours: given in your request, or set by hand in PAC.",
-  workflow: "PACo's workflow: its rules chose it from the data, or its checks changed it.",
-  agent: "The autonomous agent: its choice, with its reason, or its checks' change.",
-  default: "The preset's default.",
+  workflow: "Chosen by the assistant, by its rules on your data.",
+  agent: "Chosen by the assistant, comparing the images by eye.",
+  checks: "Decided by the assistant's quality checks.",
+  default: "PAC's default.",
 };
 const REQUESTED = "Given in the request: by you, or chosen by the assistant; or set by hand in PAC.";
 

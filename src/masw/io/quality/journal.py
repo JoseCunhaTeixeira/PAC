@@ -17,6 +17,11 @@ JOURNAL_FILE = "journal.jsonl"
 SEARCH_FILE = "searches/S1.json"
 KNOCKOUT_FILE = "searches/S1_knockout.json"
 JUDGED_FILE = "searches/S1_judged.jsonl"
+SURVEY_FILE = "survey.json"
+EXPERIMENTS = "experiments"  # each experiment, <id>.json
+# Each experiment's variants' dispersion images, as PACo's tidy keeps them: <trial>.npz.
+EXPERIMENT_IMAGES = "experiments/images"
+PICKS_FILE = "picks.jsonl"
 
 
 class JournalEntry(BaseModel):
@@ -48,6 +53,49 @@ class SearchDone(BaseModel):
     rounds: int
     finalists: tuple[str, ...] = ()
     experiment: str | None = None
+
+
+class SurveyDone(BaseModel):
+    """The study's survey, as the run's history says it: the line's receivers and records, the
+    band the records share."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    receivers: int
+    shots: tuple[Any, ...] = ()  # each record
+    kind: str = "active"
+    usable_spread_hz: tuple[float, float] | None = None
+    reach_m: float | None = None  # the farthest shot a window takes unless the settings say
+
+
+class Scored(BaseModel):
+    """What a variant's scorecard says here: the windows it was tried on."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    windows: tuple[float, ...] = ()
+
+
+class TryDone(BaseModel):
+    """A variant of an experiment: its label, its trial's key, its scorecard."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    label: str
+    trial: str = ""
+    scorecard: Scored = Scored()
+
+
+class ExperimentDone(BaseModel):
+    """An experiment's file: the line's settings it started from, the windows it ran on (as the
+    agent asked them, and their middles), and each variant's trial."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    current: dict[str, Any] = Field(default_factory=dict[str, Any])
+    windows: str = ""
+    xmids: tuple[float, ...] = ()
+    tried: tuple[TryDone, ...] = ()
 
 
 def study_of(profile_folder: Path, run_id: str) -> Path | None:
@@ -100,6 +148,46 @@ def search_of(study: Path) -> SearchDone | None:
         )
     except OSError, ValueError, KeyError, TypeError:
         return None
+
+
+def survey_of(study: Path) -> SurveyDone | None:
+    """The study's survey, when it ran and its file read."""
+    try:
+        return SurveyDone.model_validate_json((study / SURVEY_FILE).read_text())
+    except OSError, ValueError:
+        return None
+
+
+def experiment_of(study: Path, name: str) -> ExperimentDone | None:
+    """Experiment `name` of the study (E<n>), when its file is read."""
+    try:
+        return ExperimentDone.model_validate_json(
+            (study / EXPERIMENTS / f"{name}.json").read_text()
+        )
+    except OSError, ValueError:
+        return None
+
+
+def corrected(study: Path, run_id: str) -> int:
+    """The windows of run `run_id` the assistant picked again its own way: their latest pick not
+    the line's."""
+    try:
+        lines = (study / PICKS_FILE).read_text().splitlines()
+    except OSError:
+        return 0
+    latest: dict[str, str] = {}
+    for line in lines:
+        try:
+            pick: Any = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(pick, dict):
+            continue
+        found = cast(dict[str, Any], pick)
+        if found.get("run_id") == run_id:
+            recipe = cast(dict[str, Any], found.get("recipe") or {})
+            latest[str(found.get("unit"))] = str(recipe.get("how", "line"))
+    return sum(1 for how in latest.values() if how != "line")
 
 
 def _judged(study: Path, since: datetime) -> list[dict[str, Any]]:

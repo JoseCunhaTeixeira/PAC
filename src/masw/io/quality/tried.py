@@ -1,18 +1,31 @@
-"""What was tried to choose a run's settings, in tables alike for every run that tried something:
-PACo's workflow's trials on the line (the window lengths, coherence.json; the mutes, mute.json; a
-passive line's segments, segments.json; the changes of the line's settings, line_loop.json), and
-its autonomous agent's experiments (its study's journal). Each row: what was tried, how many
-trial windows passed with it, its measures, and whether it was kept."""
+"""What was tried to choose a run's settings, as comparisons the run's card shows: the workflow's
+trials on the line (the window lengths, coherence.json; the mutes, mute.json; a passive line's
+segments, segments.json; the changes made where curves failed, line_loop.json), and the
+autonomous mode's search and trials (its study's journal and experiments/). Each comparison: what
+was done, in plain lines; its options, each with every setting of its processing; how many sample
+windows gave a curve the checks passed with each, how deep its curves reach; the option kept. The
+settings are said here in the card's words, its tiles' too, in the order the records go through
+them."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from graphlib import TopologicalSorter
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from masw.io.quality.journal import JournalEntry, SearchDone
+from masw.io.quality.files import merged
+from masw.io.quality.journal import (
+    EXPERIMENT_IMAGES,
+    ExperimentDone,
+    JournalEntry,
+    SearchDone,
+    experiment_of,
+)
 from masw.io.quality.log import COHERENCE_FILE, LINE_LOOP_FILE, MUTE_FILE, SEGMENTS_FILE, Chooser
-from masw.io.quality.view import flag_text, number, plural, span
+from masw.io.quality.view import flag_text, number, plural, receivers, span
+from sigpipe.masw.presets.stages import ACTIVE_STAGES, PASSIVE_ACTIVE_STAGES, PASSIVE_STAGES
 
 MUTE_NAMES = {
     "none": "none",
@@ -21,9 +34,20 @@ MUTE_NAMES = {
     "cone": "cone",
     "tight": "tight cone",
 }
-# A setting's unit, by the end of its name: "near_field_m" is a distance in metres.
-_UNITS = {"_m": "m", "_s": "s", "_Hz": "Hz"}
-_PASSED = "passed: the trial windows whose curve passed the curve's check (G3)"
+# A setting's parameters apart: a tile's lines, a comparison's cell's.
+SEP = " · "
+
+
+def _pipeline_order() -> tuple[str, ...]:
+    """Every method's steps in one order, each method's own: sigpipe's pipelines, merged."""
+    before: dict[str, set[str]] = {}
+    for stages in (ACTIVE_STAGES, PASSIVE_STAGES, PASSIVE_ACTIVE_STAGES):
+        for first, then in pairwise(stages):
+            before.setdefault(then, set()).add(first)
+    return tuple(TopologicalSorter(before).static_order())
+
+
+STEP_ORDER = _pipeline_order()
 
 
 class LengthTrial(BaseModel):
@@ -98,38 +122,52 @@ class LineTried(BaseModel):
 
 
 class Tried(BaseModel):
-    """One thing tried: what, how many trial windows passed with it, its measures, whether it
-    was kept, and more on hover."""
+    """One option compared: its name; its settings, one a column of its table; how many sample
+    windows gave a curve the checks passed with it; how deep its curves reach; whether it was
+    kept. An option of the autonomous mode: its trial, the windows it was tried on, and whether
+    its dispersion images can be shown (kept by its study, or the run's own)."""
 
     model_config = ConfigDict(frozen=True)
 
-    label: str
-    passed: str = ""  # "5 of 6"; "" when none was judged on its own
-    measures: str = ""
+    name: str
+    values: tuple[str, ...] = ()
+    clear: str = ""  # "10 of 12"; "" when none was judged on its own
+    depth: str = ""  # "23.3 m"; "" when not measured
     kept: bool = False
     note: str = ""
+    trial: str = ""
+    windows: tuple[float, ...] = ()
+    images: bool = False
 
 
 class TriedTable(BaseModel):
-    """What was tried for one choice, by whom, and on what."""
+    """A comparison, in plain lines: what was done, then its settings' columns and its options."""
 
     model_config = ConfigDict(frozen=True)
 
     title: str
-    about: str
-    by: Chooser
+    intro: tuple[str, ...] = ()
+    columns: tuple[str, ...] = ()
     rows: tuple[Tried, ...]
+    by: Chooser
 
 
 def tried_tables(
-    run_folder: Path, journal: Sequence[JournalEntry], search: SearchDone | None
+    run_folder: Path,
+    journal: Sequence[JournalEntry],
+    search: SearchDone | None,
+    study: Path | None,
+    spacing: float,
+    defaults: Mapping[str, Any],
+    reach: float | None,
 ) -> tuple[TriedTable, ...]:
-    """Every table of what was tried for the run: its line's trials, then its study's
-    experiments, in order."""
+    """Every comparison made to choose the run's settings: its line's trials, then its study's
+    experiments, in order; each read against the receivers' `spacing`, the preset's `defaults`
+    and the line's `reach` (the farthest shot when the settings give none)."""
     tables = [
         table
         for table in (
-            _lengths(length_choice(run_folder)),
+            _lengths(length_choice(run_folder), spacing),
             _mutes(mutes_tried(run_folder)),
             _segments(segments_tried(run_folder)),
             _line(line_tried(run_folder)),
@@ -137,39 +175,242 @@ def tried_tables(
         if table is not None
     ]
     commits = [entry for entry in journal if entry.kind == "commit"]
+    # The commits that made this run; a journal older than their runs' ids, its last.
+    made = [one for one in commits if one.data.get("run_id") == run_folder.name] or commits[-1:]
     finalists = search.experiment if search is not None else None
-    tables += [
-        _experiment(entry, journal, commits, entry.id == finalists)
-        for entry in journal
-        if entry.kind == "experiment"
-    ]
+    # The options by their settings as the tables say them: an option tried again keeps its name.
+    named: dict[tuple[tuple[str, str], ...], str] = {}
+    for entry in journal:
+        if entry.kind != "experiment":
+            continue
+        found = experiment_of(study, entry.id) if study is not None else None
+        base = _base(defaults, found.current if found is not None else {}, reach)
+        searched = search if entry.id == finalists else None
+        tables.append(_experiment(entry, found, base, spacing, made, searched, study, named))
     return tuple(tables)
 
 
-def changes_text(changes: Mapping[str, Any]) -> str:
-    """Settings in words, a stage each: "masw length 24; muting mute, vmin 80, width 0.05 s"."""
-    said: list[str] = []
-    for stage, value in changes.items():
-        if isinstance(value, Mapping):
-            inner = cast(Mapping[str, Any], value)
-            parts = [
-                str(one) if key == "method" else _setting(key, one) for key, one in inner.items()
-            ]
-            said.append(f"{stage.replace('_', ' ')} {', '.join(parts)}")
-        else:
-            said.append(_setting(stage, value))
-    return "; ".join(said)
+def plain(changes: Mapping[str, Any], spacing: float, length: int | None = None) -> list[str]:
+    """Settings in the card's words, a line each, with the parameters a tile says: "Windows: 21
+    receivers (30 m)", "Shots used: up to 31.6 m", "Mute: 102.5-1,391 m/s"."""
+    said = settings_said(changes, spacing, length, every=False)
+    return [f"{column}: {value}" for column, value in said.items()]
 
 
-def _setting(key: str, value: object) -> str:
-    """A setting and its value: "distance max 30", "near field 8.25 m"."""
-    unit = next((unit for end, unit in _UNITS.items() if key.endswith(end)), "")
-    name = key.removesuffix(f"_{unit}") if unit else key
+def settings_said(
+    settings: Mapping[str, Any], spacing: float, length: int | None = None, every: bool = True
+) -> dict[str, str]:
+    """The settings `settings` sets, by the name the card gives each, in the order the records go
+    through them, each its value in the card's words, its parameters `SEP` apart (`every`: all of
+    them, else those a tile says); those the card names no other way as their keys say them.
+    `length`: the windows' receivers when the settings give none, where the shots used count
+    from."""
+    said: dict[str, str] = {}
+    if isinstance(mode := settings.get("mode"), str):
+        said["Method"] = mode
+    masw = _stage(settings, "masw")
+    windows: list[str] = []
+    if isinstance(size := masw.get("length"), int | float):
+        windows.append(receivers(int(size), spacing))
+    if isinstance(step := masw.get("step"), int | float):
+        windows.append(f"every {receivers(int(step), spacing, length=False)}")
+    if windows:
+        said["Windows"] = SEP.join(windows)
+    if {"distance_min", "distance_max"} & masw.keys() or "near_field_m" in settings:
+        size = masw.get("length", length)
+        said["Shots used"] = shots_used(masw, settings.get("near_field_m"), size, spacing)
+    for stage in sorted((one for one in settings if one in STEP_ORDER), key=STEP_ORDER.index):
+        if (found := step_words(stage, settings, every)) is not None:
+            said[found[0]] = SEP.join(found[1])
+    known = {"mode", "masw", "near_field_m", *STEP_ORDER}
+    for stage, values in settings.items():
+        if stage not in known:
+            said[stage.replace("_", " ").capitalize()] = _leaves(values)
+    return said
+
+
+def step_words(
+    stage: str, settings: Mapping[str, Any], every: bool = True
+) -> tuple[str, tuple[str, ...]] | None:
+    """Step `stage` of `settings` in the card's words: its name, and its parameters' values, its
+    value first (`every`: all of them, else those a tile says); None for a step said with another
+    (the trigger, with the mute it goes with) or without a value."""
+    if stage == "trigger" and "muting" in settings:
+        return None
+    if stage in ("muting", "trigger"):
+        muting = _stage(settings, "muting")
+        if muting.get("method") == "none":
+            return "Mute", ("none",)
+        main, more = _mute(muting) if muting else ([], [])
+        parts = [*main, *more, *_trigger(_stage(settings, "trigger"))] if every else main
+        return ("Mute", tuple(parts)) if parts else None
+    if stage not in _STEPS:
+        return None
+    name, words = _STEPS[stage]
+    main, more = words(_stage(settings, stage))
+    parts = [*main, *more] if every else main
+    return (name, tuple(parts)) if parts else None
+
+
+def shots_used(masw: Mapping[str, Any], near_field: object, length: object, spacing: float) -> str:
+    """The shots a window stacks, by their distance from its middle: from the settings' nearest,
+    or from the near field's end (a distance from the window's receivers, its half length
+    further), whichever is farther, to their farthest. A near field ending past the farthest
+    leaves the windows their near shots, as it does a window with no farther one."""
+    near, far = masw.get("distance_min"), masw.get("distance_max")
+    low = float(near) if isinstance(near, int | float) and near > 0 else None
+    high = float(far) if isinstance(far, int | float) else None
+    if isinstance(near_field, int | float) and near_field > 0 and isinstance(length, int | float):
+        end = near_field + (length - 1) * spacing / 2
+        if high is None or end < high:
+            low = max(low or 0.0, end)
+    if low is None:
+        return "any distance" if high is None else f"up to {number(high, 4)} m"
+    return f"beyond {number(low, 4)} m" if high is None else span(low, high, "m", 4)
+
+
+def _range(low: object, high: object, unit: str) -> str:
+    """A range of which the settings may give one end: "0-100 Hz", "up to 60 Hz", "from 5 Hz";
+    "" with neither."""
+    low = low if isinstance(low, int | float) else None
+    high = high if isinstance(high, int | float) else None
+    if low is not None and high is not None:
+        return span(low, high, unit, 4)
+    if high is not None:
+        return f"up to {number(high, 4)} {unit}"
+    return f"from {number(low, 4)} {unit}" if low is not None else ""
+
+
+def _stage(settings: Mapping[str, Any], name: str) -> dict[str, Any]:
+    value = settings.get(name)
+    return dict(cast(Mapping[str, Any], value)) if isinstance(value, Mapping) else {}
+
+
+# The methods by the names PAC's pages give them.
+_METHODS = {
+    "none": "none",
+    "iir": "IIR",
+    "fk": "FK",
+    "mute": "mute",
+    "onebit": "one-bit",
+    "onebit_apod": "one-bit, tapered",
+    "linear": "linear",
+    "phase_weighted": "phase-weighted",
+    "root": "root",
+}
+
+type _Words = tuple[list[str], list[str]]  # a step's values a tile says, then the others
+
+
+def _method(values: Mapping[str, Any]) -> list[str]:
+    method = values.get("method")
+    return [] if method is None else [_METHODS.get(str(method), str(method).replace("_", " "))]
+
+
+def _given(values: Mapping[str, Any], key: str, said: str) -> list[str]:
+    """A parameter given a value, in words: `said` with its value."""
+    value = values.get(key)
+    return [said.format(number(value, 4))] if isinstance(value, int | float) else []
+
+
+def _mute(values: Mapping[str, Any]) -> _Words:
+    main = [
+        one
+        for one in (
+            _range(values.get("vmin"), values.get("vmax"), "m/s"),
+            _range(values.get("tmin"), values.get("tmax"), "s"),
+        )
+        if one
+    ]
+    more = [
+        *_given(values, "width", "signal width {} s"),
+        *_given(values, "taper", "taper {} samples"),
+    ]
+    return (main or _method(values)), more
+
+
+def _trigger(values: Mapping[str, Any]) -> list[str]:
+    t0 = values.get("t0")
+    if not isinstance(t0, int | float):
+        return []
+    return [
+        f"trigger delay {number(t0 * 1000)} ms" if 0 < t0 < 1 else f"trigger delay {number(t0)} s"
+    ]
+
+
+def _filter(values: Mapping[str, Any]) -> _Words:
+    if values.get("method") == "none":
+        return ["none"], []
+    band = _range(values.get("fmin"), values.get("fmax"), "Hz")
+    return ([band] if band else _method(values)), _given(values, "order", "order {}")
+
+
+def _slicing(values: Mapping[str, Any]) -> _Words:
+    return [
+        *_given(values, "segment_duration", "{} s"),
+        *_given(values, "segment_step", "every {} s"),
+    ], []
+
+
+def _selection(values: Mapping[str, Any]) -> _Words:
+    if values.get("method") == "none":
+        return ["none"], []
+    velocities = _range(values.get("vmin"), values.get("vmax"), "m/s")
+    return [
+        *(_given(values, "threshold", "threshold {}") or _method(values)),
+        *([velocities] if velocities else []),
+    ], []
+
+
+def _whitening(values: Mapping[str, Any]) -> _Words:
+    band = _range(values.get("fmin"), values.get("fmax"), "Hz")
+    return [*_method(values), *([band] if band else [])], _given(
+        values, "taper_width_Hz", "taper {} Hz"
+    )
+
+
+def _stacking(values: Mapping[str, Any]) -> _Words:
+    return _method(values), [*_given(values, "nu", "power {}"), *_given(values, "n", "n {}")]
+
+
+def _dispersion(values: Mapping[str, Any]) -> _Words:
+    main = [
+        one
+        for one in (
+            _range(values.get("fmin"), values.get("fmax"), "Hz"),
+            _range(values.get("vmin"), values.get("vmax"), "m/s"),
+        )
+        if one
+    ]
+    return main, _given(values, "nv", "{} steps")
+
+
+# The steps of the records and the dispersion images, by the names the card gives them, each in
+# its words.
+_STEPS: dict[str, tuple[str, Callable[[Mapping[str, Any]], _Words]]] = {
+    "filtering": ("Filter", _filter),
+    "slicing": ("Segments", _slicing),
+    "selection": ("Segment selection", _selection),
+    "whitening": ("Whitening", _whitening),
+    "normalization": ("Normalization", lambda values: (_method(values), [])),
+    "stacking": ("Stacking", _stacking),
+    "dispersion": ("Dispersion image", _dispersion),
+    "image_stacking": ("Image stacking", _stacking),
+}
+
+
+def _leaves(values: object) -> str:
+    """A setting the card names no other way, as its keys say it."""
+    if not isinstance(values, Mapping):
+        return _shown(values)
+    inner = cast(Mapping[str, Any], values)
+    return SEP.join(f"{key.replace('_', ' ')} {_shown(one)}" for key, one in inner.items())
+
+
+def _shown(value: object) -> str:
     if isinstance(value, bool) or not isinstance(value, int | float):
-        shown = "none" if value is None else str(value)
-    else:
-        shown = number(value, 4)
-    return f"{name.replace('_', ' ')} {shown} {unit}".rstrip()
+        return "none" if value is None else str(value)
+    return number(value, 4)
 
 
 def length_choice(run_folder: Path) -> LengthChoice | None:
@@ -248,90 +489,83 @@ def _change_of(note: str) -> str:
     return note.split(": the line loop")[0]
 
 
-def _measures(*parts: str) -> str:
-    return ", ".join(part for part in parts if part)
+def _depth(wavelengths_m: tuple[float, float] | None) -> str:
+    """The depth curves reach, half their longest wavelength."""
+    return f"{number(wavelengths_m[1] / 2)} m" if wavelengths_m is not None else ""
 
 
-def _wavelengths(found: tuple[float, float] | None) -> str:
-    return f"wavelengths {span(*found, 'm')}" if found is not None else ""
-
-
-def _lengths(choice: LengthChoice | None) -> TriedTable | None:
+def _lengths(choice: LengthChoice | None, spacing: float) -> TriedTable | None:
     if choice is None or not choice.trials:
         return None
+    count = max(len(trial.xmids) for trial in choice.trials)
     return TriedTable(
         title="Window lengths tried",
-        about=f"Each on the same trial windows along the line; {_PASSED}.",
-        by="workflow",
+        intro=(f"Each on the same {plural(count, 'sample window')}",),
         rows=tuple(
             Tried(
-                label=f"{plural(trial.length, 'receiver')} ({number(trial.metres, 4)} m)",
-                passed=f"{trial.passed} of {len(trial.xmids)}",
-                measures=_measures(
-                    f"picks ±{number(100 * trial.uncertainty, 2)} %"
-                    if trial.uncertainty is not None
-                    else "",
-                    _wavelengths(trial.wavelengths_m),
-                    f"{plural(trial.windows, 'window')} on the line" if trial.windows else "",
-                ),
+                name=receivers(trial.length, spacing),
+                clear=f"{trial.passed} of {len(trial.xmids)}",
+                depth=_depth(trial.wavelengths_m),
                 kept=trial.length == choice.length,
-                note="tried past the length kept, to compare" if trial.compared else "",
             )
             for trial in choice.trials
         ),
+        by="workflow",
     )
 
 
 def _mutes(mutes: Sequence[MuteTried]) -> TriedTable | None:
     if not mutes:
         return None
+    count = max(len(mute.verdicts) for mute in mutes)
     return TriedTable(
         title="Mutes tried",
-        about=f"Each on the same trial windows, at the line's length; {_PASSED}.",
-        by="workflow",
+        intro=(f"Each on the same {plural(count, 'sample window')}",),
         rows=tuple(
             Tried(
-                label=MUTE_NAMES.get(mute.candidate, mute.candidate) + _bounds(mute.muting),
-                passed=f"{mute.passed} of {len(mute.verdicts)}",
-                measures=_wavelengths(mute.wavelengths_m),
+                name=mute_name(mute),
+                clear=f"{mute.passed} of {len(mute.verdicts)}",
+                depth=_depth(mute.wavelengths_m),
                 kept=mute.kept,
             )
             for mute in mutes
         ),
+        by="workflow",
     )
 
 
-def _bounds(muting: Mapping[str, Any] | None) -> str:
-    """A mute's velocities: ", 80-1,500 m/s"."""
-    low, high = (muting or {}).get("vmin"), (muting or {}).get("vmax")
+def mute_name(mute: MuteTried) -> str:
+    """A mute the trial tried, by its kind and the velocities it keeps."""
+    if mute.candidate == "none" or mute.muting is None:
+        return "No mute"
+    low, high = mute.muting.get("vmin"), mute.muting.get("vmax")
+    kind = MUTE_NAMES.get(mute.candidate, mute.candidate).capitalize()
     if isinstance(low, int | float) and isinstance(high, int | float):
-        return f", {span(low, high, 'm/s', 4)}"
-    return ""
+        return f"{kind} mute ({span(low, high, 'm/s', 4)})"
+    return f"{kind} mute"
 
 
 def _segments(segments: Sequence[SegmentsTried]) -> TriedTable | None:
     if not segments:
         return None
     return TriedTable(
-        title="Segments tried",
-        about="Each on the same trial windows, judged against the line's own by the picks' span "
-        "(their longest wavelength over their shortest) and the images' coherence along them.",
-        by="workflow",
+        title="Segment lengths tried",
+        intro=("Each on the same sample windows",),
+        columns=("Segments", "Segment selection", "Picks' span", "Coherence"),
         rows=tuple(
             Tried(
-                label=f"{number(one.segment_s)} s, "
-                + ("no selection" if one.threshold is None else f"FK {number(one.threshold)}")
-                + (" (the line's)" if one.own else ""),
-                measures=_measures(
-                    f"span {number(one.wavelength_span)}"
-                    if one.wavelength_span is not None
-                    else "",
-                    f"coherence {number(one.coherence)}" if one.coherence is not None else "",
+                name="Starting settings" if one.own else f"Option {index}",
+                values=(
+                    f"{number(one.segment_s)} s",
+                    "none" if one.threshold is None else f"threshold {number(one.threshold)}",
+                    number(one.wavelength_span) if one.wavelength_span is not None else "-",
+                    number(one.coherence) if one.coherence is not None else "-",
                 ),
                 kept=one.kept,
             )
-            for one in segments
+            for index, one in enumerate(segments, start=0 if segments[0].own else 1)
         ),
+        by="workflow",
     )
 
 
@@ -339,97 +573,184 @@ def _line(tries: Sequence[LineTried]) -> TriedTable | None:
     if not tries:
         return None
     return TriedTable(
-        title="Changes of the line tried",
-        about="Each on the whole line, asked by the checks of the windows whose curve failed; "
-        "passed: the trial windows passing G3 with the line's settings, then with the change.",
-        by="workflow",
+        title="Changes tried where curves failed",
+        intro=("Each tried on the whole line, asked by the windows whose curve failed",),
+        columns=("Asked by",),
         rows=tuple(
             Tried(
-                label=one.change,
-                passed=f"{one.before} → {one.after} of {len(one.xmids)}",
-                measures=f"asked by {plural(one.asked_by, 'window')} ({flag_text(_flag(one))})",
+                name=one.change,
+                values=(plural(one.asked_by, "window"),),
+                clear=f"{one.before} → {one.after} of {len(one.xmids)}",
                 kept=one.kept,
-                note=one.note,
             )
             for one in tries
         ),
+        by="workflow",
     )
 
 
-def _flag(tried: LineTried) -> str:
-    """The flag that asked a change most: "G2:weak_coherence" as "weak_coherence"."""
-    return tried.flag.partition(":")[2] or tried.flag
+def _base(
+    defaults: Mapping[str, Any], current: Mapping[str, Any], reach: float | None
+) -> dict[str, Any]:
+    """The line's settings an experiment started from: the preset's defaults with the line's own
+    over them; the farthest shot the line's reach when they give none, as the trials take it."""
+    base = merged(dict(defaults), dict(current))
+    base.setdefault("near_field_m", None)
+    masw = dict(_stage(base, "masw"))
+    if masw.get("distance_max") is None and reach is not None and base.get("mode") != "passive":
+        masw["distance_max"] = reach
+    base["masw"] = masw
+    return base
 
 
 def _experiment(
     entry: JournalEntry,
-    journal: Sequence[JournalEntry],
-    commits: Sequence[JournalEntry],
-    finalists: bool,
+    found: ExperimentDone | None,
+    base: Mapping[str, Any],
+    spacing: float,
+    made: Sequence[JournalEntry],
+    search: SearchDone | None,
+    study: Path | None,
+    named: dict[tuple[tuple[str, str], ...], str],
 ) -> TriedTable:
-    """An experiment of the agent: each variant against the line's settings then, those a commit
-    of the experiment took kept."""
+    """An experiment of the autonomous mode as a comparison: where it ran; each option with every
+    setting, the one the run was made with first (its settings the line's, as a commit that `made`
+    the run set them, the user's as given); the line's settings it was tried against last, when
+    the line had its own. The search's best options after what the search made, dropped and
+    judged. The first experiment's options are "Option 1", "Option 2"...; an option a later one
+    tries again keeps its name (`named`, by its settings), the others are its variants: "Variant
+    1"..."""
     variants = [
         cast(dict[str, Any], one)
         for one in cast(list[Any], entry.data.get("variants", []))
         if isinstance(one, dict)
     ]
-    taken = [
-        cast(dict[str, Any], commit.data.get("changes", {}))
-        for commit in commits
-        if entry.id in commit.of
-    ]
-    tested = [one for one in journal if one.id in entry.of]
+    current = [one for one in variants if one.get("label") == "current"]
+    tried = [one for one in variants if one.get("label") != "current"]
+    changes = [cast(Mapping[str, Any], one.get("changes") or {}) for one in tried]
+    settings = [merged(dict(base), dict(change)) for change in changes]
+    lines = [(merged(dict(base), _changes(one)), _theirs(one)) for one in made]
+    kept = [any(merged(one, theirs) == line for line, theirs in lines) for one in settings]
+    said = [settings_said(one, spacing) for one in settings]
+    line = found is not None and bool(found.current)
+    start = settings_said(base, spacing)
+    columns = _columns([*said, *([start] if line else [])])
+    trials = {one.label: one for one in found.tried} if found is not None else {}
+    images = study / EXPERIMENT_IMAGES if study is not None else None
+
+    def row(name: str, values: Mapping[str, str], variant: Mapping[str, Any], keep: bool) -> Tried:
+        done = trials.get(str(variant.get("label")))
+        trial = done.trial if done is not None else ""
+        shown = bool(trial) and (
+            keep or (images is not None and (images / f"{trial}.npz").exists())
+        )
+        return _row(name, values, columns, variant, keep).model_copy(
+            update={
+                "trial": trial,
+                "windows": done.scorecard.windows if done is not None else (),
+                "images": shown,
+            }
+        )
+
+    order = sorted(range(len(tried)), key=lambda index: not kept[index])
+    first, counted = not named, 0
+    rows: list[Tried] = []
+    for index in order:
+        key = tuple(said[index].items())
+        if key not in named:
+            counted += 1
+            named[key] = f"Option {counted}" if first else f"Variant {counted}"
+        rows.append(row(named[key], said[index], tried[index], kept[index]))
+    rows += [row("Line's settings", start, one, False) for one in current if line]
     count = max((int(one.get("windows", 0)) for one in variants), default=0)
-    about = " ".join(
-        [
-            *(f"{one.id}: {one.text.rstrip('.')}." for one in tested),
-            f"On {plural(count, 'trial window')}; {_PASSED}; gained and lost: against the line's "
-            "settings then.",
-        ]
+    spec = found.windows if found is not None and found.windows else entry.data.get("windows")
+    where = _where(str(spec or ""), count)
+    if search is None:
+        return TriedTable(
+            title="Settings tried", intro=(where,), columns=columns, rows=tuple(rows), by="agent"
+        )
+    dropped = (
+        [f"{search.dropped} dropped: curves passed on fewer than a quarter of the sample windows"]
+        if search.dropped
+        else []
     )
-    return TriedTable(
-        title=f"{entry.id}: the search's finalists, side by side"
-        if finalists
-        else f"{entry.id}: {plural(len(variants) - 1, 'variant')} against the line's settings",
-        about=about,
-        by="agent",
-        rows=tuple(_variant(one, taken) for one in variants),
+    intro = (
+        f"{search.variants} combinations of settings made",
+        *dropped,
+        f"{search.variants - search.dropped} judged by the assistant by eye on their dispersion "
+        "images",
+        f"The {len(tried)} best selected over {plural(search.rounds, 'round')}",
+        where,
+    )
+    return TriedTable(title="Search", intro=intro, columns=columns, rows=tuple(rows), by="agent")
+
+
+def _where(spec: str, count: int) -> str:
+    """The sample windows an experiment ran on, as the agent asked for them (PACo's trial set:
+    spread:n, holdout:n, failing, flag:<name>, xmids:[...], joined by +)."""
+    asked: list[str] = []
+    for part in (one.strip() for one in spec.split("+") if one.strip()):
+        kind, _, value = part.partition(":")
+        if kind == "spread" and value.isdigit():
+            asked.append(f"{plural(int(value), 'window')} spread along the line")
+        elif kind == "holdout" and value.isdigit():
+            asked.append(f"{plural(int(value), 'window')} the previous trial did not use")
+        elif kind == "failing":
+            asked.append("the windows whose curve did not pass")
+        elif kind == "flag":
+            asked.append(f"the windows flagged for {flag_text(value)}")
+        elif kind == "xmids":
+            asked.append("the windows asked for")
+        else:
+            asked.append(part)
+    return f"On {' and '.join(asked)}" if asked else f"On {plural(count, 'sample window')}"
+
+
+def _columns(options: Sequence[Mapping[str, str]]) -> tuple[str, ...]:
+    """Every setting the options have, in the order the records go through them; the method only
+    when they differ in it (the card says it otherwise)."""
+    every = dict.fromkeys(column for one in options for column in one)
+    return tuple(
+        column
+        for column in every
+        if column != "Method" or len({one.get(column) for one in options}) > 1
     )
 
 
-def _variant(variant: Mapping[str, Any], taken: Sequence[Mapping[str, Any]]) -> Tried:
-    changes = cast(Mapping[str, Any], variant.get("changes") or {})
-    current = variant.get("label") == "current"
+def _row(
+    name: str,
+    said: Mapping[str, str],
+    columns: Sequence[str],
+    variant: Mapping[str, Any],
+    kept: bool = False,
+) -> Tried:
     depth = variant.get("depth_m")
-    gained = len(cast(list[Any], variant.get("gained") or []))
-    lost = len(cast(list[Any], variant.get("lost") or []))
-    beaten = variant.get("dominated_by")
     return Tried(
-        label=_named("current") if current else f"{variant.get('label')}: {changes_text(changes)}",
-        passed=f"{variant.get('passing', 0)} of {variant.get('windows', 0)}",
-        measures=_measures(
-            "" if current else f"{gained} gained, {lost} lost",
-            f"depth {number(depth)} m" if isinstance(depth, int | float) else "",
-        ),
-        kept=not current and any(_within(changes, one) for one in taken),
-        note=f"dominated: {_named(str(beaten))} as good or better on images, coverage and depth"
-        if beaten
-        else "",
+        name=name,
+        values=tuple(said.get(column, "-") for column in columns),
+        clear=f"{variant.get('passing') or 0} of {variant.get('windows', 0)}",
+        depth=f"{number(depth)} m" if isinstance(depth, int | float) else "",
+        kept=kept,
     )
 
 
-def _named(label: str) -> str:
-    return "the line's settings" if label == "current" else f"variant {label}"
+def _changes(commit: JournalEntry) -> dict[str, Any]:
+    return dict(cast(dict[str, Any], commit.data.get("changes") or {}))
 
 
-def _within(changes: Mapping[str, Any], taken: Mapping[str, Any]) -> bool:
-    """Whether `taken` sets every setting `changes` sets, to the same value."""
-    for key, value in changes.items():
-        other = taken.get(key)
-        if isinstance(value, Mapping) and isinstance(other, Mapping):
-            if not _within(cast(Mapping[str, Any], value), cast(Mapping[str, Any], other)):
-                return False
-        elif other != value:
-            return False
-    return True
+def _theirs(commit: JournalEntry) -> dict[str, Any]:
+    """The settings a commit gave as the user's (its reasons say so), as it set them: a trial ran
+    with them whatever its own changes."""
+    changes = _changes(commit)
+    reasons = cast(dict[str, Any], commit.data.get("reasons") or {})
+    theirs: dict[str, Any] = {}
+    for key, reason in reasons.items():
+        if not str(reason).startswith("given by the user"):
+            continue
+        stage, _, field = key.partition(" ")
+        values = changes.get(stage)
+        if not field:
+            theirs[stage] = values
+        elif isinstance(values, Mapping) and field in values:
+            theirs.setdefault(stage, {})[field] = cast(Mapping[str, Any], values)[field]
+    return theirs

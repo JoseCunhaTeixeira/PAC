@@ -41,6 +41,7 @@ from masw.io.quality.view import (
     Track,
     flag_text,
     gate_view,
+    grouped,
     line_gate,
     measured_status,
     number,
@@ -503,8 +504,8 @@ def window_inversion_settings(
         Setting(
             key="effort",
             label="Sampling",
-            value=f"{parameters.n_iterations:,} iterations",
-            detail=f"{parameters.n_burnin_iterations:,} burn-in, "
+            value=f"{grouped(parameters.n_iterations)} iterations",
+            detail=f"{grouped(parameters.n_burnin_iterations)} burn-in, "
             f"{plural(parameters.n_chains, 'chain')}",
             why=why("effort"),
             origin=origin,
@@ -846,8 +847,8 @@ def _run_sentence(
     )
     text = (
         ("Ran " if ours else "Inverted by hand: ")
-        + f"{plural(parameters.n_chains, 'chain')} of {parameters.n_iterations:,} iterations "
-        f"({parameters.n_burnin_iterations:,} burn-in); "
+        + f"{plural(parameters.n_chains, 'chain')} of {grouped(parameters.n_iterations)} iterations "
+        f"({grouped(parameters.n_burnin_iterations)} burn-in); "
         + "; ".join(part for part in parts if part)
     )
     if tuning:
@@ -911,7 +912,7 @@ def _changed(before: dict[str, object], after: dict[str, object]) -> str:
             f"(was {number(model_depth(old))} m)"
         )
     if new.n_iterations != old.n_iterations:
-        said.append(f"{new.n_iterations:,} iterations (was {old.n_iterations:,})")
+        said.append(f"{grouped(new.n_iterations)} iterations (was {grouped(old.n_iterations)})")
     old_vs, new_vs = _highest_vs(old), _highest_vs(new)
     if new_vs is not None and new_vs != old_vs:
         said.append(f"Vs up to {number(new_vs)} m/s (was {number(old_vs or 0)})")

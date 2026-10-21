@@ -1,3 +1,4 @@
+import { thousands } from "../numbers";
 import type { Maker, Metric, Origin, RunEntry, StageKey, Status } from "./types";
 
 // How Visualization says things: the gates' metrics (a name a geophysicist reads, and the value
@@ -171,11 +172,11 @@ const SHARES = new Set([
 ]);
 const BOOLEANS = new Set(["band_at_fmin", "band_at_fmax"]);
 
-/** A number with about 3 significant digits, grouped by thousands. */
+/** A number with about 3 significant digits, its thousands as SI writes them. */
 export function num(v: number | null | undefined, digits = 3): string {
   if (v == null || !Number.isFinite(v)) return "—";
   const a = Math.abs(v);
-  if (a >= 1000) return Math.round(v).toLocaleString("en-US");
+  if (a >= 1000) return thousands(String(Math.round(v)));
   if (a === 0) return "0";
   const decimals = Math.max(0, Math.min(4, digits - 1 - Math.floor(Math.log10(a))));
   // Without trailing zeros: 0.5, not 0.500.
@@ -262,10 +263,12 @@ function shown(name: string, value: unknown): string {
 }
 
 /** Where a setting comes from, in two words. */
+// Who set a setting, as the card tags it: the assistant whichever its way.
 export const ORIGIN_LABELS: Record<Origin, string> = {
   you: "You",
-  workflow: "Workflow",
-  agent: "Agent",
+  workflow: "Assistant",
+  agent: "Assistant",
+  checks: "Assistant",
   default: "Default",
 };
 
@@ -306,7 +309,7 @@ export const STATE_MEANINGS: Record<StageKey, Record<Status, { full: string; sho
 };
 
 export const STATUS_LABELS: Record<Status, string> = {
-  pass: "pass",
+  pass: "passed",
   warn: "flagged",
   fail: "rejected",
   none: "—",

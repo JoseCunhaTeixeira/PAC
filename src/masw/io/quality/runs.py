@@ -5,8 +5,9 @@ to choose them, the run's history step by step, how far each stage went, and the
 for the profile plot: every receiver, every shot, every window's receivers."""
 
 import math
+import re
 from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -22,12 +23,21 @@ from masw.io.quality.files import (
     read_manifest,
     shot_distances,
 )
-from masw.io.quality.journal import JournalEntry, SearchDone, journal_of, search_of, study_of
+from masw.io.quality.journal import (
+    JournalEntry,
+    SearchDone,
+    SurveyDone,
+    corrected,
+    journal_of,
+    search_of,
+    study_of,
+    survey_of,
+)
 from masw.io.quality.log import (
     LINE,
     LOG_FILE,
+    Given,
     QCLog,
-    config_section,
     given_settings,
     is_autonomous,
     line_receivers,
@@ -35,17 +45,29 @@ from masw.io.quality.log import (
 )
 from masw.io.quality.sources import near_field
 from masw.io.quality.tried import (
-    MUTE_NAMES,
+    SEP,
     LengthChoice,
     TriedTable,
-    changes_text,
     length_choice,
     line_tried,
+    mute_name,
     mutes_tried,
+    plain,
     segments_tried,
+    settings_said,
+    shots_used,
+    step_words,
     tried_tables,
 )
-from masw.io.quality.view import REFUSALS, Origin, Setting, flag_text, number, plural, span
+from masw.io.quality.view import (
+    REFUSALS,
+    Origin,
+    Setting,
+    flag_text,
+    number,
+    plural,
+    receivers,
+)
 from sigpipe.masw.inversion.section import is_inverted
 from sigpipe.masw.petro.window import MODEL_FILE
 from sigpipe.masw.picks import CURVES_FILE
@@ -64,10 +86,12 @@ PAC = "set by hand"
 # How the autonomous agent's commits give a setting the user gave, in the line's notes.
 USER_REASON = "given by the user"
 ALL_RECORDS = "every record, none left out"
-MIN_PASS_SHARE = 0.8  # the workflow's default: the trial windows a window length must pass
-MAX_UNCERTAINTY = 0.2  # the workflow's default: picks precise enough to stop at a length
-# The preset's entries the card says apart from the preprocessing's stages.
-OWN_ENTRIES = ("mode", "masw", "dispersion")
+# The keys of the card's settings, by their stage, where not the stage's name.
+_KEYS = {"dispersion": "band", "muting": "mute"}
+# The origins, the one to show first for values set together.
+_RANKED: tuple[Origin, ...] = ("agent", "workflow", "checks", "you", "default")
+# A journal entry's id the agent's reasons name in parentheses: "(E2)", "(L1, E2)", "(E2 current)".
+_REFERENCES = re.compile(r"\s*\((?:[A-Z]\d+|current)(?:[\s,;]+(?:[A-Z]\d+|current))*\)")
 # What asked for a stage to run again, other than a check's flag, in words.
 _CAUSES = {
     "backtrack": "after an earlier stage",
@@ -123,19 +147,28 @@ class LineWindow(BaseModel):
 
 
 class Step(BaseModel):
-    """A step of how the run was made, in order: an entry of its study's journal (the autonomous
-    agent's), its search, or what its files say was done (the settings the user gave, a stage,
-    a trial), by whom."""
+    """A step of what was done, in order: a title and its facts, a line each; by whom. From the
+    study's journal (the autonomous mode's), or from what the run's files say was done."""
 
     model_config = ConfigDict(frozen=True)
 
-    id: str = ""  # the journal's (O1, E3, L2, H1...), or the search's (S1)
     kind: str
     by: Origin
     at: datetime | None = None
+    title: str
+    lines: tuple[str, ...] = ()
+    detail: str = ""  # more on hover
+
+
+class Reason(BaseModel):
+    """Why a setting is what it is, in a line: the setting, the reason in words (the assistant's
+    own, or the value the user set), and whose."""
+
+    model_config = ConfigDict(frozen=True)
+
+    setting: str
     text: str
-    detail: str = ""  # more on hover: a commit's reasons
-    of: tuple[str, ...] = ()  # the entries it rests on
+    by: Origin
 
 
 class RunCard(BaseModel):
@@ -153,6 +186,7 @@ class RunCard(BaseModel):
     records: bool  # the profile's records are in the input folder: they can be shown
     settings: tuple[Setting, ...]
     tried: tuple[TriedTable, ...] = ()  # what was tried to choose them
+    reasons: tuple[Reason, ...] = ()  # the assistant's own reasons, and what the user set
     history: tuple[Step, ...] = ()
     stages: tuple[StageCount, ...]
     receivers: tuple[float, ...]  # every receiver's x
@@ -198,13 +232,20 @@ def run_card(folder: str) -> RunCard:
     line = line_geometry(run_folder, manifest)
     masw = preset_stage(manifest, "masw")
     log = read_log(run_folder)
-    settings = processing_settings(run_folder, manifest, log, length_choice(run_folder))
     stages = _stages(run_folder, manifest)
     maker = made_by(run_folder)
     study = study_of(run_folder.parent, run_folder.name) if maker == "autonomous" else None
     journal = journal_of(study) if study is not None else ()
     search = search_of(study) if study is not None else None
-    records = next(one for one in settings if one.key == "records")
+    survey = survey_of(study) if study is not None else None
+    spacing = manifest.profile.receiver_spacing_m
+    defaults = make_preset(manifest.preset.mode).model_dump(mode="json")
+    settings = (
+        *processing_settings(manifest, log, length_choice(run_folder)),
+        _curves(stages, journal, maker),
+        _profiles(stages, journal, log, maker),
+    )
+    picked = corrected(study, run_folder.name) if study is not None else 0
     return RunCard(
         folder=folder,
         profile=manifest.profile.name,
@@ -215,10 +256,21 @@ def run_card(folder: str) -> RunCard:
         finished_at=manifest.finished_at,
         records=(INPUT_DIR / manifest.profile.name).is_dir(),
         settings=settings,
-        tried=tried_tables(run_folder, journal, search),
-        history=_study_history(journal, search)
+        tried=tried_tables(
+            run_folder,
+            journal,
+            search,
+            study,
+            spacing,
+            defaults,
+            survey.reach_m if survey is not None else None,
+        ),
+        reasons=_reasons(
+            journal, settings, given_settings(run_folder), spacing, int(masw["length"])
+        ),
+        history=_study_history(journal, search, survey, manifest, log, picked)
         if study is not None
-        else _run_history(run_folder, manifest, log, records, stages),
+        else _run_history(run_folder, manifest, log, stages),
         stages=stages,
         receivers=line.receivers,
         sources=line.sources,
@@ -228,11 +280,12 @@ def run_card(folder: str) -> RunCard:
 
 
 def processing_settings(
-    run_folder: Path, manifest: RunManifest, log: QCLog | None, choice: LengthChoice | None
+    manifest: RunManifest, log: QCLog | None, choice: LengthChoice | None
 ) -> tuple[Setting, ...]:
-    """The run's windows and the settings of each stage, as run.json has them, each with where
-    it comes from: the line's notes (the workflow's rules, the agent's reasons, the user's
-    settings among them), the request, the preset's default, or PAC's form."""
+    """The run's settings in plain words, in the order its records went through them, each with
+    where it comes from and why: its windows, the records used, the shots the windows stack, then
+    each step of its method in its order (PAC's pages'); a step off by default and left off is not
+    said."""
     preset: dict[str, Any] = manifest.preset.model_dump(mode="json")
     defaults: dict[str, Any] = make_preset(manifest.preset.mode).model_dump(mode="json")
     line = log.latest(LINE, "phase_shift") if log is not None else None
@@ -266,101 +319,81 @@ def processing_settings(
     masw: dict[str, Any] = preset["masw"]
     length, step = int(masw["length"]), int(masw["step"])
     if choice is not None and choice.length == length:
-        where, why = chooser, _length_rule(choice, config_section(run_folder, "coherence"))
+        sized: tuple[Origin, str] = (chooser, _length_rule(choice))
     else:
-        where, why = rule("masw", "length") or origin(["masw"], ["length"])
-    stepped, step_why = rule("masw", "step") or origin(["masw"], ["step"])
+        sized = rule("masw", "length") or origin(["masw"], ["length"])
+    stepped = rule("masw", "step") or origin(["masw"], ["step"])
+    missing = manifest.n_positions - len(manifest.windows)
+    reasons = [sized[1]]
+    if stepped[0] != "default":
+        reasons.append(f"one every {receivers(step, spacing, length=False)}: {stepped[1]}")
+    if missing > 0:
+        reasons.append(f"{plural(missing, 'position')} without a shot to stack")
     settings = [
-        Setting(
-            key="length",
-            label="Window length",
-            value=f"{number((length - 1) * spacing, 4)} m",
-            detail=plural(length, "receiver"),
-            why=why,
-            origin=where,
-        ),
-        Setting(
-            key="step",
-            label="Window step",
-            value=f"{number(step * spacing, 4)} m",
-            detail=plural(step, "receiver"),
-            why=step_why,
-            origin=stepped,
-        ),
-    ]
-    xmids = [window.xmid for window in manifest.windows]
-    missing = manifest.n_positions - len(xmids)
-    settings.append(
         Setting(
             key="windows",
             label="Windows",
-            value=f"{len(xmids)}",
-            detail=f"xmid {span(min(xmids), max(xmids), 'm', digits=4)}" if xmids else "",
-            why=f"one every {plural(step, 'receiver')} along the "
-            f"{plural(manifest.profile.n_receivers, 'receiver')}"
-            + (f"; {plural(missing, 'position')} without a shot to stack" if missing > 0 else ""),
-            origin=stepped,
+            value=receivers(length, spacing),
+            detail=SEP.join(
+                (
+                    f"every {receivers(step, spacing, length=False)}",
+                    plural(len(manifest.windows), "window"),
+                )
+            ),
+            why="; ".join(reasons),
+            origin=_strongest([sized[0], stepped[0]]),
         )
-    )
+    ]
+    settings.append(_records(manifest, log))
     if manifest.profile.kind == "active":
-        ends = {
-            "nearest": rule("near_field", "distance_m"),
-            "farthest": rule("masw", "distance_max"),
-        }
+        field = near_field(log)
+        nearest = (
+            f"nearest, {number(field, 4)} m from a window's receivers"
+            if field is not None
+            else "nearest"
+        )
+        ends = {nearest: rule("near_field", "distance_m"), "farthest": rule("masw", "distance_max")}
         set_by = {end: one for end, one in ends.items() if one is not None}
-        if not set_by:
-            where, why = origin(["masw"], ["distance_min", "distance_max"])
+        if set_by:
+            where = _strongest([who for who, _ in set_by.values()])
+            why = "; ".join(f"{end}: {reason}" for end, (_, reason) in set_by.items())
         else:
-            where = _shared([who for who, _ in set_by.values()])
-            why = "; ".join(f"{end}, {reason}" for end, (_, reason) in set_by.items())
+            where, why = origin(["masw"], ["distance_min", "distance_max"])
         settings.append(
             Setting(
                 key="reach",
-                label="Shots stacked",
-                value=_reach(masw),
-                detail="from the window's middle"
-                + (
-                    f", out of its near field ({number(field, 4)} m)"
-                    if (field := near_field(log)) is not None
-                    else ""
-                ),
+                label="Shots used",
+                value=shots_used(masw, field, length, spacing),
+                detail="from each window's middle",
                 why=why,
                 origin=where,
             )
         )
-    settings.append(_records(manifest, log))
-    dispersion: dict[str, Any] = preset["dispersion"]
-    where, why = rule("dispersion", "fmax") or rule("dispersion", "fmin") or origin(["dispersion"])
-    narrowed = _again(log, "phase_shift", "window")
-    settings.append(
-        Setting(
-            key="band",
-            label="Phase shift",
-            value=span(dispersion["fmin"], dispersion["fmax"], "Hz"),
-            detail=span(dispersion["vmin"], dispersion["vmax"], "m/s"),
-            why=why + (f"; done again in {narrowed}" if narrowed else ""),
-            origin=where,
+    for name in preset:
+        found = step_words(name, preset, every=False) if name not in ("mode", "masw") else None
+        if found is None:
+            continue
+        label, (value, *detail) = found
+        if name == "dispersion":
+            where, why = (
+                rule("dispersion", "fmax") or rule("dispersion", "fmin") or origin(["dispersion"])
+            )
+            if again := _again(log, "phase_shift", "window"):
+                why += f"; imaged again: {again}"
+        else:
+            where, why = rule(name) or origin([name])
+        if value == "none" and where == "default":
+            continue
+        settings.append(
+            Setting(
+                key=_KEYS.get(name, name),
+                label=label,
+                value=value,
+                detail=SEP.join(detail),
+                why=why,
+                origin=where,
+            )
         )
-    )
-    stages = [name for name in preset if name not in OWN_ENTRIES]
-    # A record step chosen for the whole line (the mute trial's muting, logged with the line's
-    # images; the agent's commits).
-    chosen = {name: one for name in stages if (one := rule(name)) is not None}
-    if chosen:
-        where = _shared([who for who, _ in chosen.values()])
-        why = "; ".join(f"its {name}, {reason}" for name, (_, reason) in chosen.items())
-    else:
-        where, why = origin(stages)
-    redone = _again(log, "preprocessing", "record")
-    settings.append(
-        Setting(
-            key="preprocessing",
-            label="Preprocessing",
-            value="; ".join(stage_text(name, preset[name]) for name in stages) or "none",
-            why=why + (f"; done again for {redone}" if redone else ""),
-            origin=where,
-        )
-    )
     return tuple(settings)
 
 
@@ -374,53 +407,41 @@ def given_why(log: QCLog | None) -> str:
 
 def noted(notes: Iterable[str], name: str, chooser: Origin) -> tuple[Origin, str | None]:
     """Who set setting `name` ('<stage> <key>', or a stage) on the line, and the reason the
-    line's note on it gives (None: no note): the user, when the agent's commit gives it as
-    theirs, else the checks' chooser."""
+    line's note on it gives, its journal references left out (None: no note): the user, when the
+    agent's commit gives it as theirs, else the checks' chooser."""
     note = next(
         (note for note in notes if note.startswith((f"{name}:", f"{name} "))),
         None,
     )
     if note is None:
         return chooser, None
-    reason = note.split(": ", 1)[1].rstrip(".")
+    reason = plain_reason(note.split(": ", 1)[1])
     return ("you" if reason.startswith(USER_REASON) else chooser), reason
 
 
-def _shared(origins: Iterable[Origin]) -> Origin:
-    """One origin for values set together: the user's when they set them all, else the
-    other's."""
-    for one in origins:
-        if one != "you":
-            return one
-    return "you"
+def plain_reason(reason: str) -> str:
+    """A reason the agent wrote, without the journal's references it names: "(E2)", "(L1, E2)"."""
+    return _REFERENCES.sub("", reason).strip().rstrip(".")
 
 
-def _length_rule(choice: LengthChoice, rules: Mapping[str, Any]) -> str:
+def _strongest(origins: Iterable[Origin]) -> Origin:
+    """The origin to show for values set together: the agent's or the workflow's choice over
+    the checks', over the user's, over the default."""
+    found = set(origins)
+    return next(one for one in _RANKED if one in found)
+
+
+def _length_rule(choice: LengthChoice) -> str:
     """Why the workflow kept `choice.length`, in a line: the trials are in their table."""
-    share = float(rules.get("min_pass_share", MIN_PASS_SHARE))
-    precision = float(rules.get("max_uncertainty", MAX_UNCERTAINTY))
     kept = next(trial for trial in choice.trials if trial.length == choice.length)
-    if kept.passed < math.ceil(share * len(kept.xmids)):
-        how = f"no length passed {share:.0%} of its trials: the most passes"
-    elif kept.uncertainty is None:
-        how = f"the shortest passing {share:.0%} of its trials"
-    elif kept.uncertainty <= precision:
-        how = f"the first passing {share:.0%} of its trials with picks within {precision:.0%}"
-    else:
-        how = f"the most precise passing {share:.0%} of its trials"
-    return f"the length trial's choice: {how} (each length tried below)"
-
-
-def _reach(masw: Mapping[str, Any]) -> str:
-    """The shots a window stacks, by their distance from its middle (both exclusive)."""
-    near, far = shot_distances(masw)
-    if near > 0:
-        return f"beyond {number(near, 4)} m" if far is None else span(near, far, "m", 4)
-    return "any distance" if far is None else f"within {number(far, 4)} m"
+    return (
+        f"the length trial kept it: {kept.passed} of its {len(kept.xmids)} test windows passed "
+        f"({plural(len(choice.trials), 'length')} tried)"
+    )
 
 
 def _records(manifest: RunManifest, log: QCLog | None) -> Setting:
-    """The records the windows stack, and those they leave out, with why."""
+    """The records the windows stack, those left out and why, by what left them out."""
     total = len(manifest.records)
     failed = [record.name for record in manifest.records if record.status == "failed"]
     excluded = manifest.exclusions.records
@@ -433,14 +454,11 @@ def _records(manifest: RunManifest, log: QCLog | None) -> Setting:
     }
     said: list[str] = []
     if excluded:
-        said.append(
-            f"{plural(len(excluded), 'record')} left out by the signal check (G1): "
-            + ", ".join(_excluded(log, name) for name in excluded)
-        )
+        said.append("left out by the signal check: " + "; ".join(_left_out(log, excluded)))
     if failed:
-        said.append(f"{plural(len(failed), 'record')} failed to preprocess: {', '.join(failed)}")
+        said.append(f"failed to preprocess: {', '.join(failed)}")
     if receivers:
-        said.append(why_receivers.rstrip(".") + " (G1 over the line)")
+        said.append(why_receivers.rstrip("."))
     if traces:
         count = sum(len(one) for one in traces.values())
         why = _trace_reasons(log, traces)
@@ -448,28 +466,30 @@ def _records(manifest: RunManifest, log: QCLog | None) -> Setting:
             f"{plural(count, 'trace')} of {plural(len(traces), 'record')} left out"
             + (f" ({why})" if why else "")
         )
+    if redone := _again(log, "preprocessing", "record"):
+        said.append(f"preprocessed again: {redone}")
     used = total - len(set(failed) | set(excluded))
+    left = total - used
     return Setting(
         key="records",
         label="Records",
         value=f"{used} of {total}",
-        detail="used",
+        detail=f"{left} left out" if left else "all used",
         why="; ".join(said) or ALL_RECORDS,
-        origin="you"
-        if log is None
-        else log.chooser
-        if excluded or traces or receivers
-        else "default",
+        origin="checks" if excluded or traces or receivers or redone else "default",
     )
 
 
-def _excluded(log: QCLog | None, name: str) -> str:
-    """Record `name`, with the flags G1 left it out for (its latest, but the spent budget)."""
-    result = log.result(name, "preprocessing", "G1") if log is not None else None
-    flags = [flag.name for flag in result.flags if flag.name not in REFUSALS] if result else []
-    return (
-        f"{name} ({', '.join(flag_text(flag) for flag in dict.fromkeys(flags))})" if flags else name
-    )
+def _left_out(log: QCLog | None, names: Iterable[str]) -> list[str]:
+    """The records G1 left out, by the flags it left them out for: "low SNR: 101.dat, 129.dat",
+    "low coherence: 133.dat"."""
+    by_flag: dict[str, list[str]] = {}
+    for name in names:
+        result = log.result(name, "preprocessing", "G1") if log is not None else None
+        flags = [flag.name for flag in result.flags if flag.name not in REFUSALS] if result else []
+        said = ", ".join(flag_text(flag) for flag in dict.fromkeys(flags)) or "no reason said"
+        by_flag.setdefault(said, []).append(name)
+    return [f"{flags}: {', '.join(found)}" for flags, found in by_flag.items()]
 
 
 def _trace_reasons(log: QCLog | None, traces: Mapping[str, tuple[int, ...]]) -> str:
@@ -491,9 +511,9 @@ def _trace_reasons(log: QCLog | None, traces: Mapping[str, tuple[int, ...]]) -> 
 
 
 def _again(log: QCLog | None, stage: str, unit: str) -> str:
-    """The units the assistant ran `stage` again on, and what asked for it, by check: "8 windows
-    (G2: 6 aliasing, 2 band at fmax)". A redo's fresh first attempt counts, as every attempt
-    after the first run."""
+    """The units the checks ran `stage` again on, and what asked for it: "8 windows (6
+    aliasing, 2 band at fmax)". A redo's fresh first attempt counts, as every attempt after the
+    first run."""
     again = [
         attempt
         for attempt in (log.attempts if log is not None else ())
@@ -502,18 +522,17 @@ def _again(log: QCLog | None, stage: str, unit: str) -> str:
     if not again:
         return ""
     units = {attempt.unit for attempt in again}
-    causes: dict[str, Counter[str]] = {}
+    # A check's flag counted; another cause (a change of the line's settings) said once.
+    flags: Counter[str] = Counter()
+    others: dict[str, None] = {}
     for attempt in again:
         gate, _, flag = attempt.triggered_by.partition(":")
         if flag:
-            causes.setdefault(gate, Counter())[flag_text(flag)] += 1
+            flags[flag_text(flag)] += 1
         else:
-            causes.setdefault(_CAUSES.get(gate, gate), Counter())[""] += 1
-    said = "; ".join(
-        f"{cause}: " + ", ".join(f"{count} {what}".rstrip() for what, count in counts.most_common())
-        for cause, counts in causes.items()
-    )
-    return f"{plural(len(units), unit)} ({said})"
+            others[_CAUSES.get(gate, gate)] = None
+    said = [f"{count} {flag}" for flag, count in flags.most_common()] + list(others)
+    return f"{plural(len(units), unit)} ({', '.join(said)})"
 
 
 def stage_text(name: str, values: Mapping[str, Any]) -> str:
@@ -658,183 +677,448 @@ def _older_card(folder: str, run_folder: Path) -> RunCard:
     )
 
 
-# The journal's entries the user made: what they asked, the settings they gave, a request after
-# the report; the agent made the others (its reasoning, and code's record of what it did).
-_USER_KINDS = frozenset({"objective", "settings", "reopen"})
+# What the model's check said of a Vs profile, in the words PAC's pages use.
+MODEL_CHECK = "passed, flagged or rejected by the model's check"
+# How the freeze says its curves: "Frozen from L1: 68 curves accepted, 8 windows rejected".
+_FROZEN = re.compile(r"(\d+) curves accepted, (\d+) windows rejected")
+# Who chose what a run's maker chose, as the card tags it.
+_MAKERS: dict[Maker, Origin] = {"autonomous": "agent", "workflow": "workflow", "manual": "you"}
+# The settings as the commits' reasons name them ("<stage> <key>", or a stage), by the names the
+# card gives them.
+_SETTING_NAMES = {
+    "masw length": "Windows",
+    "masw step": "Windows",
+    "masw distance_max": "Shots used",
+    "masw distance_min": "Shots used",
+    "near_field_m": "Shots used",
+    "near_field": "Shots used",
+    "trigger": "Mute",
+    "muting": "Mute",
+    "filtering": "Filter",
+    "dispersion": "Dispersion image",
+    "mode": "Method",
+    "slicing": "Segments",
+    "selection": "Segment selection",
+    "whitening": "Whitening",
+    "normalization": "Normalization",
+    "stacking": "Stacking",
+    "image_stacking": "Image stacking",
+    "picking": "Picking",
+}
 
 
-def _study_history(journal: Iterable[JournalEntry], search: SearchDone | None) -> tuple[Step, ...]:
-    """The history of a run the autonomous mode made: its study's journal, the search at its
-    time."""
-    steps = [
-        Step(
-            id=entry.id,
-            kind=entry.kind,
-            by="you" if entry.kind in _USER_KINDS else "agent",
-            at=entry.at,
-            text=text,
-            detail=detail,
-            of=entry.of,
-        )
-        for entry in journal
-        for text, detail in [_entry_text(entry)]
-    ]
-    if search is not None:
-        made = Step(id="S1", kind="search", by="agent", at=search.at, text=_search_text(search))
-        later = next((n for n, one in enumerate(steps) if one.at and one.at > search.at), None)
-        steps.insert(len(steps) if later is None else later, made)
-    return tuple(steps)
-
-
-def _entry_text(entry: JournalEntry) -> tuple[str, str]:
-    """A journal entry in words, and more on hover: a commit's changes, their reasons on hover;
-    an experiment's variants with their passes; else its text without its id."""
-    data = entry.data
-    changes, reasons = data.get("changes"), data.get("reasons")
-    if entry.kind == "commit" and isinstance(changes, dict) and changes:
-        how = "Made run" if data.get("new_run") else "Changed the line in run"
-        said = changes_text(cast(dict[str, Any], changes))
-        why = cast(dict[str, Any], reasons) if isinstance(reasons, dict) else {}
-        return (
-            f"{how} {data.get('run_id', '')}: {said}",
-            "; ".join(f"{key}: {reason}" for key, reason in why.items()),
-        )
-    variants = data.get("variants")
-    if entry.kind == "experiment" and isinstance(variants, list) and variants:
-        tried = [cast(dict[str, Any], one) for one in cast(list[Any], variants)]
-        count = max(int(one.get("windows", 0)) for one in tried)
-        return (
-            f"On {plural(count, 'trial window')}: "
-            + "; ".join(_variant_text(one) for one in tried),
-            "",
-        )
-    return entry.text.removeprefix(entry.id).strip(), ""
-
-
-def _variant_text(variant: Mapping[str, Any]) -> str:
-    """An experiment's variant in a line: "2, masw length 36: 9 of 12 passing"."""
-    passing = f"{variant.get('passing', 0)} of {variant.get('windows', 0)} passing"
-    if variant.get("label") == "current":
-        return f"the line's settings, {passing}"
-    changes = cast(Mapping[str, Any], variant.get("changes") or {})
-    return f"{variant.get('label')}, {changes_text(changes)}: {passing}"
-
-
-def _search_text(search: SearchDone) -> str:
-    """The search in a line: the grid's variants, those too poor to show, how the eye judged
-    the others, the finalists."""
-    said = (
-        f"{plural(search.variants, 'variant')} of the grid over "
-        f"{plural(search.settings, 'setting')}"
+def _curves(stages: Iterable[StageCount], journal: Sequence[JournalEntry], maker: Maker) -> Setting:
+    """The curves tile: those the freeze kept and rejected, else those picked."""
+    picked = next(count for count in stages if count.key == "dispersion")
+    frozen = next(
+        (
+            found
+            for entry in reversed(journal)
+            if entry.kind == "freeze" and (found := _FROZEN.search(entry.text))
+        ),
+        None,
     )
-    if search.dropped:
-        said += (
-            f", {search.dropped} too poor to show (no image, or under a quarter of the windows "
-            "passing)"
+    by = _MAKERS[maker]
+    if frozen is not None:
+        accepted, rejected = int(frozen.group(1)), int(frozen.group(2))
+        return Setting(
+            key="curves",
+            label="Curves",
+            value=f"{accepted} of {accepted + rejected} accepted",
+            detail=f"{rejected} rejected" if rejected else "",
+            why="the assistant accepted or rejected each window's curve",
+            origin=by,
         )
-    if search.sheets:
-        said += (
-            f"; the others judged by eye in {plural(search.sheets, 'sheet')} over "
-            f"{plural(search.rounds, 'round')}"
+    return Setting(
+        key="curves",
+        label="Curves",
+        value=f"{picked.done} of {picked.total}",
+        detail="windows picked",
+        why="picked by the assistant" if maker != "manual" else "picked by you",
+        origin=by if picked.done else "default",
+    )
+
+
+def _profiles(
+    stages: Iterable[StageCount], journal: Sequence[JournalEntry], log: QCLog | None, maker: Maker
+) -> Setting:
+    """The Vs profiles tile: how many passed the model's check of those made, how many it
+    flagged and rejected; else how many windows were inverted."""
+    inverted = next(count for count in stages if count.key == "inversion")
+    verdicts = _model_verdicts(journal, log)
+    if verdicts:
+        passed, flagged, rejected = _verdict_counts(verdicts)
+        return Setting(
+            key="profiles",
+            label="Vs profiles",
+            value=f"{passed} of {len(verdicts)} passed",
+            detail=SEP.join(_counted((flagged, "flagged"), (rejected, "rejected"))),
+            why=MODEL_CHECK,
+            origin=_MAKERS[maker],
         )
-    if search.finalists and search.experiment:
-        said += (
-            f"; the finalists {', '.join(search.finalists)} tried side by side in "
-            f"{search.experiment}"
+    if inverted.done:
+        return Setting(
+            key="profiles",
+            label="Vs profiles",
+            value=f"{inverted.done} of {inverted.total}",
+            detail="windows inverted",
+            why="inverted by the assistant" if maker != "manual" else "inverted by you",
+            origin=_MAKERS[maker],
         )
-    return said
+    return Setting(
+        key="profiles",
+        label="Vs profiles",
+        value="none yet",
+        why="no window inverted yet",
+        origin="default",
+    )
+
+
+def _verdict_counts(verdicts: Mapping[str, str]) -> tuple[int, int, int]:
+    """How many models passed the model's check, how many it flagged (still after its retries) and
+    rejected."""
+    counts = Counter(verdicts.values())
+    return counts["pass"], counts["retry"], counts["reject"]
+
+
+def _counted(*counts: tuple[int, str]) -> list[str]:
+    """Counts in words, a line each, those of none left out: "3 flagged"."""
+    return [f"{count} {word}" for count, word in counts if count]
+
+
+def _model_verdicts(journal: Sequence[JournalEntry], log: QCLog | None) -> dict[str, str]:
+    """Each inverted window's latest verdict on its model: the autonomous mode's inversions, from
+    its journal; else the checks' in the run's log; none for a run no check judged."""
+    found: dict[str, str] = {}
+    for entry in journal:
+        if entry.kind == "inversion":
+            found |= {
+                str(unit): str(verdict)
+                for unit, verdict in cast(dict[str, Any], entry.data.get("g5") or {}).items()
+            }
+    if found or log is None:
+        return found
+    for attempt in log.attempts:
+        if (
+            attempt.stage == "inversion"
+            and attempt.unit != LINE
+            and (g5 := attempt.results.get("G5"))
+        ):
+            found[attempt.unit] = g5.verdict
+    return found
+
+
+def _reasons(
+    journal: Sequence[JournalEntry],
+    settings: Sequence[Setting],
+    given: Sequence[Given],
+    spacing: float,
+    length: int,
+) -> tuple[Reason, ...]:
+    """Why the settings are what they are: the assistant's own reasons for those it chose (its
+    commits', the latest of each setting; a commit's reasons for one setting `SEP` apart, each
+    once), then
+    the settings the user set, each its value in words (the windows' `length` where the shots
+    used count from)."""
+    found: dict[tuple[str, str], Reason] = {}
+    for entry in journal:
+        if entry.kind != "commit":
+            continue
+        changes = cast(dict[str, Any], entry.data.get("changes") or {})
+        own: dict[str, list[str]] = {}
+        theirs: dict[str, str] = {}
+        for key, reason in cast(dict[str, Any], entry.data.get("reasons") or {}).items():
+            name = _SETTING_NAMES.get(key) or _SETTING_NAMES.get(key.split(" ")[0]) or key
+            said = plain_reason(str(reason))
+            if said.startswith(USER_REASON):
+                stage, _, field = key.partition(" ")
+                value = changes.get(stage)
+                values = (
+                    {stage: {field: cast(dict[str, Any], value).get(field)}}
+                    if field and isinstance(value, dict)
+                    else {stage: value}
+                )
+                theirs[name] = settings_said(values, spacing, length).get(name) or said
+            else:
+                own.setdefault(name, []).append(said[:1].upper() + said[1:])
+        for name, texts in own.items():
+            found[name, "agent"] = Reason(
+                setting=name, text=SEP.join(dict.fromkeys(texts)), by="agent"
+            )
+        for name, text in theirs.items():
+            found[name, "you"] = Reason(setting=name, text=text, by="you")
+    for one in given:
+        if one.family == "processing":
+            for name, value in settings_said(one.values, spacing, length).items():
+                found[name, "you"] = Reason(setting=name, text=value, by="you")
+    if not journal and not given:
+        for setting in settings:
+            # What the run gave, not a setting: its records used, its curves, its Vs profiles.
+            if setting.origin == "you" and setting.key not in ("records", "curves", "profiles"):
+                found[setting.label, "you"] = Reason(
+                    setting=setting.label, text=setting.value, by="you"
+                )
+    return tuple(found.values())
+
+
+def _study_history(
+    journal: Sequence[JournalEntry],
+    search: SearchDone | None,
+    survey: SurveyDone | None,
+    manifest: RunManifest,
+    log: QCLog | None,
+    picked: int,
+) -> tuple[Step, ...]:
+    """What the autonomous mode did, a step each, in order: what the user asked, the records, the
+    choice of the settings, the line processed, the curves picked, the Vs profiles; the
+    assistant's own reasoning left to its journal."""
+    spacing = manifest.profile.receiver_spacing_m
+    length = int(preset_stage(manifest, "masw")["length"])
+    steps: list[Step] = []
+    commits = 0
+    for entry in journal:
+        if entry.kind == "objective":
+            said = entry.text.removeprefix(entry.id).strip()
+            lines = tuple(part.strip().capitalize() for part in said.split(",") if part.strip())
+            steps.append(
+                Step(kind="objective", by="you", at=entry.at, title="You asked", lines=lines)
+            )
+        elif entry.kind == "settings":
+            changed = tuple(str(one) for one in cast(list[Any], entry.data.get("changed") or []))
+            steps.append(
+                Step(kind="settings", by="you", at=entry.at, title="You changed", lines=changed)
+            )
+        elif entry.kind == "reopen":
+            asked = str(entry.data.get("request") or "")
+            steps.append(
+                Step(kind="reopen", by="you", at=entry.at, title="You asked again", lines=(asked,))
+            )
+        elif entry.kind == "commit":
+            commits += 1
+            changes = cast(dict[str, Any], entry.data.get("changes") or {})
+            title = "Processed the whole line" if commits == 1 else "Changed the line's settings"
+            steps.append(
+                Step(
+                    kind="commit",
+                    by="agent",
+                    at=entry.at,
+                    title=title,
+                    lines=tuple(plain(changes, spacing, length)),
+                )
+            )
+        elif entry.kind == "freeze":
+            found = _FROZEN.search(entry.text)
+            lines = [f"{plural(len(manifest.windows), 'window')} picked automatically"]
+            if picked:
+                lines.append(f"{picked} picked again by the assistant")
+            if found:
+                lines += [f"{found.group(1)} accepted", f"{found.group(2)} rejected"]
+            steps.append(
+                Step(
+                    kind="freeze",
+                    by="agent",
+                    at=entry.at,
+                    title="Picked the curves",
+                    lines=tuple(lines),
+                )
+            )
+    if survey is not None:
+        steps.append(_survey_step(survey, journal, manifest, log))
+    if (tried := _tried_step(journal, search)) is not None:
+        steps.append(tried)
+    if (inverted := _inverted_step(journal)) is not None:
+        steps.append(inverted)
+    first = min((step.at for step in steps if step.at is not None), default=None)
+    return tuple(sorted(steps, key=lambda step: step.at or first or datetime.min))
+
+
+def _survey_step(
+    survey: SurveyDone, journal: Sequence[JournalEntry], manifest: RunManifest, log: QCLog | None
+) -> Step:
+    """The records looked at, after the objective: how many, the band they share, those left
+    out and why."""
+    records = "noise records" if survey.kind == "passive" else "shots"
+    lines = [f"{len(survey.shots)} {records} on {survey.receivers} receivers"]
+    if survey.usable_spread_hz is not None:
+        low, high = survey.usable_spread_hz
+        lines.append(f"Signal usable from {number(low)} to {number(high)} Hz")
+    excluded = manifest.exclusions.records
+    if excluded:
+        lines.append(f"{plural(len(excluded), 'record')} left out")
+        lines += [one[:1].upper() + one[1:] for one in _left_out(log, excluded)]
+    asked = next((entry.at for entry in journal if entry.kind == "objective"), None)
+    return Step(
+        kind="survey", by="agent", at=asked, title="Looked at your records", lines=tuple(lines)
+    )
+
+
+def _tried_step(journal: Sequence[JournalEntry], search: SearchDone | None) -> Step | None:
+    """The choice of the settings, in a few lines: what the search made, dropped, judged and left,
+    then the trials after it."""
+    experiments = [entry for entry in journal if entry.kind == "experiment"]
+    own = [entry for entry in experiments if search is None or entry.id != search.experiment]
+    lines: list[str] = []
+    if search is not None:
+        lines += [
+            f"{search.variants} combinations of settings made",
+            *_counted((search.dropped, "dropped by the checks")),
+            f"{search.variants - search.dropped} judged by eye",
+            f"{len(search.finalists)} best selected",
+        ]
+    if own:
+        lines.append(f"{plural(len(own), 'trial')} of settings")
+    if not lines:
+        return None
+    at = search.at if search is not None else own[0].at
+    return Step(
+        kind="search", by="agent", at=at, title="Chose the processing settings", lines=tuple(lines)
+    )
+
+
+def _inverted_step(journal: Sequence[JournalEntry]) -> Step | None:
+    """The curves turned into Vs profiles: how many, and how many passed the model's check, were
+    flagged and rejected."""
+    runs = [entry for entry in journal if entry.kind == "inversion"]
+    if not runs:
+        return None
+    latest = _model_verdicts(journal, None)
+    passed, flagged, rejected = _verdict_counts(latest)
+    return Step(
+        kind="inversion",
+        by="agent",
+        at=runs[0].at,
+        title="Turned the curves into Vs profiles",
+        lines=(
+            f"{plural(len(latest), 'curve')} inverted",
+            *_counted((passed, "passed"), (flagged, "flagged"), (rejected, "rejected")),
+        ),
+        detail=MODEL_CHECK[:1].upper() + MODEL_CHECK[1:],
+    )
 
 
 def _run_history(
     run_folder: Path,
     manifest: RunManifest,
     log: QCLog | None,
-    records: Setting,
     stages: Iterable[StageCount],
 ) -> tuple[Step, ...]:
-    """The history of a run PAC or the workflow made, from its files: the settings the user gave
-    before each stage, the records used, the workflow's trials on the line, the windows imaged,
-    picked, inverted and inverted to soil columns, each by who did it."""
+    """What PAC or the workflow did, from the run's files, a step each: the settings the user
+    gave, the records read, the workflow's choices on the line, the line processed, the curves
+    picked, inverted and turned into soil columns, each by who did it."""
+    spacing = manifest.profile.receiver_spacing_m
     done = {count.key: count for count in stages}
     given = given_settings(run_folder)
 
     def gave(family: str) -> list[Step]:
+        title = "Your settings" if family == "processing" else f"Your settings for the {family}"
         return [
             Step(
                 kind="given",
                 by="you",
                 at=one.at,
-                text=f"Your settings for the {family}: {changes_text(one.values)}",
+                title=title,
+                lines=tuple(
+                    plain(one.values, spacing, int(preset_stage(manifest, "masw")["length"]))
+                ),
             )
             for one in given
             if one.family == family
         ]
 
-    def stage(kind: str, log_stage: str, text: str, unit: str = "window") -> Step:
+    def stage(
+        kind: str, log_stage: str, title: str, lines: list[str], unit: str = "window"
+    ) -> Step:
         attempts = [one for one in log.attempts if one.stage == log_stage] if log else []
-        again = _again(log, log_stage, unit)
+        if again := _again(log, log_stage, unit):
+            lines.append(f"Done again: {again}")
         return Step(
             kind=kind,
             by=log.chooser if log is not None and attempts else "you",
             at=min((one.started_at for one in attempts), default=None),
-            text=text + (f"; done again: {again}" if again else ""),
+            title=title,
+            lines=tuple(lines),
         )
 
     steps = gave("processing")
-    used = records.value.split(" of ")
-    left_out = f": {records.why}" if records.why != ALL_RECORDS else ""
+    used = sum(record.status == "succeeded" for record in manifest.records) - len(
+        manifest.exclusions.records
+    )
+    lines = [f"{used} of {plural(len(manifest.records), 'record')} used"]
+    if manifest.exclusions.records:
+        lines += [one[:1].upper() + one[1:] for one in _left_out(log, manifest.exclusions.records)]
+    steps.append(
+        stage("records", "preprocessing", "Read your records", lines, "record").model_copy(
+            update={"at": manifest.started_at}
+        )
+    )
+    steps += _trials(run_folder, spacing)
+    masw = preset_stage(manifest, "masw")
+    length, step = int(masw["length"]), int(masw["step"])
     steps.append(
         stage(
-            "records",
-            "preprocessing",
-            f"{used[0]} of {plural(int(used[-1]), 'record')} used{left_out}",
-            "record",
-        ).model_copy(update={"at": manifest.started_at})
+            "images",
+            "phase_shift",
+            "Processed the whole line",
+            [
+                f"{plural(len(manifest.windows), 'window')} of {receivers(length, spacing)}",
+                f"One every {receivers(step, spacing, length=False)}",
+            ],
+        )
     )
-    steps += _trials(run_folder)
-    imaged = len(manifest.windows)
-    steps.append(stage("images", "phase_shift", f"{plural(imaged, 'window')} imaged"))
     steps += _line_tries(run_folder)
     steps += gave("picking")
     picked = done["dispersion"]
     steps.append(
-        stage("picks", "picking", f"{picked.done} of {plural(picked.total, 'window')} picked")
+        stage(
+            "picks",
+            "picking",
+            "Picked the curves",
+            [f"{picked.done} of {plural(picked.total, 'window')}"],
+        )
     )
     steps += gave("inversion")
-    for key, log_stage, what in (
-        ("inversion", "inversion", "inverted"),
-        ("petro", "petro_inversion", "inverted to a soil column"),
+    for key, log_stage, title in (
+        ("inversion", "inversion", "Inverted the curves"),
+        ("petro", "petro_inversion", "Made the soil columns"),
     ):
         count = done[key]
         if count.done:
             steps.append(
-                stage(key, log_stage, f"{count.done} of {plural(count.total, 'window')} {what}")
+                stage(key, log_stage, title, [f"{count.done} of {plural(count.total, 'window')}"])
             )
     return tuple(steps)
 
 
-def _trials(run_folder: Path) -> list[Step]:
-    """The workflow's trials before the line's windows: the window length, the mute, a passive
+def _trials(run_folder: Path, spacing: float) -> list[Step]:
+    """The workflow's choices before the line's windows: the window length, the mute, a passive
     line's segments, each with the one kept."""
     steps: list[Step] = []
     choice = length_choice(run_folder)
     if choice is not None and choice.trials:
+        count = max(len(trial.xmids) for trial in choice.trials)
         steps.append(
             Step(
                 kind="length",
                 by="workflow",
-                text=f"{plural(len(choice.trials), 'length')} tried, "
-                f"{plural(choice.length, 'receiver')} kept",
+                title="Chose the window length",
+                lines=(
+                    f"{plural(len(choice.trials), 'length')} tried on {plural(count, 'sample window')}",
+                    f"Kept {receivers(choice.length, spacing)}",
+                ),
             )
         )
     mutes = mutes_tried(run_folder)
     if mutes:
-        kept = next((one.candidate for one in mutes if one.kept), None)
+        kept = next((one for one in mutes if one.kept), None)
         steps.append(
             Step(
                 kind="mute",
                 by="workflow",
-                text=f"{plural(len(mutes), 'mute')} tried, {_mute_kept(kept)}",
+                title="Chose the mute",
+                lines=(
+                    f"{plural(len(mutes), 'mute')} tried",
+                    f"Kept: {mute_name(kept).lower() if kept is not None else 'none'}",
+                ),
             )
         )
     segments = segments_tried(run_folder)
@@ -844,22 +1128,16 @@ def _trials(run_folder: Path) -> list[Step]:
             Step(
                 kind="segments",
                 by="workflow",
-                text=f"{plural(len(segments), 'segment length')} tried, "
-                + (
-                    f"{number(kept_segments.segment_s)} s kept"
+                title="Chose the segments",
+                lines=(
+                    f"{plural(len(segments), 'segment length')} tried",
+                    f"Kept {number(kept_segments.segment_s)} s"
                     if kept_segments is not None
-                    else "none kept"
+                    else "None kept",
                 ),
             )
         )
     return steps
-
-
-def _mute_kept(candidate: str | None) -> str:
-    """The mute a trial kept, in words."""
-    if candidate is None:
-        return "none kept"
-    return "no mute kept" if candidate == "none" else f"{MUTE_NAMES.get(candidate, candidate)} kept"
 
 
 def _line_tries(run_folder: Path) -> list[Step]:
@@ -872,7 +1150,7 @@ def _line_tries(run_folder: Path) -> list[Step]:
         Step(
             kind="line",
             by="workflow",
-            text=f"{plural(len(tries), 'change')} of the line's settings tried, {len(kept)} kept"
-            + (f" ({'; '.join(kept)})" if kept else ""),
+            title="Changed the line where curves failed",
+            lines=(f"{plural(len(tries), 'change')} tried", *(f"Kept: {one}" for one in kept)),
         )
     ]

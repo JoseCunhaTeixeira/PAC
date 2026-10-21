@@ -9,7 +9,7 @@ import { num, xmidOf } from "./format";
 import { LineGather, type GatherData } from "./LineGather";
 import { LinePlot } from "./LinePlot";
 import { vizPalette } from "./palette";
-import { StageHead, UnitCard } from "./panel";
+import { UnitCard } from "./panel";
 import { Normalization, SavedSpectrum } from "./RecordsPanel";
 import { runFigures, useRunFigures } from "./runFigures";
 import type { DispersionCard, Overview, WindowSources } from "./types";
@@ -148,14 +148,12 @@ export function DispersionPanel({
   folder,
   selected,
   overview,
-  overviewError,
   sources,
   onSelect,
 }: {
   folder: string;
   selected: string | null;
   overview: Overview | null;
-  overviewError: string | null;
   sources: WindowSources | null;
   onSelect: (key: string) => void;
 }) {
@@ -179,7 +177,6 @@ export function DispersionPanel({
 
   return (
     <>
-      <StageHead overview={overview} error={overviewError} />
       {selected && (
         <div className="viz-section">
           <UnitCard

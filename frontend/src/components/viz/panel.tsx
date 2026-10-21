@@ -43,21 +43,13 @@ function beyondLimits(gates: GateView[]): Sentence | null {
   return { mark: "warn", text: `Beyond the assistant's limits: ${names.join(", ")}.` };
 }
 
-export function StageHead({
-  overview,
-  error,
-  aside,
-}: {
-  overview: Overview | null;
-  error: string | null;
-  /** A choice for the whole stage (the model shown), on the summary's right. */
-  aside?: ReactNode;
-}) {
+/** The stage along the line in a line, and its line check's measures, in the same menu as a
+ * unit's. */
+export function StageHead({ overview, error }: { overview: Overview | null; error: string | null }) {
   if (error) return <ErrorBox message={error} />;
   if (!overview) return <Skeleton height={54} />;
   return (
-    <section className="viz-card">
-      <div className="viz-row">
+    <div className="viz-stage-head">
       <p
         className="viz-summary"
         data-tip={
@@ -68,11 +60,8 @@ export function StageHead({
       >
         {overview.summary}
       </p>
-      {aside}
-      </div>
-      {/* The line check's measures, in the same menu as a unit's. */}
       <GateTables gates={overview.gates ?? []} />
-    </section>
+    </div>
   );
 }
 
