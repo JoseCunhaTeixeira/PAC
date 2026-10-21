@@ -544,7 +544,8 @@ button.viz-option:active {
   border: 1px solid var(--border);
 }
 
-/* The stages' card: their tabs first, the line, then the stage along it in a line. */
+/* The stages' card: their tabs first, the line, then, apart, the stage along it in a line and its
+   measures. */
 .viz-card.viz-stage {
   margin-top: 22px;
 }
@@ -554,7 +555,15 @@ button.viz-option:active {
 }
 
 .viz-stage-head {
-  margin-top: 16px;
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.viz-stage-head .viz-fold {
+  margin-top: 6px;
+  padding-top: 0;
+  border-top: none;
 }
 
 .viz button.viz-tab {

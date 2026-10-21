@@ -18,13 +18,14 @@ from pydantic import BaseModel, ConfigDict
 from masw.io.quality.files import merged
 from masw.io.quality.journal import (
     EXPERIMENT_IMAGES,
+    SEARCH_IMAGES,
     ExperimentDone,
     JournalEntry,
     SearchDone,
     experiment_of,
 )
 from masw.io.quality.log import COHERENCE_FILE, LINE_LOOP_FILE, MUTE_FILE, SEGMENTS_FILE, Chooser
-from masw.io.quality.view import flag_text, number, plural, receivers, span
+from masw.io.quality.view import number, plural, receivers, span
 from sigpipe.masw.presets.stages import ACTIVE_STAGES, PASSIVE_ACTIVE_STAGES, PASSIVE_STAGES
 
 MUTE_NAMES = {
@@ -162,8 +163,8 @@ def tried_tables(
     reach: float | None,
 ) -> tuple[TriedTable, ...]:
     """Every comparison made to choose the run's settings: its line's trials, then its study's
-    experiments, in order; each read against the receivers' `spacing`, the preset's `defaults`
-    and the line's `reach` (the farthest shot when the settings give none)."""
+    search, its finalists side by side; each read against the receivers' `spacing`, the preset's
+    `defaults` and the line's `reach` (the farthest shot when the settings give none)."""
     tables = [
         table
         for table in (
@@ -174,19 +175,21 @@ def tried_tables(
         )
         if table is not None
     ]
+    if search is None or not search.finalists:
+        return tuple(tables)
     commits = [entry for entry in journal if entry.kind == "commit"]
     # The commits that made this run; a journal older than their runs' ids, its last.
     made = [one for one in commits if one.data.get("run_id") == run_folder.name] or commits[-1:]
-    finalists = search.experiment if search is not None else None
-    # The options by their settings as the tables say them: an option tried again keeps its name.
-    named: dict[tuple[tuple[str, str], ...], str] = {}
-    for entry in journal:
-        if entry.kind != "experiment":
-            continue
-        found = experiment_of(study, entry.id) if study is not None else None
-        base = _base(defaults, found.current if found is not None else {}, reach)
-        searched = search if entry.id == finalists else None
-        tables.append(_experiment(entry, found, base, spacing, made, searched, study, named))
+    # A search of an older PACo tried its finalists side by side, an experiment.
+    entry = next(
+        (one for one in journal if one.kind == "experiment" and one.id == search.experiment), None
+    )
+    found = experiment_of(study, entry.id) if study is not None and entry is not None else None
+    base = _base(defaults, found.current if found is not None else {}, reach)
+    if entry is not None:
+        tables.append(_tried_finalists(entry, found, base, spacing, made, search, study))
+    else:
+        tables.append(_searched(search, base, spacing, made, study))
     return tuple(tables)
 
 
@@ -603,23 +606,90 @@ def _base(
     return base
 
 
-def _experiment(
+def _search_intro(search: SearchDone, then: str) -> tuple[str, ...]:
+    """What the search did, a line each: what it made, dropped and judged by eye, how; `then`,
+    what came of its finalists."""
+    dropped = (
+        [f"{search.dropped} dropped: curves passed on fewer than a quarter of the sample windows"]
+        if search.dropped
+        else []
+    )
+    seen = (
+        f"on {search.places} dispersion images spread along the line"
+        if search.places
+        else "on their dispersion images"
+    )
+    return (
+        f"{search.variants} combinations of settings made",
+        *dropped,
+        f"{search.variants - search.dropped} judged by the assistant by eye {seen}",
+        f"In groups of 12, the best of each kept and grouped again until "
+        f"{len(search.finalists)} were left",
+        then,
+    )
+
+
+def _kept(
+    settings: Sequence[Mapping[str, Any]], base: Mapping[str, Any], made: Sequence[JournalEntry]
+) -> list[bool]:
+    """Whether each of `settings` is the line's: as a commit that `made` the run set them, the
+    user's as given."""
+    lines = [(merged(dict(base), _changes(one)), _theirs(one)) for one in made]
+    return [any(merged(dict(one), theirs) == line for line, theirs in lines) for one in settings]
+
+
+def _searched(
+    search: SearchDone,
+    base: Mapping[str, Any],
+    spacing: float,
+    made: Sequence[JournalEntry],
+    study: Path | None,
+) -> TriedTable:
+    """The search's finalists side by side, the one it chose first, each with every setting, how
+    many of its windows a curve passed, how deep its curves reach, and its dispersion images (the
+    search's thumbnails, which its study keeps)."""
+    settings = [merged(dict(base), dict(one.changes)) for one in search.finalists]
+    said = [settings_said(one, spacing) for one in settings]
+    columns = _columns(said)
+    kept = _kept(settings, base, made)
+    images = study / SEARCH_IMAGES if study is not None else None
+    rows: list[Tried] = []
+    for index, (one, values) in enumerate(zip(search.finalists, said, strict=True)):
+        depth = one.card.get("depth_m")
+        rows.append(
+            Tried(
+                name=f"Option {index + 1}",
+                values=tuple(values.get(column, "-") for column in columns),
+                clear=f"{one.card.get('covered', 0)} of {one.card.get('windows', 0)}",
+                depth=f"{number(depth)} m" if isinstance(depth, int | float) else "",
+                kept=kept[index],
+                trial=one.label,
+                images=images is not None and (images / f"{one.label}.npz").exists(),
+            )
+        )
+    then = (
+        f"The best of those {len(search.finalists)} chosen by eye"
+        if search.best is not None
+        else f"Those {len(search.finalists)} below"
+    )
+    return TriedTable(
+        title="Search", intro=_search_intro(search, then), columns=columns, rows=tuple(rows),
+        by="agent",
+    )  # fmt: skip
+
+
+def _tried_finalists(
     entry: JournalEntry,
     found: ExperimentDone | None,
     base: Mapping[str, Any],
     spacing: float,
     made: Sequence[JournalEntry],
-    search: SearchDone | None,
+    search: SearchDone,
     study: Path | None,
-    named: dict[tuple[tuple[str, str], ...], str],
 ) -> TriedTable:
-    """An experiment of the autonomous mode as a comparison: where it ran; each option with every
-    setting, the one the run was made with first (its settings the line's, as a commit that `made`
-    the run set them, the user's as given); the line's settings it was tried against last, when
-    the line had its own. The search's best options after what the search made, dropped and
-    judged. The first experiment's options are "Option 1", "Option 2"...; an option a later one
-    tries again keeps its name (`named`, by its settings), the others are its variants: "Variant
-    1"..."""
+    """The finalists of an older PACo's search, tried side by side at full size (an experiment),
+    each with every setting, the one the run was made with first; the line's settings they were
+    tried against last, when the line had its own."""
     variants = [
         cast(dict[str, Any], one)
         for one in cast(list[Any], entry.data.get("variants", []))
@@ -627,10 +697,8 @@ def _experiment(
     ]
     current = [one for one in variants if one.get("label") == "current"]
     tried = [one for one in variants if one.get("label") != "current"]
-    changes = [cast(Mapping[str, Any], one.get("changes") or {}) for one in tried]
-    settings = [merged(dict(base), dict(change)) for change in changes]
-    lines = [(merged(dict(base), _changes(one)), _theirs(one)) for one in made]
-    kept = [any(merged(one, theirs) == line for line, theirs in lines) for one in settings]
+    settings = [merged(dict(base), dict(one.get("changes") or {})) for one in tried]
+    kept = _kept(settings, base, made)
     said = [settings_said(one, spacing) for one in settings]
     line = found is not None and bool(found.current)
     start = settings_said(base, spacing)
@@ -653,57 +721,16 @@ def _experiment(
         )
 
     order = sorted(range(len(tried)), key=lambda index: not kept[index])
-    first, counted = not named, 0
-    rows: list[Tried] = []
-    for index in order:
-        key = tuple(said[index].items())
-        if key not in named:
-            counted += 1
-            named[key] = f"Option {counted}" if first else f"Variant {counted}"
-        rows.append(row(named[key], said[index], tried[index], kept[index]))
+    rows = [
+        row(f"Option {at}", said[index], tried[index], kept[index])
+        for at, index in enumerate(order, start=1)
+    ]
     rows += [row("Line's settings", start, one, False) for one in current if line]
-    count = max((int(one.get("windows", 0)) for one in variants), default=0)
-    spec = found.windows if found is not None and found.windows else entry.data.get("windows")
-    where = _where(str(spec or ""), count)
-    if search is None:
-        return TriedTable(
-            title="Settings tried", intro=(where,), columns=columns, rows=tuple(rows), by="agent"
-        )
-    dropped = (
-        [f"{search.dropped} dropped: curves passed on fewer than a quarter of the sample windows"]
-        if search.dropped
-        else []
-    )
-    intro = (
-        f"{search.variants} combinations of settings made",
-        *dropped,
-        f"{search.variants - search.dropped} judged by the assistant by eye on their dispersion "
-        "images",
-        f"The {len(tried)} best selected over {plural(search.rounds, 'round')}",
-        where,
-    )
-    return TriedTable(title="Search", intro=intro, columns=columns, rows=tuple(rows), by="agent")
-
-
-def _where(spec: str, count: int) -> str:
-    """The sample windows an experiment ran on, as the agent asked for them (PACo's trial set:
-    spread:n, holdout:n, failing, flag:<name>, xmids:[...], joined by +)."""
-    asked: list[str] = []
-    for part in (one.strip() for one in spec.split("+") if one.strip()):
-        kind, _, value = part.partition(":")
-        if kind == "spread" and value.isdigit():
-            asked.append(f"{plural(int(value), 'window')} spread along the line")
-        elif kind == "holdout" and value.isdigit():
-            asked.append(f"{plural(int(value), 'window')} the previous trial did not use")
-        elif kind == "failing":
-            asked.append("the windows whose curve did not pass")
-        elif kind == "flag":
-            asked.append(f"the windows flagged for {flag_text(value)}")
-        elif kind == "xmids":
-            asked.append("the windows asked for")
-        else:
-            asked.append(part)
-    return f"On {' and '.join(asked)}" if asked else f"On {plural(count, 'sample window')}"
+    then = f"Those {len(tried)} tried at full size"
+    return TriedTable(
+        title="Search", intro=_search_intro(search, then), columns=columns, rows=tuple(rows),
+        by="agent",
+    )  # fmt: skip
 
 
 def _columns(options: Sequence[Mapping[str, str]]) -> tuple[str, ...]:

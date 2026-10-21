@@ -924,7 +924,7 @@ def _study_history(
             )
     if survey is not None:
         steps.append(_survey_step(survey, journal, manifest, log))
-    if (tried := _tried_step(journal, search)) is not None:
+    if (tried := _tried_step(search)) is not None:
         steps.append(tried)
     if (inverted := _inverted_step(journal)) is not None:
         steps.append(inverted)
@@ -952,26 +952,30 @@ def _survey_step(
     )
 
 
-def _tried_step(journal: Sequence[JournalEntry], search: SearchDone | None) -> Step | None:
-    """The choice of the settings, in a few lines: what the search made, dropped, judged and left,
-    then the trials after it."""
-    experiments = [entry for entry in journal if entry.kind == "experiment"]
-    own = [entry for entry in experiments if search is None or entry.id != search.experiment]
-    lines: list[str] = []
-    if search is not None:
-        lines += [
-            f"{search.variants} combinations of settings made",
-            *_counted((search.dropped, "dropped by the checks")),
-            f"{search.variants - search.dropped} judged by eye",
-            f"{len(search.finalists)} best selected",
-        ]
-    if own:
-        lines.append(f"{plural(len(own), 'trial')} of settings")
-    if not lines:
+def _tried_step(search: SearchDone | None) -> Step | None:
+    """The choice of the settings, in a few lines: what the search made, dropped and judged, and
+    how it ended."""
+    if search is None:
         return None
-    at = search.at if search is not None else own[0].at
+    ended = (
+        [f"The best of the last {len(search.finalists)} chosen"]
+        if search.best is not None
+        else [f"The last {len(search.finalists)} tried at full size"]
+        if search.finalists
+        else []
+    )
+    lines = [
+        f"{search.variants} combinations of settings made",
+        *_counted((search.dropped, "dropped by the checks")),
+        f"{search.variants - search.dropped} judged by eye in groups of 12",
+        *ended,
+    ]
     return Step(
-        kind="search", by="agent", at=at, title="Chose the processing settings", lines=tuple(lines)
+        kind="search",
+        by="agent",
+        at=search.at,
+        title="Chose the processing settings",
+        lines=tuple(lines),
     )
 
 

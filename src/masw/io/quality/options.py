@@ -1,14 +1,20 @@
 """An option of the autonomous mode's comparisons, its dispersion images as the run's card shows
-them, small, at the windows it was tried on: the thumbnails the study kept of its trial (PACo's
-tidy), or, for the option the run was made with when none were kept, the run's own windows' there,
-made as PACo makes its sheets'."""
+them, small, at the windows it was judged on: the search's thumbnails of a finalist, or those the
+study kept of a trial (PACo's tidy), or, for the option the run was made with when none were kept,
+the run's own windows' there, made as PACo makes its sheets'."""
 
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
 from masw.io.quality.files import folder_path
-from masw.io.quality.journal import EXPERIMENT_IMAGES, EXPERIMENTS, ExperimentDone, study_of
+from masw.io.quality.journal import (
+    EXPERIMENT_IMAGES,
+    EXPERIMENTS,
+    SEARCH_IMAGES,
+    ExperimentDone,
+    study_of,
+)
 from sigpipe.masw.runs import window_folders, xmid_of
 from sigpipe.masw.runs.finding import IMAGE_FILE
 
@@ -28,9 +34,9 @@ class OptionImage(BaseModel):
 
 
 def option_images(folder: str, trial: str, line: bool) -> tuple[OptionImage, ...]:
-    """The dispersion images of the option tried as `trial` in the study of run `folder`, in order
-    along the line; `line`: the option the run was made with, its own windows' when the study kept
-    none. None for a run of no study."""
+    """The dispersion images of the option `trial` names in the study of run `folder` (a search's
+    variant by its label, or a trial by its key), in order along the line; `line`: the option the
+    run was made with, its own windows' when the study kept none. None for a run of no study."""
     from paco.autonomous.tools.grid import read_thumbs, thumbnail  # PACo's sheets'
 
     run_folder = folder_path(folder)
@@ -38,7 +44,10 @@ def option_images(folder: str, trial: str, line: bool) -> tuple[OptionImage, ...
     if study is None:
         return ()
     kept = study / EXPERIMENT_IMAGES / f"{trial}.npz"
-    if kept.exists():
+    searched = study / SEARCH_IMAGES / f"{trial}.npz"
+    if searched.exists():
+        thumbs = read_thumbs(searched)
+    elif kept.exists():
         thumbs = read_thumbs(kept)
     elif line:
         names = {round(xmid_of(name), 2): name for name in window_folders(run_folder)}

@@ -214,7 +214,7 @@ Open the **AI assistant** page, type your request and press Enter, for example:
 - *Process active_test_profile and invert it: I want its velocity section.*
 - *Process active_test_profile and give me the soil types and the water table.* The assistant runs the petrophysical inversion (a Silex model) on the curves the model was trained for: the bundled one needs curves reaching 43 Hz, and the assistant says how many of yours do.
 
-While it works, the page shows its steps in small grey text: each kind of step on one line, with how many times it ran and what it did (the survey, the search's finalists, the windows decided), the step under way last with its progress; once it answers, they fold under the answer. Under each answer, the tokens the model read and wrote for it; the list of conversations gives each one's total. Processing a profile takes a few minutes; an inversion, longer. When it has finished, open the **Dispersion Picking**, **Seismic Inversion**, **Petrophysical Inversion** or **Visualization** pages: they open on the latest run, the assistant's.
+While it works, the page shows its steps in small grey text: each kind of step on one line, with how many times it ran and what it did (the survey, the search's choice, the windows decided), the step under way last with its progress; once it answers, they fold under the answer. Under each answer, the tokens the model read and wrote for it; the list of conversations gives each one's total. Processing a profile takes a few minutes; an inversion, longer. When it has finished, open the **Dispersion Picking**, **Seismic Inversion**, **Petrophysical Inversion** or **Visualization** pages: they open on the latest run, the assistant's.
 
 ### The assistant's settings
 

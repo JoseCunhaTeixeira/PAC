@@ -15,6 +15,8 @@ STUDIES = "studies"  # in a profile's output folder
 LINE_FILE = "line.json"  # in a study's folder
 JOURNAL_FILE = "journal.jsonl"
 SEARCH_FILE = "searches/S1.json"
+# The search's thumbnails, each variant's (its finalists' alone once a session ends): <label>.npz.
+SEARCH_IMAGES = "searches/S1_images"
 KNOCKOUT_FILE = "searches/S1_knockout.json"
 JUDGED_FILE = "searches/S1_judged.jsonl"
 SURVEY_FILE = "survey.json"
@@ -38,10 +40,22 @@ class JournalEntry(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict[str, Any])
 
 
+class SearchRow(BaseModel):
+    """A variant of the search: its label, the changes of the line's settings it makes, and its
+    scores (how many of its windows a curve passed, how deep its curves reach)."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    label: str
+    changes: dict[str, Any] = Field(default_factory=dict[str, Any])
+    card: dict[str, Any] = Field(default_factory=dict[str, Any])
+
+
 class SearchDone(BaseModel):
     """The study's search: how many variants of the grid it made, over how many settings, how
-    many no sheet showed (the really bad), the sheets the eye judged over how many rounds, and
-    the finalists with the experiment that tried them."""
+    many no sheet showed (the really bad), the places along the line each variant was shown at,
+    the sheets the eye judged over how many rounds; its finalists, best first, with the one the
+    eye chose of them (or, a search of an older PACo, the experiment that tried them)."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -49,9 +63,11 @@ class SearchDone(BaseModel):
     variants: int
     settings: int
     dropped: int
+    places: int = 0
     sheets: int
     rounds: int
-    finalists: tuple[str, ...] = ()
+    finalists: tuple[SearchRow, ...] = ()
+    best: str | None = None
     experiment: str | None = None
 
 
@@ -136,14 +152,21 @@ def search_of(study: Path) -> SearchDone | None:
             else {}
         )
         judged = _judged(study, at)
+        rows = {str(row["label"]): row for row in made["rows"]}
+        best = knockout.get("best")
+        labels = sorted(knockout.get("finalists", ()), key=lambda label: label != best)
         return SearchDone(
             at=at,
-            variants=len(made["rows"]),
+            variants=len(rows),
             settings=len(made.get("axes", {})),
             dropped=int(made.get("dropped", 0)),
+            places=len(made.get("places", ())),
             sheets=len(judged),
             rounds=len({sheet.get("round") for sheet in judged}),
-            finalists=tuple(knockout.get("finalists", ())),
+            finalists=tuple(
+                SearchRow.model_validate(rows.get(label, {"label": label})) for label in labels
+            ),
+            best=best,
             experiment=knockout.get("experiment"),
         )
     except OSError, ValueError, KeyError, TypeError:

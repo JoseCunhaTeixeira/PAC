@@ -44,21 +44,15 @@ function Thumb({ one }: { one: OptionImage }) {
   );
 }
 
-/** The option's dispersion images; where none can be shown, the windows it was tried on. */
+/** The option's dispersion images; where none can be shown, said so. */
 export function OptionImages({ folder, option }: { folder: string; option: Tried }) {
   const url =
     option.images && option.trial
       ? `${API}/quality/option_images/${encodeURIComponent(folder)}/${option.trial}?line=${option.kept}`
       : null;
   const images = useJson<OptionImage[]>(url);
-  const windows = option.windows ?? [];
   if (url === null || images.error || (images.data && images.data.length === 0)) {
-    return (
-      <ul className="viz-tried-intro">
-        <li>No dispersion images kept for this option</li>
-        {windows.length > 0 && <li>Windows at {windows.map((x) => num(x)).join(", ")} m</li>}
-      </ul>
-    );
+    return <div className="viz-thumbs-loading">No dispersion images kept for this option</div>;
   }
   if (!images.data) return <div className="viz-thumbs-loading">Loading the dispersion images…</div>;
   return (

@@ -1639,35 +1639,57 @@ def _study(profile: Path, run_id: str) -> Path:
     return study
 
 
-def test_an_option_tried_again_keeps_its_name_the_others_are_its_variants(tmp_path: Path) -> None:
-    def experiment(name: str, *changes: dict[str, Any]) -> JournalEntry:
-        variants = [
-            {"label": str(index), "changes": one, "passing": 1, "windows": 2}
-            for index, one in enumerate(changes, start=1)
-        ]
-        return JournalEntry(
-            id=name, kind="experiment", at=datetime.now(UTC), text="", data={"variants": variants}
-        )
-
-    longer, shorter = {"masw": {"length": 9}}, {"masw": {"length": 7}}
-    commit = JournalEntry(
-        id="L1", kind="commit", at=datetime.now(UTC), text="", data={"changes": longer}
-    )
-    journal = [
-        experiment("E1", shorter, longer),
-        experiment("E2", longer, {"masw": {"length": 9, "distance_max": 20.0}}),
-        commit,
+def test_a_search_shows_its_finalists_the_one_it_chose_first(tmp_path: Path) -> None:
+    study = tmp_path / "study"
+    (study / "searches" / "S1_images").mkdir(parents=True)
+    rows = [
+        {
+            "label": f"g{n}",
+            "changes": {"masw": {"length": 5 + 2 * n}},
+            "card": {"covered": n, "windows": 12, "depth_m": 10.0 + n},
+        }
+        for n in range(1, 5)
     ]
+    search = {
+        "made_at": "2026-10-21T15:00:00+00:00",
+        "rows": rows,
+        "dropped": 0,
+        "axes": {"length": ["7", "9", "11", "13"]},
+        "places": [10.0 * n for n in range(1, 13)],
+    }
+    (study / "searches" / "S1.json").write_text(json.dumps(search))
+    knockout = {"round": 3, "sheets": [], "finalists": ["g2", "g3", "g4"], "best": "g3"}
+    (study / "searches" / "S1_knockout.json").write_text(json.dumps(knockout))
+    (study / "searches" / "S1_images" / "g3.npz").write_bytes(b"")
+    commit = JournalEntry(
+        id="L1",
+        kind="commit",
+        at=datetime.now(UTC),
+        text="",
+        data={"changes": {"masw": {"length": 11}}},
+    )
     defaults = make_preset("active").model_dump(mode="json")
 
-    first, second = tried_tables(tmp_path, journal, None, None, 1.0, defaults, None)
+    (table,) = tried_tables(
+        tmp_path / "run", [commit], search_of(study), study, 1.0, defaults, None
+    )
 
-    # The first comparison's options by number, the one the line was made with first; the second
-    # tries it again, under its name, and a variant of it.
-    assert [(one.name, one.kept) for one in first.rows] == [("Option 1", True), ("Option 2", False)]
-    assert [(one.name, one.kept) for one in second.rows] == [
-        ("Option 1", True),
-        ("Variant 1", False),
+    # What the search did, then its finalists side by side, the one it chose first and the line
+    # made with, each with how many of its windows a curve passed, how deep, and its images where
+    # the study kept them; nothing tried after it.
+    assert table.title == "Search"
+    assert table.intro == (
+        "4 combinations of settings made",
+        "4 judged by the assistant by eye on 12 dispersion images spread along the line",
+        "In groups of 12, the best of each kept and grouped again until 3 were left",
+        "The best of those 3 chosen by eye",
+    )
+    assert [
+        (row.name, row.kept, row.trial, row.images, row.clear, row.depth) for row in table.rows
+    ] == [
+        ("Option 1", True, "g3", True, "3 of 12", "13 m"),
+        ("Option 2", False, "g2", False, "2 of 12", "12 m"),
+        ("Option 3", False, "g4", False, "4 of 12", "14 m"),
     ]
 
 
@@ -1683,7 +1705,8 @@ def test_a_study_is_read_for_the_runs_its_line_was(tmp_path: Path) -> None:
     search = search_of(study)
     assert search is not None
     assert (search.variants, search.settings, search.dropped) == (3, 2, 1)
-    assert (search.sheets, search.rounds, search.finalists) == (3, 2, ("g1", "g2"))
+    assert (search.sheets, search.rounds) == (3, 2)
+    assert [one.label for one in search.finalists] == ["g1", "g2"]
     assert study_of(profile, "20261021-160000-0000") is None
     assert study_of(tmp_path / "noise", "20261021-151000-abcd") is None
 
@@ -1734,8 +1757,8 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
         "3 combinations of settings made",
         "1 dropped: curves passed on fewer than a quarter of the sample windows",
         "2 judged by the assistant by eye on their dispersion images",
-        "The 2 best selected over 2 rounds",
-        "On 12 windows spread along the line",
+        "In groups of 12, the best of each kept and grouped again until 2 were left",
+        "Those 2 tried at full size",
     ]
     assert experiment["columns"] == [
         "Windows",
@@ -1783,8 +1806,8 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
             [
                 "3 combinations of settings made",
                 "1 dropped by the checks",
-                "2 judged by eye",
-                "2 best selected",
+                "2 judged by eye in groups of 12",
+                "The last 2 tried at full size",
             ],
         ),
         (
