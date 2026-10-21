@@ -953,15 +953,16 @@ def _survey_step(
 
 
 def _tried_step(search: SearchDone | None) -> Step | None:
-    """The choice of the settings, in a few lines: how many combinations the eye compared and on
-    what, the best it kept, the one chosen of them."""
+    """The choice of the settings, in a few lines: how many combinations, their dispersion images
+    compared by eye, the best of them chosen."""
     if search is None:
         return None
-    lines = [f"{search.variants - search.dropped} combinations compared by eye"]
-    if search.places:
-        lines.append(f"Each on {search.places} dispersion images along the line")
+    lines = [
+        f"{search.variants - search.dropped} combinations of settings",
+        "Dispersion images compared by eye",
+    ]
     if search.finalists:
-        lines += [f"The {len(search.finalists)} best kept", "The best of them chosen"]
+        lines.append("The best of them chosen")
     return Step(
         kind="search",
         by="agent",

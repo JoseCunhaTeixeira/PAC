@@ -616,7 +616,7 @@ def _search_intro(search: SearchDone) -> tuple[str, ...]:
     )
     return (
         f"{search.variants - search.dropped} combinations of settings compared by eye{seen}",
-        f"The {len(search.finalists)} best of them, side by side, the chosen one first",
+        f"The {len(search.finalists)} best of them:",
     )
 
 
