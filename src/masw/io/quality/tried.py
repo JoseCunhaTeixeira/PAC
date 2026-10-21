@@ -607,9 +607,15 @@ def _base(
 
 
 def _search_intro(search: SearchDone) -> tuple[str, ...]:
-    """What the search did, in short: how many combinations the eye compared, then its best."""
+    """What the search did, in short: how many combinations the eye compared and on what, then its
+    best."""
+    seen = (
+        f", each on {search.places} dispersion images spread along the line"
+        if search.places
+        else " on their dispersion images"
+    )
     return (
-        f"{search.variants - search.dropped} combinations of settings compared by eye",
+        f"{search.variants - search.dropped} combinations of settings compared by eye{seen}",
         f"The {len(search.finalists)} best",
     )
 

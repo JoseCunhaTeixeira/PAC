@@ -1678,7 +1678,11 @@ def test_a_search_shows_its_finalists_the_one_it_chose_first(tmp_path: Path) -> 
     # made with, each with how many of its windows a curve passed, how deep, and its images where
     # the study kept them; nothing tried after it.
     assert table.title == "Search"
-    assert table.intro == ("4 combinations of settings compared by eye", "The 3 best")
+    assert table.intro == (
+        "4 combinations of settings compared by eye, each on 12 dispersion images spread along "
+        "the line",
+        "The 3 best",
+    )
     assert [
         (row.name, row.kept, row.trial, row.images, row.clear, row.depth) for row in table.rows
     ] == [
@@ -1748,7 +1752,10 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
     # line had no settings of its own then: none shown against the options.
     (experiment,) = card["tried"]
     assert (experiment["title"], experiment["by"]) == ("Search", "agent")
-    assert experiment["intro"] == ["2 combinations of settings compared by eye", "The 2 best"]
+    assert experiment["intro"] == [
+        "2 combinations of settings compared by eye on their dispersion images",
+        "The 2 best",
+    ]
     assert experiment["columns"] == [
         "Windows",
         "Shots used",
