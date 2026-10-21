@@ -373,9 +373,9 @@ def inversion_overview(folder: str) -> Overview:
         if not runs
         else " by hand"
         if not assistant
-        else " by the assistant"
+        else " by the agent"
         if not by_hand
-        else f": {assistant} by the assistant, {by_hand} by hand"
+        else f": {assistant} by the agent, {by_hand} by hand"
     )
     if runs:
         passed, flagged, rejected = (statuses.count(one) for one in ("pass", "warn", "fail"))
@@ -440,7 +440,7 @@ def window_inversion_settings(
     def why(key: str) -> str:
         if not assistant:
             return "set by hand" + (
-                "" if (run_folder / PAC_CONFIG_FILE).exists() else " (or by the assistant, earlier)"
+                "" if (run_folder / PAC_CONFIG_FILE).exists() else " (or by the agent, earlier)"
             )
         retried = changed.get(key)
         return RULES[key] + (

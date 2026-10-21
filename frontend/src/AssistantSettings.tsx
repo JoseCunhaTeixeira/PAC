@@ -267,8 +267,8 @@ function SettingsForm({
     >
       <header className="settings-head">
         <div>
-          <h2 id="settings-title">Assistant settings</h2>
-          <p>How the AI assistant works, and its model.</p>
+          <h2 id="settings-title">Agent settings</h2>
+          <p>How the AI agent works, and its model.</p>
         </div>
         <button type="button" className="ghost settings-close" aria-label="Close" onClick={onClose}>
           <CrossIcon size={16} />

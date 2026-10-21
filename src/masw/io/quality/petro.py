@@ -360,7 +360,7 @@ def _settings(
 ) -> tuple[Setting, ...]:
     if model is None:
         return ()
-    why = "set by hand" if origin == "you" else "chosen by the assistant"
+    why = "set by hand" if origin == "you" else "chosen by the agent"
     if card is None:
         return (Setting(key="model", label="Silex model", value=model, why=why, origin=origin),)
     covered = sum(1 for gaps in found if not gaps)

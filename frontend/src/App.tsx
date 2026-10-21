@@ -48,7 +48,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   { label: null, items: [{ to: "/", label: "Home", icon: <HomeIcon /> }] },
   {
     label: "Automate",
-    items: [{ to: "/assistant", label: "AI assistant", icon: <SparklesIcon /> }],
+    items: [{ to: "/assistant", label: "AI agent", icon: <SparklesIcon /> }],
   },
   {
     label: "Compute",

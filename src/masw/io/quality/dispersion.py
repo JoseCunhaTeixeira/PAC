@@ -515,7 +515,7 @@ def _picks(
     by = (
         "by hand"
         if picked_by != "auto"
-        else "automatically by the assistant"
+        else "automatically by the agent"
         if assistant
         else "automatically"
     )
@@ -556,7 +556,7 @@ def _picks(
         said.append(
             Sentence(
                 mark="warn",
-                text="Beyond the assistant's limits: "
+                text="Beyond the agent's limits: "
                 + ", ".join(flag_text(name) for name in failed)
                 + ".",
             )
@@ -624,7 +624,7 @@ def _picking_setting(
         )
     again = [one for one in log.of(unit, "picking") if one.attempt > 1]
     asked = Counter(flag_text(one.triggered_by.partition(":")[2]) for one in again)
-    why = "the assistant's picker tracked M0 along its ridge"
+    why = "the agent's picker tracked M0 along its ridge"
     if again:
         why += (
             "; picked again by the curve check (G3: "

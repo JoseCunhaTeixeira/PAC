@@ -418,7 +418,7 @@ def verdict_sentence(unit: str, *results: GateResult | None) -> Sentence | None:
     status = verdict_status(*judged)
     if status == "pass":
         gates = ", ".join(result.gate for result in judged)
-        return Sentence(mark="pass", text=f"The assistant's checks ({gates}) passed this {unit}.")
+        return Sentence(mark="pass", text=f"The agent's checks ({gates}) passed this {unit}.")
     if status == "fail":
         rejected = [result for result in judged if result.verdict == "reject"]
         flags = [flag for result in rejected for flag in result.flags]

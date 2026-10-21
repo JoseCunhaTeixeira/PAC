@@ -14,12 +14,12 @@ PAC runs entirely **on your own computer**. You start it once, then use it throu
 - **Seismic inversion:** turns dispersion curves into shear-wave velocity profiles by Bayesian inversion (sigpipe). The number of layers is chosen by the data, or set by you; each model's dispersion curve is computed with [Disba](https://github.com/keurfonluu/disba).
 - **Petrophysical inversion:** computes soil profiles from dispersion data using the AI inversion model from [silex](https://github.com/JoseCunhaTeixeira/silex).
 - **User-friendly interface:** streamlined workflow with visualization capabilities.
-- **Assistant:** an AI agent, PACo, that processes profiles for you when you ask it in plain words, checking the quality of every step. It uses the language model you choose: a provider's API (Claude, OpenAI, Gemini, Mistral) or your own server. See [The assistant](#the-assistant).
+- **Agent:** PACo, an AI agent that processes profiles for you when you ask it in plain words, checking the quality of every step. It uses the language model you choose: a provider's API (Claude, OpenAI, Gemini, Mistral) or your own server. See [The agent](#the-agent).
 
 ## Overview
 <img width="1643" height="1738" alt="pac-home" src="https://github.com/user-attachments/assets/c060f45f-52aa-4c34-a6b5-7689c2f9b046" />
 <img width="1641" height="1740" alt="pac-visu" src="https://github.com/user-attachments/assets/0f791ee5-b1af-4260-982a-3f644b9b7ae1" />
-<img width="1672" height="735" alt="pac-assistant" src="https://github.com/user-attachments/assets/d80f84a2-fec0-4d74-b6a8-181ef914b10b" />
+<img width="1672" height="735" alt="pac-agent" src="https://github.com/user-attachments/assets/d80f84a2-fec0-4d74-b6a8-181ef914b10b" />
 
 ## Running the app
 
@@ -42,7 +42,7 @@ Both options give you the exact same app at http://localhost:5173.
 ### Option 1: Run the published docker images (recommended, no clone needed)
 A backend image and a frontend image are built and published to GitHub Container Registry on every push to `main` ([`ghcr.io/josecunhateixeira/pac-backend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-backend), [`ghcr.io/josecunhateixeira/pac-frontend`](https://github.com/JoseCunhaTeixeira/PAC/pkgs/container/pac-frontend)). Docker downloads and runs them for you — no source code needed. (Every commit is also tagged `sha-<short-sha>`, to pin a version.)
 
-**Step 1 — Create a folder for PAC.** Pick any location you like (home folder, Documents, …). Inside it, PAC needs three data subfolders: `data/input` (where you'll put your seismic records), `data/output` (where PAC writes its results) and `data/settings` (where the assistant keeps its settings).
+**Step 1 — Create a folder for PAC.** Pick any location you like (home folder, Documents, …). Inside it, PAC needs three data subfolders: `data/input` (where you'll put your seismic records), `data/output` (where PAC writes its results) and `data/settings` (where the agent keeps its settings).
 
 On macOS or Linux:
 ```sh
@@ -160,7 +160,7 @@ echo "PAC_WEB_URL=http://server:5173" >> .env
 ```
 Then start PAC with `docker compose up -d --build`, and open http://server:5173 from any computer of your network.
 
-**Caution:** anyone who reaches the server's ports 5173 and 8000 can use PAC and its assistant. Keep the server on a private network (or behind a VPN), and never open these ports to the internet.
+**Caution:** anyone who reaches the server's ports 5173 and 8000 can use PAC and its agent. Keep the server on a private network (or behind a VPN), and never open these ports to the internet.
 
 ### Adding your own data
 PAC looks for your recordings in `data/input/` and writes its results to `data/output/`, with **one folder per profile**:
@@ -183,7 +183,7 @@ PAC looks for your recordings in `data/input/` and writes its results to `data/o
 
 The Dispersion Picking, Seismic Inversion, Petrophysical Inversion and Visualization pages list the runs, the most recent first, and open on it. Results computed by earlier versions of PAC, straight in `output/<profile>/`, are listed too.
 
-The **Visualization** page shows one run: how it was made (by hand, by the assistant's workflow or by its autonomous mode; each setting with who set it, what was tried to choose it, and the run's history step by step), the line with its windows coloured by quality at each stage, and for the window you select its image, picks, velocity model and checks.
+The **Visualization** page shows one run: how it was made (by hand, by the agent's workflow or by its autonomous mode; each setting with who set it, what was tried to choose it, and the run's history step by step), the line with its windows coloured by quality at each stage, and for the window you select its image, picks, velocity model and checks.
 
 To process your own data, simply drop a profile folder like the above into `data/input/` — no restart needed.
 
@@ -198,27 +198,27 @@ To process your own data, simply drop a profile folder like the above into `data
 - **`port is already allocated` / `address already in use`** — another program is already using port 5173 or 8000. Close it, or edit the Compose file and change the number on the **left** side of the colon under `ports:` (e.g. `5174:...`), then open that port in the browser instead.
 - **The page won't load right after starting** — the very first start can take a few minutes while images are downloaded or built. Watch the progress with the *live logs* command above, then refresh the browser.
 
-## The assistant
+## The agent
 
-The assistant is an AI agent, **PACo**, that works PAC for you. You ask it in plain words — *"Process active_test_profile and give me its dispersion curves"* — and it runs PAC's processing, checks the quality of every step (and retries what it can), picks the dispersion curves, inverts them into velocity models if you asked for them (or into soils and a water table, if you asked for those), then tells you what it did and which settings it changed. Its results are ordinary PAC runs: you open them in the other pages, to review or correct them.
+The agent, **PACo**, works PAC for you. You ask it in plain words — *"Process active_test_profile and give me its dispersion curves"* — and it runs PAC's processing, checks the quality of every step (and retries what it can), picks the dispersion curves, inverts them into velocity models if you asked for them (or into soils and a water table, if you asked for those), then tells you what it did and which settings it changed. Its results are ordinary PAC runs: you open them in the other pages, to review or correct them.
 
-You can keep working in PAC's other pages while it answers: a run one side is writing is refused to the other until it ends. Nothing is deleted: results a step replaces are kept in the window's `replaced` folder. The Assistant entry of the menu shows when it is working, and when an answer waits for your choice.
+You can keep working in PAC's other pages while it answers: a run one side is writing is refused to the other until it ends. Nothing is deleted: results a step replaces are kept in the window's `replaced` folder. The AI agent entry of the menu shows when it is working, and when an answer waits for your choice.
 
 It needs a language model, which you choose in its settings (below): a provider's API (Claude, OpenAI, Gemini or Mistral, with your key), or your own server, any server speaking OpenAI's chat API (vLLM, Ollama, LM Studio, OpenRouter, a company's gateway). Running a model server is up to you: see its own documentation. Until a model is set, the rest of PAC works as usual.
 
-### Talk to the assistant
+### Talk to the agent
 
-Open the **AI assistant** page, type your request and press Enter, for example:
+Open the **AI agent** page, type your request and press Enter, for example:
 - *Which profiles can I process?*
 - *Process active_test_profile and give me its dispersion curves.*
 - *Process active_test_profile and invert it: I want its velocity section.*
-- *Process active_test_profile and give me the soil types and the water table.* The assistant runs the petrophysical inversion (a Silex model) on the curves the model was trained for: the bundled one needs curves reaching 43 Hz, and the assistant says how many of yours do.
+- *Process active_test_profile and give me the soil types and the water table.* The agent runs the petrophysical inversion (a Silex model) on the curves the model was trained for: the bundled one needs curves reaching 43 Hz, and the agent says how many of yours do.
 
-While it works, the page shows its steps in small grey text: each kind of step on one line, with how many times it ran and what it did (the survey, the search's choice, the windows decided), the step under way last with its progress; once it answers, they fold under the answer. Under each answer, the tokens the model read and wrote for it; the list of conversations gives each one's total. Processing a profile takes a few minutes; an inversion, longer. When it has finished, open the **Dispersion Picking**, **Seismic Inversion**, **Petrophysical Inversion** or **Visualization** pages: they open on the latest run, the assistant's.
+While it works, the page shows its steps in small grey text: each kind of step on one line, with how many times it ran and what it did (the survey, the search's choice, the windows decided), the step under way last with its progress; once it answers, they fold under the answer. Under each answer, the tokens the model read and wrote for it; the list of conversations gives each one's total. Processing a profile takes a few minutes; an inversion, longer. When it has finished, open the **Dispersion Picking**, **Seismic Inversion**, **Petrophysical Inversion** or **Visualization** pages: they open on the latest run, the agent's.
 
-### The assistant's settings
+### The agent's settings
 
-On the **AI assistant** page, a click on the assistant's state (its mode and model, beside **Conversations**) opens its settings in a popup. The popup also opens by itself when PAC starts while the settings are incomplete, as when `.env` gives none. Nothing is chosen for you: the popup shows what you saved, or what `.env` sets.
+On the **AI agent** page, a click on the agent's state (its mode and model, beside **Conversations**) opens its settings in a popup. The popup also opens by itself when PAC starts while the settings are incomplete, as when `.env` gives none. Nothing is chosen for you: the popup shows what you saved, or what `.env` sets.
 
 - **The mode.** *Autonomous* gives better results, but it costs more. PACo tries every combination of the line's settings, and the model looks at all the images and keeps the cleanest, then decides each window and inverts. Each conversation is one study of one profile, with its own budgets: **New conversation** starts a new one. Its history, with its reasoning, is on the run's card in **Visualization**. It needs a frontier model with vision, since it judges every image by eye, and a long context (128k tokens or more). It uses many more tokens, a million or more for a line, which an online service bills: from under a dollar to a few dollars a line, depending on the model. *Workflow* is cheaper, but its results are less good: PACo leads the model step by step with fixed rules, and its quality gates check each stage. A small model on your own GPU is enough.
 - **The model**, the same for both modes, in one of two places: *a provider's API* (Claude, OpenAI, Gemini or Mistral: the model's name and your key), or *your server*, any server speaking OpenAI's chat API (vLLM, Ollama, LM Studio, OpenRouter, a company's gateway: its address, the model's name, its context). **Test the connection** makes one short call to the model, and counts down the minute it may take.
@@ -227,26 +227,26 @@ The popup keeps its settings in `data/settings/assistant.env`, the API key with 
 
 ### What the model's provider receives
 
-Your messages to the assistant, the descriptions of PACo's tools, and what the tools return, that is the quality gates' summaries (profile and run names, settings, verdicts, velocities and depths). In the autonomous mode, its figures (records, dispersion images, models) go to the model too. With a provider's API, check that this suits your data's rules. Providers charge by use: one request, such as processing and picking a profile, takes a few tens of thousands of tokens in the workflow mode, and hundreds of thousands in the autonomous mode.
+Your messages to the agent, the descriptions of PACo's tools, and what the tools return, that is the quality gates' summaries (profile and run names, settings, verdicts, velocities and depths). In the autonomous mode, its figures (records, dispersion images, models) go to the model too. With a provider's API, check that this suits your data's rules. Providers charge by use: one request, such as processing and picking a profile, takes a few tens of thousands of tokens in the workflow mode, and hundreds of thousands in the autonomous mode.
 
 ### If something goes wrong
 
 | What you see | What to do |
 |---|---|
-| *The assistant is not available: ...* | Open its settings (a click on its state, beside **Conversations**) and **Test the connection**: it says what is wrong, a key, an address or a model's name. |
+| *The agent is not available: ...* | Open its settings (a click on its state, beside **Conversations**) and **Test the connection**: it says what is wrong, a key, an address or a model's name. |
 | The settings popup opens at every start | The settings are incomplete: choose a mode and a model, and save. |
-| The assistant is slow | That is normal: it runs PAC's processing, which takes minutes; the progress line under the conversation shows what it is doing. |
-| The assistant made a choice you disagree with | Tell it, in the same conversation: *use windows of 24 receivers*, *invert with 3 layers*. **New conversation** starts afresh. |
+| The agent is slow | That is normal: it runs PAC's processing, which takes minutes; the progress line under the conversation shows what it is doing. |
+| The agent made a choice you disagree with | Tell it, in the same conversation: *use windows of 24 receivers*, *invert with 3 layers*. **New conversation** starts afresh. |
 
 ### For developers (without Docker)
 With the source code and [uv](https://docs.astral.sh/uv/):
 ```sh
-uv sync                                              # PAC, its assistant included
+uv sync                                              # PAC, its agent included
 uv run uvicorn masw.api.main:app --host 127.0.0.1 --port 8000
 ```
-and the web app with `npm install && npm run dev` in `frontend/`. Set the assistant's model in its settings popup, or in a `.env` file in the `PAC` folder, which the backend reads when started from there (`PACO_LLM_PROVIDER`, `PACO_LLM_MODEL`, `PACO_LLM_API_KEY` or `PACO_LLM_BASE_URL`, `PACO_LLM_CONTEXT`); the popup's settings win.
+and the web app with `npm install && npm run dev` in `frontend/`. Set the agent's model in its settings popup, or in a `.env` file in the `PAC` folder, which the backend reads when started from there (`PACO_LLM_PROVIDER`, `PACO_LLM_MODEL`, `PACO_LLM_API_KEY` or `PACO_LLM_BASE_URL`, `PACO_LLM_CONTEXT`); the popup's settings win.
 
-The assistant's processing uses half of the computer's cores (`PACO_WORKERS` to change it), and keeps the windows' images it makes in `data/output/.cache`, at most 2 GB, to take them again when a run makes the same ones (`PACO_CACHE_GB=0` keeps none). When a conversation ends, and when PAC starts (no conversation outlives it), the assistant's working files are removed and that cache emptied: only the results stay.
+The agent's processing uses half of the computer's cores (`PACO_WORKERS` to change it), and keeps the windows' images it makes in `data/output/.cache`, at most 2 GB, to take them again when a run makes the same ones (`PACO_CACHE_GB=0` keeps none). When a conversation ends, and when PAC starts (no conversation outlives it), the agent's working files are removed and that cache emptied: only the results stay.
 
 ## License
 This project is under Creative Commons Attribution 4.0 International license, allowing re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited.

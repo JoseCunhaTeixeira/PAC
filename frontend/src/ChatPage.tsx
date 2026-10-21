@@ -40,7 +40,7 @@ interface AgentStatus {
 const MODE_NAMES: Record<Mode, string> = { workflow: "Workflow", autonomous: "Autonomous" };
 // What a conversation cleared under the page says: the settings changed elsewhere.
 const CLEARED =
-  "The assistant's settings changed: the conversations were cleared. Your next message starts a new one.";
+  "The agent's settings changed: the conversations were cleared. Your next message starts a new one.";
 
 // A run an answer worked on, and what it did there, in order.
 interface RunResult {
@@ -252,7 +252,7 @@ async function detail(res: Response): Promise<string> {
 }
 
 export default function ChatPage() {
-  usePageTitle("AI assistant");
+  usePageTitle("AI agent");
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [session, setSession] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -542,7 +542,7 @@ export default function ChatPage() {
               <SparklesIcon size={24} />
             </div>
             <div>
-              <h1>AI assistant</h1>
+              <h1>AI agent</h1>
               <p className="page-sub">
                 Ask PACo to process, pick and invert your profiles
               </p>
@@ -652,7 +652,7 @@ export default function ChatPage() {
         {status && !status.available && (
           <div className="chat-unavailable">
             <p style={{ margin: "0 0 6px", fontWeight: 600 }}>
-              The AI assistant is not available.
+              The AI agent is not available.
             </p>
             <p style={{ margin: "0 0 6px" }}>{status.reason}</p>
             <p style={{ margin: "0 0 12px" }}>
@@ -660,7 +660,7 @@ export default function ChatPage() {
             </p>
             <span className="chat-unavailable-actions">
               <button className="chat-quiet" onClick={settings.open}>
-                Open the assistant&apos;s settings
+                Open the agent&apos;s settings
               </button>
               <button className="chat-quiet" onClick={checkStatus}>
                 Check again
@@ -766,7 +766,7 @@ function StatusBadge({ status, onClick }: { status: AgentStatus | null; onClick:
       type="button"
       className="chat-status"
       aria-haspopup="dialog"
-      data-tip={`${said}Click for the assistant's settings`}
+      data-tip={`${said}Click for the agent's settings`}
       onClick={onClick}
     >
       <span className={ready ? "chat-status-dot ready" : "chat-status-dot"} />

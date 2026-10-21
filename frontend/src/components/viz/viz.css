@@ -405,9 +405,11 @@ button.viz-option:active {
   transform: none;
 }
 
+/* The chosen option's badge, under its name: its column no wider than the others. */
 .viz-chosen {
-  display: inline-block;
-  margin-left: 6px;
+  display: block;
+  width: fit-content;
+  margin-top: 3px;
   padding: 0 7px;
   border-radius: 999px;
   background: var(--ok-soft);

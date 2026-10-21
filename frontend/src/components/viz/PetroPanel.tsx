@@ -92,7 +92,7 @@ export function PetroPanel({
         <section className="viz-section viz-card">
           <Empty>
             No window of this run has a soil column yet: invert it in the Petrophysical inversion page, or ask
-            the assistant.
+            the agent.
           </Empty>
         </section>
       ) : (

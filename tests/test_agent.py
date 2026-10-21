@@ -127,7 +127,7 @@ def test_an_empty_model_is_one_not_set(monkeypatch: pytest.MonkeyPatch) -> None:
     found = client.get("/agent/status").json()
 
     assert not found["available"] and found["reason"] == (
-        "The assistant has no model yet: choose one in its settings (PACO_LLM_MODEL)."
+        "The agent has no model yet: choose one in its settings (PACO_LLM_MODEL)."
     )
 
 

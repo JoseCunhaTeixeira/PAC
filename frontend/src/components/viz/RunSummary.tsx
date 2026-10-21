@@ -15,8 +15,8 @@ import { Fold, OriginTag } from "./ui";
 // Who made a run, on hover.
 const MAKER_MEANINGS: Record<Maker, string> = {
   manual: "Made in PAC's pages, by hand",
-  workflow: "Made by the assistant, step by step with fixed rules",
-  autonomous: "Made by the assistant on its own, comparing the dispersion images by eye",
+  workflow: "Made by the agent, step by step with fixed rules",
+  autonomous: "Made by the agent on its own, comparing the dispersion images with its vision",
 };
 
 // A setting's parameters, apart: a line each.
@@ -138,7 +138,7 @@ function Comparison({ folder, table }: { folder: string; table: TriedTable }) {
                   )}
                   {row.kept && (
                     <span className="viz-chosen" data-tip="The option the line was processed with">
-                      Chosen
+                      Chosen by the {table.by}
                     </span>
                   )}
                 </th>
@@ -243,7 +243,7 @@ function Why({ card, tables, reasons }: { card: RunCard; tables: TriedTable[]; r
           <DispersionThumbs folder={card.folder} receivers={card.receivers} windows={card.windows} />
         </div>
       )}
-      {own.length > 0 && <Reasons title="In the assistant's own words" reasons={own} />}
+      {own.length > 0 && <Reasons title="In the agent's own words" reasons={own} />}
       {yours.length > 0 && <Reasons title="Set by you" reasons={yours} />}
     </>
   );

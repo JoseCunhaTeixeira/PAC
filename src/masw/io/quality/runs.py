@@ -80,7 +80,7 @@ type StageKey = Literal["records", "dispersion", "inversion", "petro"]
 
 GIVEN = "given in your request"
 # A workflow run's request, which the assistant writes: the user's values, or its own choices.
-REQUESTED = "given in the request: by you, or chosen by the assistant"
+REQUESTED = "given in the request: by you, or chosen by the agent"
 DEFAULT = "the preset's default"
 PAC = "set by hand"
 # How the autonomous agent's commits give a setting the user gave, in the line's notes.
@@ -726,7 +726,7 @@ def _curves(stages: Iterable[StageCount], journal: Sequence[JournalEntry], maker
             label="Curves",
             value=f"{accepted} of {accepted + rejected} accepted",
             detail=f"{rejected} rejected" if rejected else "",
-            why="the assistant accepted or rejected each window's curve",
+            why="the agent accepted or rejected each window's curve",
             origin=by,
         )
     return Setting(
@@ -734,7 +734,7 @@ def _curves(stages: Iterable[StageCount], journal: Sequence[JournalEntry], maker
         label="Curves",
         value=f"{picked.done} of {picked.total}",
         detail="windows picked",
-        why="picked by the assistant" if maker != "manual" else "picked by you",
+        why="picked by the agent" if maker != "manual" else "picked by you",
         origin=by if picked.done else "default",
     )
 
@@ -762,7 +762,7 @@ def _profiles(
             label="Vs profiles",
             value=f"{inverted.done} of {inverted.total}",
             detail="windows inverted",
-            why="inverted by the assistant" if maker != "manual" else "inverted by you",
+            why="inverted by the agent" if maker != "manual" else "inverted by you",
             origin=_MAKERS[maker],
         )
     return Setting(
@@ -910,7 +910,7 @@ def _study_history(
             found = _FROZEN.search(entry.text)
             lines = [f"{plural(len(manifest.windows), 'window')} picked automatically"]
             if picked:
-                lines.append(f"{picked} picked again by the assistant")
+                lines.append(f"{picked} picked again by the agent")
             if found:
                 lines += [f"{found.group(1)} accepted", f"{found.group(2)} rejected"]
             steps.append(
@@ -959,7 +959,7 @@ def _tried_step(search: SearchDone | None) -> Step | None:
         return None
     lines = [
         f"{search.variants - search.dropped} combinations of settings",
-        "Dispersion images compared by eye",
+        "Dispersion images compared by the agent's vision",
     ]
     if search.finalists:
         lines.append("The best of them chosen")

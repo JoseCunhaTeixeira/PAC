@@ -37,7 +37,7 @@ function beyondLimits(gates: GateView[]): Sentence | null {
     .filter((metric) => metric.threshold != null && metric.bound != null && !metric.passed);
   if (beyond.length === 0) return null;
   const names = [...new Set(beyond.map((metric) => metricLabel(metric.name)))];
-  return { mark: "warn", text: `Beyond the assistant's limits: ${names.join(", ")}.` };
+  return { mark: "warn", text: `Beyond the agent's limits: ${names.join(", ")}.` };
 }
 
 /** The stage along the line in a line, and its line check's measures, in the same menu as a
@@ -51,7 +51,7 @@ export function StageHead({ overview, error }: { overview: Overview | null; erro
         className="viz-summary"
         data-tip={
           !overview.paco && overview.cells.length > 0
-            ? "By hand\nMeasured against the assistant's limits, not judged"
+            ? "By hand\nMeasured against the agent's limits, not judged"
             : undefined
         }
       >

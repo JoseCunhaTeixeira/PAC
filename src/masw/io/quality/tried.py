@@ -615,7 +615,8 @@ def _search_intro(search: SearchDone) -> tuple[str, ...]:
         else " on their dispersion images"
     )
     return (
-        f"{search.variants - search.dropped} combinations of settings compared by eye{seen}",
+        f"{search.variants - search.dropped} combinations of settings compared by the agent's "
+        f"vision{seen}",
         f"The {len(search.finalists)} best of them:",
     )
 

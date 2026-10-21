@@ -49,7 +49,7 @@ const INVERT: Way[] = [
 ];
 
 const TOOLS = [
-  { name: "PACo", role: "The AI assistant and its quality checks", href: "https://github.com/JoseCunhaTeixeira/PACo" },
+  { name: "PACo", role: "The AI agent and its quality checks", href: "https://github.com/JoseCunhaTeixeira/PACo" },
   { name: "sigpipe", role: "Processing, dispersion, inversion, Silex", href: "https://github.com/JoseCunhaTeixeira/sigpipe" },
   { name: "Disba", role: "Forward modelling", href: "https://github.com/keurfonluu/disba" },
 ];
@@ -96,7 +96,7 @@ export default function HomePage() {
               <EyeIcon size={16} /> Explore results
             </Link>
             <Link to="/assistant" className="button hero-secondary">
-              <SparklesIcon size={16} /> Ask the AI assistant
+              <SparklesIcon size={16} /> Ask the AI agent
             </Link>
           </div>
         </div>

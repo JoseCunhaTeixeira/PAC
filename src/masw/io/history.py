@@ -63,7 +63,7 @@ def redraw_picks(run_folder: Path, mode: Mode) -> threading.Thread:
                 with writing(run_folder):
                     save_picks_figures(run_folder, window_folders(run_folder), [mode])
             except RunBusy:
-                logger.info("The picks' figures of %s left to the assistant", run_folder)
+                logger.info("The picks' figures of %s left to the agent", run_folder)
             except Exception:
                 logger.exception("Could not draw the picks' figures of %s", run_folder)
 

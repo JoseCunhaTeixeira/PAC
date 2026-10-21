@@ -150,12 +150,12 @@ export function Sentences({ sentences }: { sentences: Sentence[] }) {
 // writes, yours or its own.
 const ORIGIN_MEANINGS: Record<Origin, string> = {
   you: "Yours: given in your request, or set by hand in PAC.",
-  workflow: "Chosen by the assistant, by its rules on your data.",
-  agent: "Chosen by the assistant, comparing the images by eye.",
-  checks: "Decided by the assistant's quality checks.",
+  workflow: "Chosen by the agent, by its rules on your data.",
+  agent: "Chosen by the agent, comparing the dispersion images with its vision.",
+  checks: "Decided by the agent's quality checks.",
   default: "PAC's default.",
 };
-const REQUESTED = "Given in the request: by you, or chosen by the assistant; or set by hand in PAC.";
+const REQUESTED = "Given in the request: by you, or chosen by the agent; or set by hand in PAC.";
 
 /** Who set a setting, a badge; what that means on its hover, unless `tip` is off. */
 export function OriginTag({ origin, tip = true }: { origin: Origin; tip?: boolean }) {

@@ -355,7 +355,7 @@ export function InversionPanel({
     <>
       {overview && !inverted ? (
         <section className="viz-section viz-card">
-          <Empty>No window inverted yet: invert them in Seismic inversion, or ask the assistant.</Empty>
+          <Empty>No window inverted yet: invert them in Seismic inversion, or ask the agent.</Empty>
         </section>
       ) : (
         <>

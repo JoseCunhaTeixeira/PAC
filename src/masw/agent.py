@@ -187,7 +187,7 @@ def _checked(mode: Mode, settings: AgentSettings) -> AgentStatus:
                 update={
                     "reason": f"The model server at {url} does not answer "
                     f"({type(error).__name__}). Start it, or choose another model in the "
-                    "assistant's settings."
+                    "agent's settings."
                 }
             )
     return found.model_copy(update={"available": True})
@@ -241,7 +241,7 @@ def _settings() -> AgentSettings:
         return AgentSettings()  # pyright: ignore[reportCallIssue]  # from the environment
     except ValidationError as error:
         raise AgentUnavailable(
-            f"The assistant has no model yet: choose one in its settings ({missing(error)})."
+            f"The agent has no model yet: choose one in its settings ({missing(error)})."
         ) from error
 
 

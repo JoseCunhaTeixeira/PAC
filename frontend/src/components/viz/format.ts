@@ -266,9 +266,9 @@ function shown(name: string, value: unknown): string {
 // Who set a setting, as the card tags it: the assistant whichever its way.
 export const ORIGIN_LABELS: Record<Origin, string> = {
   you: "You",
-  workflow: "Assistant",
-  agent: "Assistant",
-  checks: "Assistant",
+  workflow: "Agent",
+  agent: "Agent",
+  checks: "Agent",
   default: "Default",
 };
 

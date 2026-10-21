@@ -942,7 +942,7 @@ def test_an_assistant_run_card_says_why_its_windows_are_what_they_are(judged: st
     assert windows["origin"] == "workflow"
     assert windows["why"] == (
         "the length trial kept it: 2 of its 2 test windows passed (1 length tried); one every 3 "
-        "receivers (3 m): given in the request: by you, or chosen by the assistant"
+        "receivers (3 m): given in the request: by you, or chosen by the agent"
     )
     (lengths,) = card["tried"]
     assert (lengths["title"], lengths["by"]) == ("Window lengths tried", "workflow")
@@ -1062,7 +1062,7 @@ def test_an_assistant_run_shows_g1_and_what_it_redid(judged: str) -> None:
     assert second["status"] == "pass"  # measured: G1 said nothing of it
 
     card = client.get(f"/quality/records/card/{judged}/1.mseed").json()
-    assert card["verdict"]["text"] == "The assistant's checks (G1) passed this record."
+    assert card["verdict"]["text"] == "The agent's checks (G1) passed this record."
     assert "Preprocessed again (shifted trigger): trigger at 12 ms." in _texts(card)
     first_attempt, retried = card["attempts"]
     assert first_attempt["verdicts"] == {"G1": "retry"}
@@ -1090,7 +1090,7 @@ def test_an_assistant_run_shows_g2_g3_g4(judged: str) -> None:
     gates = {gate["gate"]: gate for gate in card["gates"]}
     assert [gates[gate]["verdict"] for gate in ("G2", "G3", "G4")] == ["pass"] * 3
     assert [metric["name"] for metric in gates["G3"]["metrics"]] == ["sharpness", "prominence"]
-    assert card["verdict"]["text"] == "The assistant's checks (G2, G3, G4) passed this window."
+    assert card["verdict"]["text"] == "The agent's checks (G2, G3, G4) passed this window."
     assert card["parts"] == [
         {"label": "image", "state": "pass"},
         {"label": "curve", "state": "pass"},
@@ -1176,7 +1176,7 @@ def test_an_assistant_run_shows_g5_and_what_each_attempt_changed(judged: str) ->
 
     assert overview["paco"] is True
     # 5.5 inverted by hand before (test_api's run): who made each model now.
-    assert overview["summary"].startswith("2 of 3 windows inverted: 1 by the assistant, 1 by hand")
+    assert overview["summary"].startswith("2 of 3 windows inverted: 1 by the agent, 1 by hand")
     cells = {one["x"]: one for one in overview["cells"]}
     assert cells[2.5]["status"] == "pass" and "G5 pass · G6 pass" in cells[2.5]["hover"]
 
@@ -1189,7 +1189,7 @@ def test_an_assistant_run_shows_g5_and_what_each_attempt_changed(judged: str) ->
         "; the checks changed it on this window: attempt 2 (G5 not converged)"
     )
     assert "changed it" not in settings["drop"]["why"]
-    assert card["verdict"]["text"] == "The assistant's checks (G5, G6) passed this model."
+    assert card["verdict"]["text"] == "The agent's checks (G5, G6) passed this model."
     assert "Attempt 2: 2000 iterations (was 1000) (G5: not converged)." in _texts(card)
     # The run's own thresholds.
     assert any("(at most 1.2)" in text for text in _texts(card))
@@ -1679,8 +1679,8 @@ def test_a_search_shows_its_finalists_the_one_it_chose_first(tmp_path: Path) -> 
     # the study kept them; nothing tried after it.
     assert table.title == "Search"
     assert table.intro == (
-        "4 combinations of settings compared by eye, each on 12 dispersion images spread along "
-        "the line",
+        "4 combinations of settings compared by the agent's vision, each on 12 dispersion images "
+        "spread along the line",
         "The 3 best of them:",
     )
     assert [
@@ -1753,7 +1753,7 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
     (experiment,) = card["tried"]
     assert (experiment["title"], experiment["by"]) == ("Search", "agent")
     assert experiment["intro"] == [
-        "2 combinations of settings compared by eye on their dispersion images",
+        "2 combinations of settings compared by the agent's vision on their dispersion images",
         "The 2 best of them:",
     ]
     assert experiment["columns"] == [
@@ -1801,7 +1801,7 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
             "Chose the processing settings",
             [
                 "2 combinations of settings",
-                "Dispersion images compared by eye",
+                "Dispersion images compared by the agent's vision",
                 "The best of them chosen",
             ],
         ),
