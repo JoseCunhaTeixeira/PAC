@@ -1758,7 +1758,6 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
         "1 dropped: curves passed on fewer than a quarter of the sample windows",
         "2 judged by the assistant by eye on their dispersion images",
         "In groups of 12, the best of each kept and grouped again until 2 were left",
-        "Those 2 tried at full size",
     ]
     assert experiment["columns"] == [
         "Windows",
@@ -1807,7 +1806,6 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
                 "3 combinations of settings made",
                 "1 dropped by the checks",
                 "2 judged by eye in groups of 12",
-                "The last 2 tried at full size",
             ],
         ),
         (

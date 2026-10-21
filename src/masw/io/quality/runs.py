@@ -957,13 +957,7 @@ def _tried_step(search: SearchDone | None) -> Step | None:
     how it ended."""
     if search is None:
         return None
-    ended = (
-        [f"The best of the last {len(search.finalists)} chosen"]
-        if search.best is not None
-        else [f"The last {len(search.finalists)} tried at full size"]
-        if search.finalists
-        else []
-    )
+    ended = [f"The best of the last {len(search.finalists)} chosen"] if search.best else []
     lines = [
         f"{search.variants} combinations of settings made",
         *_counted((search.dropped, "dropped by the checks")),

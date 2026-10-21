@@ -606,9 +606,9 @@ def _base(
     return base
 
 
-def _search_intro(search: SearchDone, then: str) -> tuple[str, ...]:
+def _search_intro(search: SearchDone, then: str | None = None) -> tuple[str, ...]:
     """What the search did, a line each: what it made, dropped and judged by eye, how; `then`,
-    what came of its finalists."""
+    what came of its finalists, when it says more than the table."""
     dropped = (
         [f"{search.dropped} dropped: curves passed on fewer than a quarter of the sample windows"]
         if search.dropped
@@ -625,7 +625,7 @@ def _search_intro(search: SearchDone, then: str) -> tuple[str, ...]:
         f"{search.variants - search.dropped} judged by the assistant by eye {seen}",
         f"In groups of 12, the best of each kept and grouped again until "
         f"{len(search.finalists)} were left",
-        then,
+        *([then] if then else []),
     )
 
 
@@ -726,11 +726,9 @@ def _tried_finalists(
         for at, index in enumerate(order, start=1)
     ]
     rows += [row("Line's settings", start, one, False) for one in current if line]
-    then = f"Those {len(tried)} tried at full size"
     return TriedTable(
-        title="Search", intro=_search_intro(search, then), columns=columns, rows=tuple(rows),
-        by="agent",
-    )  # fmt: skip
+        title="Search", intro=_search_intro(search), columns=columns, rows=tuple(rows), by="agent"
+    )
 
 
 def _columns(options: Sequence[Mapping[str, str]]) -> tuple[str, ...]:
