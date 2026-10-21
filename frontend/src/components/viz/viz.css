@@ -1245,10 +1245,6 @@ button.viz-option:active {
 }
 
 /* A unit card's other sentences, folded under its verdict and warnings. */
-.viz-more {
-  margin-top: 6px;
-}
-
 /* A card's head: its verdict first, then each check's, set apart and quieter. */
 
 .viz-gate-list {

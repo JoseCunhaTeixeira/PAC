@@ -24,12 +24,9 @@ import {
 } from "./ui";
 
 // What every stage's panel is made of: its summary, and the selected unit's card, with its
-// neighbours a click away. A card says its verdict and its warnings, shows the unit, and holds
-// everything its display was made with (its settings, and why; how the line's other units
-// differ in each); the rest of what it says is folded under them.
-
-// The marks said at once: what went wrong or needs a look.
-const LOUD = new Set<Sentence["mark"]>(["warn", "fail"]);
+// neighbours a click away. A card's badges say its verdict; it shows the unit, then, folded, what
+// it says (why it was rejected or flagged first) and everything its display was made with (its
+// settings, and why; how the line's other units differ in each).
 
 /** A unit no gate judged (a run made by hand), its measures beyond the assistant's limits
  * named in one warning, as a verdict would say them; none beyond, none said. */
@@ -169,15 +166,10 @@ export function UnitCard({
       </section>
     );
   }
-  const said = [...lead, ...card.sentences];
-  // The verdict and the warnings at once, the rest folded; with neither, the first line shown.
-  // The measures in their tables, the sentences say what they do not.
+  // The verdict is the badges': folded under the unit, why it was rejected or flagged first,
+  // then the rest the card says. The measures in their tables, the sentences say what they do not.
   const verdict = card.verdict ?? beyondLimits(card.gates);
-  const loud = said.filter((one) => LOUD.has(one.mark));
-  const quiet = said.filter((one) => !LOUD.has(one.mark));
-  const opener = verdict || loud.length ? [] : quiet.slice(0, 1);
-  const shown = [...(verdict ? [verdict] : []), ...opener, ...loud];
-  const folded = quiet.slice(opener.length);
+  const said = [...(verdict && verdict.mark !== "pass" ? [verdict] : []), ...lead, ...card.sentences];
   const gates = card.gates.filter((gate) => gate.verdict !== null || gate.by_hand);
   return (
     <section className={`viz-card${loading ? " viz-stale" : ""}`}>
@@ -201,15 +193,12 @@ export function UnitCard({
         )}
         {arrows}
       </div>
-      {!bare && <Sentences sentences={shown} />}
-      {!bare && folded.length > 0 && (
-        <div className="viz-more">
-          <Fold title="More details">
-            <Sentences sentences={folded} />
-          </Fold>
-        </div>
-      )}
       {children}
+      {!bare && said.length > 0 && (
+        <Fold title="Details">
+          <Sentences sentences={said} />
+        </Fold>
+      )}
       {!bare && card.settings && card.settings.length > 0 && (
         <Fold title="Settings, and why">
           <SettingsList settings={card.settings} />
