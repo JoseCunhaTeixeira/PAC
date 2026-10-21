@@ -20,17 +20,16 @@ from sigpipe.masw.runs.finding import IMAGE_FILE
 
 
 class OptionImage(BaseModel):
-    """A window's dispersion image, small: where it is; its image, each frequency scaled from its
-    least value to its largest, 0 to 255 (rows the velocities from the lowest, columns the
-    frequencies); the frequencies and velocities it spans; its picked curve."""
+    """A window's dispersion image, small, as the agent compared it, no pick on it: where it is;
+    its image, each frequency scaled from its least value to its largest, 0 to 255 (rows the
+    velocities from the lowest, columns the frequencies); the frequencies and velocities it
+    spans."""
 
     model_config = ConfigDict(frozen=True)
 
     xmid: float
     image: list[list[int]]
     extent: tuple[float, float, float, float]  # fmin, fmax, vmin, vmax
-    pick_fs: list[float]
-    pick_vs: list[float]
 
 
 def option_images(folder: str, trial: str, line: bool) -> tuple[OptionImage, ...]:
@@ -60,14 +59,7 @@ def option_images(folder: str, trial: str, line: bool) -> tuple[OptionImage, ...
     else:
         thumbs = []
     return tuple(
-        OptionImage(
-            xmid=one.xmid,
-            image=one.image.tolist(),
-            extent=one.extent,
-            pick_fs=one.pick[0].tolist(),
-            pick_vs=one.pick[1].tolist(),
-        )
-        for one in thumbs
+        OptionImage(xmid=one.xmid, image=one.image.tolist(), extent=one.extent) for one in thumbs
     )
 
 

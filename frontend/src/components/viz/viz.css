@@ -337,8 +337,19 @@
   font-weight: 700;
 }
 
-/* Options side by side, a column each, a setting a row: the settings' names on the left, the
-   option kept tinted, a setting's other parameters under its value. */
+/* Options side by side, a column each and every column as wide, a setting a row: the settings'
+   names on the left, the option kept tinted, a setting's other parameters under its value; a
+   narrow screen scrolls it. */
+.viz table.viz-options {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 560px;
+}
+
+.viz table.viz-options thead th:first-child {
+  width: 150px;
+}
+
 .viz table.viz-options th[scope="row"] {
   color: var(--text-muted);
   font-weight: 600;
@@ -405,11 +416,10 @@ button.viz-option:active {
   transform: none;
 }
 
-/* The chosen option's badge, under its name: its column no wider than the others. */
+/* The chosen option's badge, beside its name. */
 .viz-chosen {
-  display: block;
-  width: fit-content;
-  margin-top: 3px;
+  display: inline-block;
+  margin-left: 6px;
   padding: 0 7px;
   border-radius: 999px;
   background: var(--ok-soft);

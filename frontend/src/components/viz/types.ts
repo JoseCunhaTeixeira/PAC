@@ -57,14 +57,13 @@ export interface Tried {
   images?: boolean;
 }
 
-// A window's dispersion image, small: each frequency scaled 0 to 255, rows the velocities from the
-// lowest, columns the frequencies; the frequencies and velocities it spans; its picked curve.
+// A window's dispersion image, small, as the agent compared it, no pick on it: each frequency
+// scaled 0 to 255, rows the velocities from the lowest, columns the frequencies; the frequencies
+// and velocities it spans.
 export interface OptionImage {
   xmid: number;
   image: number[][];
   extent: [number, number, number, number];
-  pick_fs: number[];
-  pick_vs: number[];
 }
 
 // A comparison: what was done, then its settings and its options.
