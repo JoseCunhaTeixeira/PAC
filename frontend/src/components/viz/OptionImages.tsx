@@ -35,9 +35,8 @@ function Thumb({ one }: { one: OptionImage }) {
   useEffect(() => {
     if (canvasRef.current) draw(canvasRef.current, one);
   }, [one]);
-  const [f0, f1, v0, v1] = one.extent;
   return (
-    <figure className="viz-thumb" data-tip={`${num(f0)}–${num(f1)} Hz across\n${num(v0)}–${num(v1)} m/s up`}>
+    <figure className="viz-thumb">
       <canvas ref={canvasRef} />
       <figcaption>x = {num(one.xmid)} m</figcaption>
     </figure>

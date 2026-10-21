@@ -61,11 +61,8 @@ function Thumb({ folder, window }: { folder: string; window: LineWindow }) {
   useEffect(() => {
     if (canvasRef.current && data) draw(canvasRef.current, data);
   }, [data]);
-  const ranges = data
-    ? `${num(data.fs[0])}–${num(data.fs[data.fs.length - 1])} Hz across\n${num(data.vs[0])}–${num(data.vs[data.vs.length - 1])} m/s up`
-    : undefined;
   return (
-    <figure className="viz-thumb" data-tip={ranges}>
+    <figure className="viz-thumb">
       {image.error ? (
         <div className="viz-thumb-empty">No dispersion image</div>
       ) : (

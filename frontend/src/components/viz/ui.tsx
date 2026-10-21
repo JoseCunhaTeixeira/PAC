@@ -157,11 +157,15 @@ const ORIGIN_MEANINGS: Record<Origin, string> = {
 };
 const REQUESTED = "Given in the request: by you, or chosen by the assistant; or set by hand in PAC.";
 
-export function OriginTag({ origin }: { origin: Origin }) {
+/** Who set a setting, a badge; what that means on its hover, unless `tip` is off. */
+export function OriginTag({ origin, tip = true }: { origin: Origin; tip?: boolean }) {
   const maker = useRunMaker();
   const meaning = origin === "you" && maker === "workflow" ? REQUESTED : ORIGIN_MEANINGS[origin];
   return (
-    <span className={`viz-origin ${origin}`} data-tip={`${ORIGIN_LABELS[origin]}\n${meaning}`}>
+    <span
+      className={`viz-origin ${origin}`}
+      data-tip={tip ? `${ORIGIN_LABELS[origin]}\n${meaning}` : undefined}
+    >
       {ORIGIN_LABELS[origin]}
     </span>
   );

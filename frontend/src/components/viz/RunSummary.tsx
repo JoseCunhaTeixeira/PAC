@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { capitalized, MAKER_LABELS, ORIGIN_LABELS, runDate } from "./format";
+import { MAKER_LABELS, ORIGIN_LABELS, runDate } from "./format";
 import { FolderIcon } from "../icons";
 import { DispersionThumbs } from "./DispersionThumbs";
 import { RunMaker } from "./maker";
@@ -44,7 +44,7 @@ function Lines({ text }: { text: string }) {
 
 function Tile({ setting }: { setting: Setting }) {
   return (
-    <div className="viz-tile" data-tip={`${setting.label}\n${capitalized(setting.why)}`}>
+    <div className="viz-tile">
       <div className="viz-tile-label">{setting.label}</div>
       <div className="viz-tile-value">{setting.value}</div>
       {setting.detail
@@ -55,7 +55,7 @@ function Tile({ setting }: { setting: Setting }) {
             {line}
           </div>
         ))}
-      <OriginTag origin={setting.origin} />
+      <OriginTag origin={setting.origin} tip={false} />
     </div>
   );
 }
