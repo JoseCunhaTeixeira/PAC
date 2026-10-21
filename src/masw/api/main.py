@@ -67,10 +67,12 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
 
 app = FastAPI(title="MASW API", version=__version__, lifespan=lifespan)
 
+# The browser's address of the frontend, localhost or 127.0.0.1 (as a dev server bound to it says).
 _cors_origins = [
     origin.strip()
     for origin in os.environ.get(
-        "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000",
     ).split(",")
     if origin.strip()
 ]
