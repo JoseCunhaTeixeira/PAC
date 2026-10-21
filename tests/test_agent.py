@@ -210,6 +210,29 @@ def test_pac_stopping_waits_for_each_conversations_end() -> None:
     assert not kept.exists()
 
 
+def test_pac_starting_removes_what_no_conversation_goes_on_with() -> None:
+    from paco.autonomous.tools.trials import TRIALS
+
+    profile = OUTPUT_DIR / "swept"
+    study = profile / "studies" / "20261021-150000-abcd"
+    (study / TRIALS / "t1").mkdir(parents=True)
+    (study / TRIALS / "t1" / "window.npz").write_bytes(b"x" * 100)
+    (study / "journal.jsonl").write_text("{}\n")
+    cached = OUTPUT_DIR / ".cache" / "ef" / "ef56"
+    cached.mkdir(parents=True, exist_ok=True)
+    (cached / "image.h5").write_bytes(b"x" * 100)
+    try:
+        freed = agent.sweep()
+
+        # A conversation is its study, and none outlives PAC: the studies' working files and
+        # PACo's images' cache removed, their results kept.
+        assert freed >= 200
+        assert not (study / TRIALS).exists() and (study / "journal.jsonl").exists()
+        assert not cached.exists()
+    finally:
+        shutil.rmtree(profile)
+
+
 def test_one_message_at_a_time(monkeypatch: pytest.MonkeyPatch) -> None:
     session = agent.sessions.create(ScriptedModel())
     monkeypatch.setattr(session, "busy", True)

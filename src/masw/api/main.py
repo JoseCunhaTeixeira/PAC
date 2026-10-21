@@ -21,7 +21,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from masw import assistant
-from masw.agent import sessions
+from masw.agent import sessions, sweep
 from masw.api.routers import (
     acquisitions,
     agent,
@@ -55,6 +55,9 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     # The assistant's settings its page saved, over compose's.
     assistant.load()
     logger.info("MASW API starting")
+    # No conversation outlives PAC: what none goes on with removed before any starts.
+    if freed := await anyio.to_thread.run_sync(sweep):
+        logger.info("Removed %.2f GB of working files the conversations before left", freed / 1e9)
     yield
     logger.info("MASW API shutting down")
     # The assistant's conversations ended before the process: only their results stay.

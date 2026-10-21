@@ -143,9 +143,6 @@ interface Progress {
   fraction: number | null;
 }
 
-// What the autonomous mode's "New study" puts in the box: the profile is the user's to add.
-const NEW_STUDY = "Start a new study of ";
-
 // Requests to start from, as each mode takes them.
 const EXAMPLES: Record<Mode, string[]> = {
   workflow: [
@@ -586,20 +583,6 @@ export default function ChatPage() {
             >
               <PlusIcon size={15} /> New conversation
             </button>
-            {status?.mode === "autonomous" && (
-              <button
-                className="chat-menu-new"
-                role="menuitem"
-                data-tip={"Start over\nA new study of a profile, its budgets fresh; the one there kept"}
-                onClick={() => {
-                  newConversation();
-                  setListOpen(false);
-                  start(NEW_STUDY);
-                }}
-              >
-                <PlusIcon size={15} /> New study
-              </button>
-            )}
             {listed.length > 0 && (
               <div className="chat-menu-list">
                 {listed.map((one) => (

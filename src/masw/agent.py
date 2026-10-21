@@ -267,6 +267,24 @@ def _use_pacs_folders() -> None:
     get_settings.cache_clear()
 
 
+def sweep() -> int:
+    """At PAC's start, what no conversation goes on with removed: a conversation is its study,
+    and none outlives PAC. Every study's working files (those a stop too abrupt to tidy left)
+    and PACo's images' cache; the studies' results kept. The bytes freed."""
+    from paco.autonomous.tools.tidy import tidy
+    from paco.autonomous.tools.trials import STUDIES, STUDY_ID, Study
+    from paco.runs import clear_image_cache
+    from paco.settings import get_settings
+
+    _use_pacs_folders()
+    freed = sum(
+        tidy(Study(folder.parent.parent.name, folder))
+        for folder in OUTPUT_DIR.glob(f"*/{STUDIES}/*")
+        if folder.is_dir() and STUDY_ID.fullmatch(folder.name)
+    )
+    return freed + clear_image_cache(get_settings())
+
+
 class Session:
     """One conversation: its agent answers in a thread of its own, one message at a time; the
     page polls the events. An answer can be stopped: at once, and everything it started (see
