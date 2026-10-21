@@ -193,6 +193,23 @@ def test_a_closed_conversation_empties_pacos_images_cache(monkeypatch: pytest.Mo
     assert not closed(answering=False).exists()
 
 
+def test_pac_stopping_waits_for_each_conversations_end() -> None:
+    session = agent.sessions.create(ScriptedModel())
+    client.post(f"/agent/sessions/{session.id}/messages", json={"text": "What can I process?"})
+    _events(session.id)
+    kept = OUTPUT_DIR / ".cache" / "cd" / "cd34"
+    kept.mkdir(parents=True, exist_ok=True)
+    (kept / "image.h5").write_bytes(b"x" * 100)
+
+    left = agent.sessions.shut(20)
+
+    # Every conversation closed, and its end done before PAC goes on stopping: its transcript
+    # saved and PACo's images' cache emptied, only the results staying.
+    assert left == [] and session.closed
+    assert agent.sessions.get(session.id) is None
+    assert not kept.exists()
+
+
 def test_one_message_at_a_time(monkeypatch: pytest.MonkeyPatch) -> None:
     session = agent.sessions.create(ScriptedModel())
     monkeypatch.setattr(session, "busy", True)

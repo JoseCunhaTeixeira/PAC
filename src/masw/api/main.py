@@ -16,10 +16,12 @@ import matplotlib
 # GUI/main-loop concept, so it has no such thread affinity.
 matplotlib.use("Agg")
 
+import anyio.to_thread
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from masw import assistant
+from masw.agent import sessions
 from masw.api.routers import (
     acquisitions,
     agent,
@@ -36,6 +38,9 @@ from masw.logging_config import setup_logging
 from sigpipe.workers import one_thread_each
 
 logger = logging.getLogger(__name__)
+# How long PAC waits at shutdown for its conversations to end (their study tidied, the images'
+# cache emptied), in all.
+SHUTDOWN_S = 60.0
 
 # One thread in each process of PAC's jobs (numpy's BLAS, OpenMP, TensorFlow's pools), set
 # before the first pool starts: the workers asked are the cores a job takes.
@@ -52,6 +57,9 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     logger.info("MASW API starting")
     yield
     logger.info("MASW API shutting down")
+    # The assistant's conversations ended before the process: only their results stay.
+    if left := await anyio.to_thread.run_sync(sessions.shut, SHUTDOWN_S):
+        logger.warning("Conversations still ending at shutdown: %s", ", ".join(left))
 
 
 app = FastAPI(title="MASW API", version=__version__, lifespan=lifespan)

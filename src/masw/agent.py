@@ -351,6 +351,12 @@ class Session:
     def close(self) -> None:
         self._questions.put(None)
 
+    def wait(self, seconds: float) -> bool:
+        """Whether the conversation ended (its transcript saved, its study tidied) within
+        `seconds`."""
+        self._thread.join(seconds)
+        return not self._thread.is_alive()
+
     def _add(
         self,
         kind: EventKind,
@@ -615,6 +621,19 @@ class Sessions:
             found = list(self._sessions)
         for session_id in found:
             self.close(session_id)
+
+    def shut(self, seconds: float) -> list[str]:
+        """Every conversation closed as PAC stops, each one's end waited for, `seconds` at most
+        in all: its transcript saved, its study's working files removed, PACo's images' cache
+        emptied. Those that did not end in time, by id."""
+        with self._lock:
+            found = list(self._sessions.values())
+            self._sessions.clear()
+        for session in found:
+            session.stop()
+            session.close()
+        deadline = time.monotonic() + seconds
+        return [one.id for one in found if not one.wait(max(0.0, deadline - time.monotonic()))]
 
     def close(self, session_id: str) -> bool:
         """Delete conversation `session_id`: its answer stopped first if one runs (its work kept
