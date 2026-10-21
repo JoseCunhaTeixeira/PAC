@@ -960,7 +960,7 @@ def _tried_step(search: SearchDone | None) -> Step | None:
     ended = [f"The best of the last {len(search.finalists)} chosen"] if search.best else []
     lines = [
         f"{search.variants} combinations of settings made",
-        *_counted((search.dropped, "dropped by the checks")),
+        *_counted((search.dropped, "dropped as obviously bad")),
         f"{search.variants - search.dropped} judged by eye in groups of 12",
         *ended,
     ]

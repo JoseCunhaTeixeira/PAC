@@ -609,20 +609,16 @@ def _base(
 def _search_intro(search: SearchDone, then: str | None = None) -> tuple[str, ...]:
     """What the search did, a line each: what it made, dropped and judged by eye, how; `then`,
     what came of its finalists, when it says more than the table."""
-    dropped = (
-        [f"{search.dropped} dropped: curves passed on fewer than a quarter of the sample windows"]
-        if search.dropped
-        else []
-    )
+    dropped = [f"{search.dropped} dropped as obviously bad"] if search.dropped else []
     seen = (
-        f"on {search.places} dispersion images spread along the line"
+        f", each on {search.places} dispersion images spread along the line"
         if search.places
-        else "on their dispersion images"
+        else " on their dispersion images"
     )
     return (
         f"{search.variants} combinations of settings made",
         *dropped,
-        f"{search.variants - search.dropped} judged by the assistant by eye {seen}",
+        f"{search.variants - search.dropped} judged by the assistant by eye{seen}",
         f"In groups of 12, the best of each kept and grouped again until "
         f"{len(search.finalists)} were left",
         *([then] if then else []),
