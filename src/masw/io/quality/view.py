@@ -6,6 +6,7 @@ stage's modules fill them; the page draws them all alike."""
 
 from collections import Counter
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -94,6 +95,21 @@ class Track(BaseModel):
     bound: Literal["min", "max"] | None = None
 
 
+class Step(BaseModel):
+    """A step of what was done, in order: a title and its facts, a line each; by whom. A run's,
+    from the study's journal (the autonomous mode's) or from what the run's files say was done;
+    a unit's, from its attempts."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: str
+    by: Origin
+    at: datetime | None = None
+    title: str
+    lines: tuple[str, ...] = ()
+    detail: str = ""  # more on hover
+
+
 class Sentence(BaseModel):
     """One line of a card."""
 
@@ -147,9 +163,12 @@ class Card(BaseModel):
     sentences: tuple[Sentence, ...]
     gates: tuple[GateView, ...] = ()
     parts: tuple[Part, ...] = ()  # its checks said apart, as its cell's parts: for its badges
-    # What was done to it, as its "Settings, and why": each step with the settings it ran with,
-    # where they come from and their history (quality.done).
+    # What was done to it, as its "Settings": each step with the settings it ran with, where
+    # they come from, and how the line's other units differ in them (quality.done).
     settings: tuple[Setting, ...] = ()
+    # Its attempts, a step each, when one ran again (quality.done's attempt_steps); none when
+    # each stage ran once.
+    steps: tuple[Step, ...] = ()
 
 
 def worst(*statuses: Status) -> Status:
@@ -199,6 +218,7 @@ _LINE = frozenset(
         "inverse_curves",
         "models",
         "without_model",
+        "shallow_models",
         "depth_informed_spread",
         "useful_depth_spread",
         "water_table_min",
@@ -215,88 +235,12 @@ _CORRELATIONS = frozenset(
     {"snr_db", "lateral_coherence", "dead_traces", "clipped_traces", "nan_traces",
      "virtual_shot_snr_db"}
 )  # fmt: skip
-# What each measure covers, said generally: a log from before the measures said it.
-_COVERS = {
-    "dead_traces": "the record's traces",
-    "clipped_traces": "the record's traces",
-    "nan_traces": "the record's traces",
-    "rms_outliers": "its live traces: the amplitude's decay with offset",
-    "snr_db": "its traces within the line's reach: the surface-wave window against the noise's",
-    "usable_band_hz": "its traces within the line's reach: 6 dB over the noise",
-    "lateral_coherence": "neighbouring pairs of traces, in the surface-wave window",
-    "pulse_s": "the traces nearest the shot",
-    "trigger_shift_s": "the first breaks",
-    "trigger_error_s": "the first breaks nearest the shot",
-    "trigger_scatter_s": "the first breaks",
-    "energy_removed": "the record, before and after its mute",
-    "spectral_outliers": "each trace against its neighbours' spectra",
-    "coherent_columns": "the image's columns",
-    "ridge_at_vmin": "the coherent columns: a peak at the grid's lowest velocity",
-    "ridge_at_vmax": "the coherent columns: a peak at the grid's highest velocity",
-    "band_at_fmin": "the coherent band against the image's lowest frequency",
-    "band_at_fmax": "the coherent band against the image's highest frequency",
-    "competing_ridges": "the coherent columns: a second ridge",
-    "aliased_ridges": "the columns with a second ridge: under 2 dx f",
-    "background": "the coherent columns: the level off the ridge, over its peak",
-    "stripes": "that level's jumps between neighbouring columns",
-    "band_share_of_usable": "the coherent band over the records' usable band",
-    "virtual_shot_snr_db": "the stacked correlations",
-    "fk_segments": "the window's segments",
-    "fk_kept": "the window's segments",
-    "fk_flipped": "the window's segments",
-    "sharpness": "the pick's points on its image",
-    "prominence": "the pick's points on its image",
-    "on_data": "the pick's points on its image",
-    "constant_wavelength": "the pick's points on its image",
-    "n_points": "the pick's points kept on its ridge",
-    "aliased_points": "the curve's points: under twice the receiver spacing",
-    "beyond_reach_points": "the curve's points: over three window lengths",
-    "curve_points": "the pick resampled by wavelength",
-    "wavelength_ratio": "the curve's wavelengths",
-    "max_jump": "the curve's points: each step to the next by wavelength",
-    "air_wave_share": "the curve's points: at the air wave's speed",
-    "trend": "the curve's points: velocity against wavelength",
-    "uncertainty": "the curve's points with one",
-    "near_offset": "the window's nearest shot",
-    "misfit": "its neighbours on each side",
-    "neighbour_misfit": "its neighbours on each side",
-    "sides_compared": "its sides",
-    "water_table_jump": "its neighbours' water tables",
-    "misfit_layered": "every picked point, against the layered median's curve",
-    "rhat": "the models' Vs at the depths watched, over the chains",
-    "ess": "the models' Vs at the depths watched, over the chains",
-    "autocorrelation": "the models' Vs at the depths watched, over the chains",
-    "acceptance": "the chains' moves",
-    "samples_per_chain": "each chain, after its burn-in",
-    "at_bound": "each parameter's samples at a prior's bound",
-    "depth_informed": "the models' Vs spread, from the surface down",
-    "useful_depth": "the models' Vs spread, from the surface down",
-    "contrast": "the layered median's adjacent layers",
-    "water_table": "the soil column",
-    # The line checks'.
-    "off_decay_receivers": "the line's receivers: off the amplitude decay in most of the "
-    "records reaching them",
-    "spectral_receivers": "the line's receivers: off their neighbours' spectra in most of the "
-    "records reaching them",
-    "curves": "the line's windows: a curve G3 passed",
-    "without_curve": "the line's windows",
-    "depth_spread": "the curves' longest wavelengths: MAD over median",
-    "inverse_curves": "the curves: velocity falling with wavelength",
-    "models": "the line's windows: a model G5 passed",
-    "without_model": "the line's windows",
-    "depth_informed_spread": "the models' depths informed: MAD over median",
-    "useful_depth_spread": "the models' depths of investigation: MAD over median",
-    "water_table_min": "the soil columns",
-    "water_table_max": "the soil columns",
-}
-# ...where a measure's name is another gate's too.
-_GATE_COVERS = {("G8", "models"): "the line's windows: a soil column G7 passed"}
 
 
 def covered(gate: str, metric: Metric) -> Metric:
-    """`metric` saying what it describes and what it covers: as measured, or, from a log older
-    than that, the thing each gate measures and what the measure covers in general."""
-    if metric.of and metric.over:
+    """`metric` saying what it describes (its signal, its spectrum, the line): as measured, or,
+    from a log older than that, the thing each gate measures."""
+    if metric.of:
         return metric
     name = metric.name
     if name in _LINE:
@@ -327,28 +271,93 @@ def covered(gate: str, metric: Metric) -> Metric:
         )
     else:
         of = "spectrum" if name in _SPECTRUM else "signal"
-    fit = (gate == "G7" and "soil column's") or "model's"
-    over = (
-        _GATE_COVERS.get((gate, name))
-        or _COVERS.get(name)
-        or (
-            f"the band's picked points, against the {fit} curve"
-            if name.startswith(("misfit_", "residual_"))
-            else ""
-        )
-    )
-    return metric.model_copy(update={"of": metric.of or of, "over": metric.over or over})
+    return metric.model_copy(update={"of": of})
 
 
-# The flags whose names do not say what they found.
+# The checks' flags in a few plain words: a unit's flags listed ("flagged: …"), a cell's hover.
 FLAG_WORDS = {
-    "rms_outliers": "amplitude off the offset decay",
-    "low_snr": "low SNR",
+    # A record's signal
+    "dead_traces": "dead traces",
+    "clipped_traces": "clipped traces",
+    "nan_traces": "traces with NaN samples",
+    "record_too_short": "record too short",
     "no_usable_band": "no usable band",
+    "low_snr": "low SNR",
+    "low_coherence": "neighbouring traces unalike",
+    "inconsistent_trigger": "first breaks scattered",
+    "shifted_trigger": "trigger off",
+    "fast_arrivals": "energy faster than the surface waves",
+    "rms_outliers": "amplitude off the decay with distance",
+    "spectral_receivers": "receivers with an unusual spectrum",
+    "off_decay_receivers": "receivers too weak or too loud",
+    # A dispersion image
+    "bad_correlations": "bad correlations",
+    "no_coherent_energy": "no coherent energy",
+    "weak_coherence": "weak coherence",
+    "aliasing": "aliased ridge",
+    "competing_ridges": "second ridge",
+    "narrower_than_usable": "coherent band narrower than the usable band",
+    "band_at_fmin": "coherent band at the lowest frequency",
+    "band_at_fmax": "coherent band at the highest frequency",
+    # A curve
+    "aliasing_zone": "points in the aliasing zone",
+    "beyond_reach": "points beyond the window's reach",
+    "narrow_span": "narrow range of wavelengths",
+    "air_wave": "points at the air wave's speed",
+    "inverse_dispersion": "inverse dispersion",
+    "near_field": "near field",
+    "mode_jump": "jump to another mode",
+    "too_few_points": "too few points",
+    "no_ridge": "no ridge",
+    "sharpness": "broad ridge",
+    "prominence": "faint ridge",
+    "on_data": "points off the ridge's top",
+    "constant_wavelength": "points at constant wavelength",
+    # Along the line
+    "gaps": "gaps along the line",
+    "uneven_depth": "uneven λmax along the line",
+    "no_neighbours": "no neighbours to compare with",
+    "outlier": "unlike its neighbours",
+    "shared_change": "unlike its neighbours on one side",
+    "inverse_trend": "inverse trends along the line",
+    "model_change": "unlike its neighbours",
+    "non_unique": "unlike its neighbours, fitting as well",
+    "shallow": "informed too shallow to compare",
+    "uneven_depth_informed": "uneven depth informed",
+    "petro_change": "unlike its neighbours",
+    "petro_outlier": "unlike its neighbours",
+    # A model, a soil column
+    "not_converged": "chains not converged",
+    "few_samples": "few independent samples",
+    "multimodal": "chains disagree",
+    "uninformed": "no depth informed",
+    "smoothing_misfit": "smooth model misfits",
+    "underfit": "model misfits the curve",
+    "acceptance": "moves accepted out of range",
+    "no_mode": "points without a mode",
+    "deep_interface": "interfaces at the deepest allowed",
+    "most_layers": "most layers allowed",
+    "too_deep": "depth beyond what the data inform",
+    "strong_inversion": "strong velocity inversion",
+    "implausible_vs": "implausible Vs",
+    "at_bound": "samples at a bound",
+    "misfit": "misfits the curve",
+    "no_uncertainty": "no uncertainty",
+    # Why a check refused a retry
     "budget_spent": "retries spent",
     "nothing_to_try": "nothing left to try",
     "redone_once": "redone once, still short",
-    "uneven_depth_informed": "uneven depth informed",
+}
+# The checks, as a sentence names them.
+CHECK_NAMES = {
+    "G1": "the signal check",
+    "G2": "the dispersion image check",
+    "G3": "the curve check",
+    "G4": "the check against the neighbouring curves",
+    "G5": "the model check",
+    "G6": "the check against the neighbouring models",
+    "G7": "the soil column check",
+    "G8": "the check against the neighbouring soil columns",
 }
 # Why a gate refused a unit the retry it asked (PACo's budgets.budget_spent): said with the flags
 # that asked it, never as the unit's reason.
@@ -409,31 +418,56 @@ def warnings(*results: GateResult | None) -> tuple[Sentence, ...]:
     )
 
 
-def verdict_sentence(unit: str, *results: GateResult | None) -> Sentence | None:
-    """What the gates concluded of the `unit` (window, record, model), in one sentence; None
+# A check's verdict in a word.
+VERDICT_WORDS: dict[Verdict, str] = {"pass": "passed", "retry": "flagged", "reject": "rejected"}
+
+
+def verdicts_said(*results: GateResult | None) -> str:
+    """The checks' verdicts in words: "The model check passed, the check against the
+    neighbouring models flagged"; "" when none judged."""
+    said = ", ".join(
+        f"{CHECK_NAMES.get(result.gate, result.gate)} {VERDICT_WORDS[result.verdict]}"
+        for result in results
+        if result is not None
+    )
+    return said[:1].upper() + said[1:]
+
+
+def checks_named(results: Iterable[GateResult]) -> str:
+    """The checks that gave `results`, in words: "the signal check", "the curve check and the
+    check against the neighbouring curves"."""
+    names = list(dict.fromkeys(CHECK_NAMES.get(result.gate, result.gate) for result in results))
+    return " and ".join(names) if len(names) < 3 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def after_colon(text: str) -> str:
+    """A sentence said after a colon: its first letter in lower case, unless its first word is
+    an acronym (SNR)."""
+    return text[:1].lower() + text[1:] if text[1:2].islower() else text
+
+
+def verdict_sentence(*results: GateResult | None) -> Sentence | None:
+    """What the checks concluded of a unit (a record, a window, a model), in one sentence; None
     when none judged."""
     judged = [result for result in results if result is not None]
     if not judged:
         return None
     status = verdict_status(*judged)
     if status == "pass":
-        gates = ", ".join(result.gate for result in judged)
-        return Sentence(mark="pass", text=f"The agent's checks ({gates}) passed this {unit}.")
+        return Sentence(mark="pass", text=f"Passed {checks_named(judged)}.")
     if status == "fail":
         rejected = [result for result in judged if result.verdict == "reject"]
         flags = [flag for result in rejected for flag in result.flags]
         reason = next((flag for flag in flags if flag.name not in REFUSALS), None)
-        why = f": {finding(reason.message)}" if reason is not None else "."
+        why = f": {after_colon(finding(reason.message))}" if reason is not None else "."
         return Sentence(
             mark="fail",
-            text=f"Rejected by {', '.join(one.gate for one in rejected)}{why}",
+            text=f"Rejected by {checks_named(rejected)}{why}",
             detail=reason.message if reason is not None else "",
         )
-    raised = [flag.name for result in judged for flag in result.flags]
-    return Sentence(
-        mark="warn",
-        text=f"Kept, still flagged once the retries were spent: {counted(raised)}.",
-    )
+    flagged = [result for result in judged if result.verdict == "retry"]
+    raised = [flag.name for result in flagged for flag in result.flags]
+    return Sentence(mark="warn", text=f"Flagged by {checks_named(flagged)}: {counted(raised)}.")
 
 
 # The thousands apart as SI writes them: a narrow space from five digits on, none in four.

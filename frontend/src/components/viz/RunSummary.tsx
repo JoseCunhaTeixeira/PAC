@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { MAKER_LABELS, ORIGIN_LABELS, runDate } from "./format";
+import { MAKER_LABELS, runDate } from "./format";
 import { FolderIcon } from "../icons";
 import { DispersionThumbs } from "./DispersionThumbs";
 import { RunMaker } from "./maker";
 import { OptionImages } from "./OptionImages";
-import type { Maker, Reason, RunCard, Setting, Step, TriedTable } from "./types";
-import { Fold, OriginTag } from "./ui";
+import type { Maker, Reason, RunCard, Setting, TriedTable } from "./types";
+import { Fold, OriginTag, Timeline } from "./ui";
 
 // A run at a glance, for someone who does not know how it was made: its settings in a strip, in
 // the order its records went through them; folded under them what was done, a step after another
@@ -57,33 +57,6 @@ function Tile({ setting }: { setting: Setting }) {
         ))}
       <OriginTag origin={setting.origin} tip={false} />
     </div>
-  );
-}
-
-/** What was done: a step after another along a timeline, each its number on the line in the
- * colour of who did it, its title, then its facts, a line each. */
-function Timeline({ steps }: { steps: Step[] }) {
-  return (
-    <ol className="viz-timeline">
-      {steps.map((step, index) => (
-        <li key={index} className="viz-step" data-tip={step.detail || undefined}>
-          <span
-            className={`viz-step-node ${step.by}`}
-            data-tip={`${ORIGIN_LABELS[step.by]}${step.at ? `\n${runDate(step.at)}` : ""}`}
-          >
-            {index + 1}
-          </span>
-          <div className="viz-step-title">{step.title}</div>
-          {step.lines.length > 0 && (
-            <ul className="viz-step-lines">
-              {step.lines.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          )}
-        </li>
-      ))}
-    </ol>
   );
 }
 

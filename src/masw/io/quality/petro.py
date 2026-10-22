@@ -12,15 +12,14 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from masw.io.quality.done import attempt_steps
 from masw.io.quality.files import folder_path, fundamental
 from masw.io.quality.inversion import FitCurve, fit_curve
 from masw.io.quality.log import (
-    AttemptSummary,
     GateResult,
     Metric,
     QCLog,
     config_section,
-    metric_value,
     read_log,
 )
 from masw.io.quality.view import (
@@ -40,6 +39,7 @@ from masw.io.quality.view import (
     span,
     verdict_sentence,
     verdict_status,
+    verdicts_said,
     warnings,
 )
 from sigpipe.algorithms.inversion.rayleigh.petro.silex_catalog import (
@@ -98,7 +98,6 @@ class SoilColumn(BaseModel):
 class PetroCard(Card):
     """A window's card: its soil column, its fit, whether the model covers its curve."""
 
-    attempts: tuple[AttemptSummary, ...] = ()
     model: str | None  # the Silex model
     column: SoilColumn | None
     curve: FitCurve | None
@@ -165,9 +164,8 @@ def petro_overview(folder: str) -> Overview:
         hover.append(f"water table at {number(measures.water_table_m)} m")
         if misfits:
             hover.append(f"misfit {max(misfits):.2f} at worst")
-        verdicts = [f"{one.gate} {one.verdict}" for one in (g7, g8) if one is not None]
-        if verdicts:
-            hover.append(" · ".join(verdicts))
+        if said := verdicts_said(g7, g8):
+            hover.append(said)
         cells.append(
             Cell(
                 key=unit,
@@ -179,26 +177,25 @@ def petro_overview(folder: str) -> Overview:
             )
         )
     paco = log is not None and any(attempt.stage == STAGE for attempt in log.attempts)
-    summary = f"{len(statuses)} of {plural(len(cells), 'window')} inverted"
+    said = [plural(len(cells), "window"), f"{len(statuses)} inverted"]
     if model is not None and statuses:
-        summary += f" with {model}"
-        passed, flagged, rejected = (statuses.count(one) for one in ("pass", "warn", "fail"))
-        summary += " · " + ", ".join(
-            part
-            for part in (
-                f"{passed} pass" if passed else "",
-                f"{flagged} flagged" if flagged else "",
-                f"{rejected} rejected" if rejected else "",
-            )
-            if part
+        said[-1] += f" with {model}"
+        words = (
+            {"pass": "passed", "warn": "flagged", "fail": "rejected"}
+            if paco
+            else {"pass": "fit their curve", "warn": "misfit their curve"}
         )
+        said += [
+            f"{statuses.count(state)} {word}" for state, word in words.items() if state in statuses
+        ]
     return Overview(
         paco=paco,
-        summary=summary,
+        summary=" · ".join(said),
+        # A run made by hand: measured, never rejected.
         legend={
             "pass": "passed the soil column checks" if paco else "fits its curve",
-            "warn": "kept, still flagged" if paco else "misfits its curve",
-            "fail": "rejected",
+            "warn": "flagged" if paco else "misfits its curve",
+            **({"fail": "rejected"} if paco else {}),
             "none": "not inverted",
         },
         cells=tuple(cells),
@@ -224,7 +221,7 @@ def petro_card(folder: str, xmid: float) -> PetroCard:
     ours = measures is not None and by_assistant(log, window)
     g7, g8 = _results(log, window) if measures is not None else (None, None)
     said: list[Sentence] = []
-    verdict = verdict_sentence("soil column", g7, g8)
+    verdict = verdict_sentence(g7, g8)
     if card is not None and curve is not None:
         said.append(_coverage(card, curve, gaps))
     metrics: tuple[Metric, ...] = ()
@@ -240,9 +237,8 @@ def petro_card(folder: str, xmid: float) -> PetroCard:
         )
     else:
         metrics = fit_metrics(measures, thresholds)
-        said.append(_column_sentence(measures))
+        said += _column_sentences(measures)
         said += _fit_sentences(measures.fit, thresholds)
-        said += _neighbours(g8, thresholds)
         said += warnings(g7, g8)
     gates = (gate_view("G7", g7, metrics),) + ((gate_view("G8", g8),) if g8 is not None else ())
     return PetroCard(
@@ -259,7 +255,7 @@ def petro_card(folder: str, xmid: float) -> PetroCard:
         verdict=verdict,
         sentences=tuple(said),
         gates=gates if measures is not None else (),
-        attempts=log.summaries(unit, STAGE) if log is not None and ours else (),
+        steps=attempt_steps(log, unit, (STAGE,), 1.0) if ours else (),
         model=model,
         column=(
             SoilColumn(
@@ -299,11 +295,15 @@ def model_of(run_folder: Path, log: QCLog | None) -> str | None:
 
 
 def by_assistant(log: QCLog | None, window: Path) -> bool:
-    """Whether the soil column in window folder `window` is the assistant's: it logged one, and
-    PAC did not invert the window again after it."""
+    """Whether the soil column in window folder `window` is the agent's: it logged one, and PAC
+    did not invert the window again after it. PAC writes its configuration into the run when it
+    inverts: without it, the soil column is the agent's, however a copy of the run dated its
+    files."""
     latest = log.latest(window.name, STAGE) if log is not None else None
     if latest is None:
         return False
+    if not (window.parent / CONFIG_FILE).exists():
+        return True
     model = window / MODEL_FILE
     done = latest.finished_at or latest.started_at
     return not (model.exists() and model.stat().st_mtime > (done + LATER).timestamp())
@@ -360,9 +360,8 @@ def _settings(
 ) -> tuple[Setting, ...]:
     if model is None:
         return ()
-    why = "set by hand" if origin == "you" else "chosen by the agent"
     if card is None:
-        return (Setting(key="model", label="Silex model", value=model, why=why, origin=origin),)
+        return (Setting(key="model", label="Silex model", value=model, why="", origin=origin),)
     covered = sum(1 for gaps in found if not gaps)
     counts: Counter[RangeGap] = Counter(gap for gaps in found for gap in gaps)
     start, end = card.band_needed
@@ -376,26 +375,26 @@ def _settings(
             key="model",
             label="Silex model",
             value=model,
-            detail=f"trained on {span(card.min_freq, card.max_freq, 'Hz')}, "
-            f"{span(card.min_vel, card.max_vel, 'm/s')}",
-            why=f"{why}; it covers {covered} of the {plural(len(found), 'picked curve')}"
-            + (f" ({left_out})" if left_out else ""),
+            detail=f"trained on {span(card.min_freq, card.max_freq, 'Hz')} · "
+            f"{span(card.min_vel, card.max_vel, 'm/s')} · covers {covered} of the "
+            f"{plural(len(found), 'picked curve')}",
+            why=f"the others: {left_out}" if left_out else "",
             origin=origin,
         ),
     )
 
 
 def _coverage(card: SilexCard, curve: DispersionCurve, gaps: tuple[RangeGap, ...]) -> Sentence:
-    band = span(float(min(curve.fs)), float(max(curve.fs)), "Hz")
+    low, high = float(min(curve.fs)), float(max(curve.fs))
     if not gaps:
         return Sentence(
             mark="pass",
-            text=f"The Silex model {card.name} covers its curve ({band}).",
+            text=f"The Silex model {card.name} covers its curve, {number(low)} to "
+            f"{number(high)} Hz.",
         )
     return Sentence(
         mark="warn",
-        text=f"Outside the range {card.name} was trained on: its curve ({band}) "
-        f"{_gaps_text(card, gaps)}.",
+        text=f"Its curve {_gaps_text(card, gaps)}: outside the range {card.name} was trained on.",
     )
 
 
@@ -407,7 +406,8 @@ def _gaps_text(card: SilexCard, gaps: tuple[RangeGap, ...]) -> str:
     )
 
 
-def _column_sentence(measures: PetroMeasures) -> Sentence:
+def _column_sentences(measures: PetroMeasures) -> list[Sentence]:
+    """The soil column top down, each layer with its thickness and N; its water table."""
     layers = [
         f"{soil} {number(thickness)} m (N {n})"
         for soil, thickness, n in zip(
@@ -416,53 +416,28 @@ def _column_sentence(measures: PetroMeasures) -> Sentence:
     ]
     if len(measures.soils) > len(measures.thicknesses_m):
         layers.append(f"{measures.soils[-1]} below")
-    return Sentence(
-        mark="info",
-        text=f"Soil column, top down: {', '.join(layers)}; water table at "
-        f"{number(measures.water_table_m)} m.",
-    )
+    return [
+        Sentence(mark="info", text=f"Soil column, top down: {', '.join(layers)}."),
+        Sentence(mark="info", text=f"Water table at {number(measures.water_table_m)} m."),
+    ]
 
 
 def _fit_sentences(fit: ModelFit, thresholds: PetroThresholds) -> list[Sentence]:
-    misfits = [band.misfit for band in fit.bands]
-    known = [value for value in misfits if value is not None]
+    """How the soil column's curve fits the pick: its worst band against the limit."""
+    known = [(band.misfit, i) for i, band in enumerate(fit.bands) if band.misfit is not None]
     if not known:
         return [Sentence(mark="warn", text="Its curve could not be compared with the pick.")]
-    names = BAND_NAMES.get(len(misfits))
-    each = ", ".join(f"{value:.2f}" if value is not None else "no mode" for value in misfits)
-    where = f" over the {', '.join(names[:-1])} and {names[-1]} wavelengths" if names else ""
-    good = all(value is not None and value <= thresholds.max_misfit for value in misfits)
-    return [
-        Sentence(
-            mark="pass" if good else "warn",
-            text=f"{'Fits' if good else 'Misfits'} its curve: misfit {each}{where} (at most "
-            f"{number(thresholds.max_misfit)}, in uncertainties).",
-        )
-    ]
-
-
-def _neighbours(g8: GateResult | None, thresholds: PetroThresholds) -> list[Sentence]:
-    """What G8 found against the neighbours' columns."""
-    if g8 is None:
-        return []
-    vs = metric_value(g8, "misfit")
-    jump = metric_value(g8, "water_table_jump")
-    parts: list[str] = []
-    if vs is not None:
-        parts.append(f"Vs {vs:.0%} off their median (at most {thresholds.max_vs_misfit:.0%})")
-    if jump is not None:
-        parts.append(
-            f"water table {number(jump)} m off theirs (at most "
-            f"{number(thresholds.max_water_table_jump)} m)"
-        )
-    if not parts:
-        return []
-    return [
-        Sentence(
-            mark="pass" if g8.verdict == "pass" else "warn",
-            text=f"Against its neighbours: {', '.join(parts)}.",
-        )
-    ]
+    names = BAND_NAMES.get(len(fit.bands))
+    worst, at = max(known)
+    limit = number(thresholds.max_misfit)
+    if worst <= thresholds.max_misfit:
+        return [
+            Sentence(
+                mark="pass", text=f"Fits its curve: misfit {worst:.2f} at worst, {limit} allowed."
+            )
+        ]
+    where = f" at the {names[at]} wavelengths" if names else ""
+    return [Sentence(mark="warn", text=f"Misfits its curve: {worst:.2f}{where}, {limit} allowed.")]
 
 
 def _curve(window: Path, observed: DispersionCurve | None) -> FitCurve | None:

@@ -14,7 +14,6 @@ import {
   Empty,
   ErrorBox,
   Fold,
-  GateBadge,
   GateTables,
   PartBadge,
   Sentences,
@@ -26,7 +25,7 @@ import {
 // What every stage's panel is made of: its summary, and the selected unit's card, with its
 // neighbours a click away. A card's badges say its verdict; it shows the unit, then, folded, what
 // it says (why it was rejected or flagged first) and everything its display was made with (its
-// settings, and why; how the line's other units differ in each).
+// settings; how the line's other units differ in each).
 
 /** A unit no gate judged (a run made by hand), its measures beyond the assistant's limits
  * named in one warning, as a verdict would say them; none beyond, none said. */
@@ -36,7 +35,10 @@ function beyondLimits(gates: GateView[]): Sentence | null {
     .flatMap((gate) => gate.metrics)
     .filter((metric) => metric.threshold != null && metric.bound != null && !metric.passed);
   if (beyond.length === 0) return null;
-  const names = [...new Set(beyond.map((metric) => metricLabel(metric.name)))];
+  // Said within the sentence: lower case, but an acronym (SNR).
+  const names = [...new Set(beyond.map((metric) => metricLabel(metric.name)))].map((name) =>
+    /^.[a-z]/.test(name) ? name.charAt(0).toLowerCase() + name.slice(1) : name,
+  );
   return { mark: "warn", text: `Beyond the agent's limits: ${names.join(", ")}.` };
 }
 
@@ -170,7 +172,6 @@ export function UnitCard({
   // then the rest the card says. The measures in their tables, the sentences say what they do not.
   const verdict = card.verdict ?? beyondLimits(card.gates);
   const said = [...(verdict && verdict.mark !== "pass" ? [verdict] : []), ...lead, ...card.sentences];
-  const gates = card.gates.filter((gate) => gate.verdict !== null || gate.by_hand);
   return (
     <section className={`viz-card${loading ? " viz-stale" : ""}`}>
       <div className="viz-unit-head">
@@ -184,13 +185,6 @@ export function UnitCard({
           : card.status !== "none" && (
               <StatusBadge status={card.status} meaning={stage ? STATE_MEANINGS[stage][card.status].full : undefined} />
             )}
-        {!bare && gates.length > 0 && (
-          <span className="viz-gate-list">
-            {gates.map((gate) => (
-              <GateBadge key={gate.gate} gate={gate} />
-            ))}
-          </span>
-        )}
         {arrows}
       </div>
       {children}
@@ -200,7 +194,7 @@ export function UnitCard({
         </Fold>
       )}
       {!bare && card.settings && card.settings.length > 0 && (
-        <Fold title="Settings, and why">
+        <Fold title="Settings">
           <SettingsList settings={card.settings} />
         </Fold>
       )}

@@ -63,6 +63,7 @@ from masw.io.quality.view import (
     REFUSALS,
     Origin,
     Setting,
+    Step,
     flag_text,
     number,
     plural,
@@ -144,20 +145,6 @@ class LineWindow(BaseModel):
     xmid: float
     first: float
     last: float
-
-
-class Step(BaseModel):
-    """A step of what was done, in order: a title and its facts, a line each; by whom. From the
-    study's journal (the autonomous mode's), or from what the run's files say was done."""
-
-    model_config = ConfigDict(frozen=True)
-
-    kind: str
-    by: Origin
-    at: datetime | None = None
-    title: str
-    lines: tuple[str, ...] = ()
-    detail: str = ""  # more on hover
 
 
 class Reason(BaseModel):

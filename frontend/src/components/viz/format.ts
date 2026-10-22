@@ -1,92 +1,193 @@
 import { thousands } from "../numbers";
 import type { Maker, Metric, Origin, RunEntry, StageKey, Status } from "./types";
 
-// How Visualization says things: the gates' metrics (a name a geophysicist reads, and the value
-// in the unit it is judged in), numbers, dates, and where a setting comes from.
+// How Visualization says things: the checks' measures (a name a geophysicist reads, what it is
+// on its hover, and the value in the unit it is judged in), numbers, dates, and where a setting
+// comes from.
 
-const METRIC_LABELS: Record<string, string> = {
-  // G1, a record's signal
-  dead_traces: "Dead traces",
-  clipped_traces: "Clipped traces",
-  nan_traces: "Traces holding NaN",
-  rms_outliers: "Traces too weak or strong for their offset",
-  snr_db: "Median SNR",
-  usable_band_hz: "Usable band width",
-  lateral_coherence: "Neighbouring traces' coherence",
-  trigger_error_s: "Trigger error",
-  trigger_shift_s: "Trigger error", // its name in older logs
-  trigger_scatter_s: "First breaks' scatter",
-  energy_removed: "Energy the mute removed",
-  pulse_s: "Shot pulse",
-  spectral_outliers: "Traces off their neighbours' spectra",
-  spectral_receivers: "Receivers off their neighbours' spectra",
-  off_decay_receivers: "Receivers too weak or strong for their offset",
-  // G2, an image
-  coherent_columns: "Coherent columns",
-  virtual_shot_snr_db: "Virtual shot's SNR",
-  ridge_at_vmin: "Columns peaking at vmin",
-  ridge_at_vmax: "Columns peaking at vmax",
-  band_at_fmin: "Coherent band reaches fmin",
-  band_at_fmax: "Coherent band reaches fmax",
-  competing_ridges: "Columns with a second ridge",
-  aliased_ridges: "Second ridges below the aliasing limit",
-  background: "Background off the ridge",
-  stripes: "Background's stripes",
-  band_share_of_usable: "Coherent band / usable band",
-  // a passive window's segments, by its fk selection
-  fk_segments: "Segments the fk selection judged",
-  fk_kept: "Segments it kept",
-  fk_flipped: "Segments it flipped",
-  // G3, a pick
-  sharpness: "Sharpness",
-  prominence: "Prominence",
-  on_data: "Points on the brightest value",
-  constant_wavelength: "Points at constant wavelength",
-  n_points: "Points picked",
-  aliased_points: "Points under λmin",
-  beyond_reach_points: "Points over λmax",
-  curve_points: "Points of the resampled curve",
-  wavelength_ratio: "Longest / shortest wavelength",
-  max_jump: "Largest step between points",
-  air_wave_share: "Points in the air wave's band",
-  trend: "Normal dispersion trend",
-  uncertainty: "Median uncertainty / velocity",
-  near_offset: "Nearest shot's offset",
-  // G4, the line's curves
-  neighbour_misfit: "Misfit to the neighbours",
-  misfit: "Misfit to the neighbours", // its name in older logs
-  sides_compared: "Sides compared",
-  curves: "Curves",
-  without_curve: "Windows without a curve",
-  depth_spread: "Spread of the depths reached",
-  inverse_curves: "Curves with an inverse trend",
-  // G5, a seismic model
-  misfit_short: "Misfit, short wavelengths",
-  misfit_middle: "Misfit, middle wavelengths",
-  misfit_long: "Misfit, long wavelengths",
-  residual_short: "Residual, short wavelengths",
-  residual_middle: "Residual, middle wavelengths",
-  residual_long: "Residual, long wavelengths",
-  misfit_layered: "Misfit of the layered median",
-  rhat: "Max R-hat",
-  acceptance: "Median acceptance",
-  ess: "Min effective samples",
-  autocorrelation: "Max lag-1 autocorrelation",
-  samples_per_chain: "Samples a chain",
-  at_bound: "Share at a prior's bound",
-  depth_informed: "Depth informed",
-  useful_depth: "Depth informed", // its name in older logs
-  depth_informed_spread: "Spread of the depths informed",
-  // In older logs, G6 compared the models down to half their curve's longest wavelength.
-  useful_depth_spread: "Spread of the depths of investigation",
-  contrast: "Least contrast between layers",
-  // G7 and G8, a petrophysical model
-  water_table: "Water table",
-  water_table_jump: "Water table off the neighbours",
-  models: "Models",
-  without_model: "Windows without a model",
-  water_table_min: "Shallowest water table",
-  water_table_max: "Deepest water table",
+// Each measure's name, then what it is, a line each.
+const METRICS: Record<string, [string, string]> = {
+  // A record's signal
+  dead_traces: ["Dead traces", "Traces with almost no signal"],
+  clipped_traces: ["Clipped traces", "Traces cut at the recorder's largest value"],
+  nan_traces: ["Traces with NaN samples", "Traces holding samples that are not numbers"],
+  rms_outliers: [
+    "Traces too weak or too loud",
+    "Amplitude off the decay with distance from the shot\nReported only: the receivers are judged over the whole line",
+  ],
+  snr_db: [
+    "Median SNR",
+    "The surface waves against the noise after them\nThe median over the traces the waves reach\nIn the band the dispersion images use",
+  ],
+  usable_band_hz: ["Usable band width", "The frequencies where the surface waves stand clearly over the noise"],
+  lateral_coherence: [
+    "Coherence of neighbouring traces",
+    "How alike neighbouring traces are where the surface waves arrive\nTheir median correlation: 1 when identical",
+  ],
+  trigger_error_s: [
+    "Trigger error",
+    "The shot time read from the first breaks, against the record's time zero\nJudged on a muted record only: its mute starts at time zero",
+  ],
+  trigger_shift_s: [
+    "Trigger error",
+    "The shot time read from the first breaks, against the record's time zero",
+  ], // its name in older logs
+  trigger_scatter_s: [
+    "Scatter of the first breaks",
+    "How far the first breaks stray from a straight line\nLarge when the delay differs from trace to trace",
+  ],
+  energy_removed: ["Energy the mute removed", "The share of the record's energy the mute took out"],
+  pulse_s: ["Shot pulse length", "How long the shot's energy lasts after its first break\nOn the traces nearest the shot"],
+  spectral_outliers: [
+    "Traces with an unusual spectrum",
+    "A spectrum unlike their neighbours': a gain, a response or a dead band of their own\nReported only: the receivers are judged over the whole line",
+  ],
+  fast_arrivals: [
+    "Energy faster than the surface waves",
+    "The share of the surface-wave energy arriving faster than the gathers' cone\nBody waves or refractions",
+  ],
+  // The line's receivers
+  off_decay_receivers: [
+    "Receivers too weak or too loud",
+    "Amplitude off the decay with distance in most records reaching them\nLeft out of every window",
+  ],
+  spectral_receivers: [
+    "Receivers with an unusual spectrum",
+    "A spectrum unlike their neighbours' in most records reaching them\nKept, to look at",
+  ],
+  // A dispersion image
+  coherent_columns: ["Coherent frequencies", "The share of the image's frequencies whose peak stands over the background"],
+  virtual_shot_snr_db: [
+    "Median SNR",
+    "The stacked correlations' surface waves against the noise after them\nMeasured as a record's, from their virtual source",
+  ],
+  ridge_at_vmin: [
+    "Peaks at the lowest velocity",
+    "The share of the coherent frequencies peaking at the image's lowest velocity\nIts velocities may start too high",
+  ],
+  ridge_at_vmax: [
+    "Peaks at the highest velocity",
+    "The share of the coherent frequencies peaking at the image's highest velocity\nIts velocities may stop too low",
+  ],
+  band_at_fmin: [
+    "Coherent band at the lowest frequency",
+    "The coherent band reaches the image's lowest frequency\nIt may go on below it",
+  ],
+  band_at_fmax: [
+    "Coherent band at the highest frequency",
+    "The coherent band reaches the image's highest frequency\nIt may go on above it",
+  ],
+  competing_ridges: [
+    "Frequencies with a second ridge",
+    "The share of the coherent frequencies with a second peak of similar strength\nA higher mode or another wave",
+  ],
+  aliased_ridges: [
+    "Second ridges in the aliasing zone",
+    "The share of the second ridges at wavelengths under twice the receiver spacing\nThere a ridge may be an alias",
+  ],
+  background: ["Background level", "The image away from its ridge, against the ridge's peak\n0 when clean, 1 as strong as the ridge"],
+  stripes: ["Background stripes", "How much that level jumps from a frequency to the next\n0 when even"],
+  band_share_of_usable: [
+    "Coherent band / usable band",
+    "The coherent band's width over the records' usable band, within the image's frequencies",
+  ],
+  // A passive window's segments, by its FK selection
+  fk_segments: ["Segments judged", "The window's noise segments the FK selection judged"],
+  fk_kept: ["Segments kept", "The share of the segments the FK selection kept"],
+  fk_flipped: ["Segments flipped", "Segments whose waves travel the other way, turned before stacking"],
+  // A curve
+  sharpness: ["Sharpness", "How narrow the ridge is, against a plane wave's through the window\n1 when as narrow"],
+  prominence: ["Prominence", "How much the ridge stands over the rest of its frequency, against a plane wave's"],
+  on_data: ["Points on the ridge's top", "The share of the picked points at their frequency's brightest value, within 10 %"],
+  constant_wavelength: [
+    "Points at constant wavelength",
+    "The share of the points where velocity grows like frequency\nA wavelength set by the window, not by the ground",
+  ],
+  n_points: ["Points picked", "The points of the pick kept on its ridge"],
+  aliased_points: [
+    "Points in the aliasing zone",
+    "The share of the curve's points at wavelengths under twice the receiver spacing",
+  ],
+  beyond_reach_points: [
+    "Points beyond the window's reach",
+    "The share of the curve's points at wavelengths over three window lengths",
+  ],
+  curve_points: ["Points of the curve", "The pick resampled by wavelength: what the inversion fits"],
+  wavelength_ratio: ["Longest / shortest wavelength", "How wide a range of wavelengths the curve spans"],
+  max_jump: ["Largest step", "The largest velocity step from a point to the next, relative\nA jump to another mode"],
+  air_wave_share: ["Points at the air wave's speed", "The share of the points near 340 m/s: the air wave, not the ground"],
+  trend: ["Normal dispersion", "The rank correlation of velocity with wavelength\nAbove 0 when velocity grows with wavelength"],
+  uncertainty: ["Median uncertainty", "The points' velocity uncertainty over their velocity, the median"],
+  near_offset: [
+    "Nearest shot",
+    "The distance from the window's receivers to its nearest shot\nNearer than half the longest wavelength, the long wavelengths may read slow (near field)",
+  ],
+  // A curve, a model, a soil column against its neighbours
+  neighbour_misfit: [
+    "Difference from the neighbours",
+    "Against the neighbours on each side, the median relative difference\nThe worse side",
+  ],
+  misfit: ["Difference from the neighbours", "Against the neighbours on each side, the median relative difference\nThe worse side"],
+  sides_compared: ["Sides compared", "The sides whose neighbours agree with each other, and so could be compared"],
+  // The line's curves
+  curves: ["Curves passed", "The windows whose curve passed the curve check"],
+  without_curve: ["Windows without a curve", "The windows whose curve was rejected or never picked"],
+  depth_spread: [
+    "Spread of λmax",
+    "How much the curves' longest wavelength varies along the line\nThe median absolute deviation over the median",
+  ],
+  inverse_curves: ["Curves with an inverse trend", "The curves whose velocity falls as wavelength grows"],
+  // A seismic model
+  misfit_short: ["Misfit, short wavelengths", "The model's curve against the picked points at the shortest wavelengths\nIn uncertainties: under 1 within them"],
+  misfit_middle: ["Misfit, middle wavelengths", "The model's curve against the picked points at the middle wavelengths\nIn uncertainties: under 1 within them"],
+  misfit_long: ["Misfit, long wavelengths", "The model's curve against the picked points at the longest wavelengths\nIn uncertainties: under 1 within them"],
+  residual_short: ["Residual, short wavelengths", "(modelled − picked) / modelled, the median over those points"],
+  residual_middle: ["Residual, middle wavelengths", "(modelled − picked) / modelled, the median over those points"],
+  residual_long: ["Residual, long wavelengths", "(modelled − picked) / modelled, the median over those points"],
+  misfit_layered: ["Misfit of the layered median", "The layered median's curve against every picked point"],
+  rhat: ["Chains' agreement (R-hat)", "How well the chains agree on Vs at the depths watched: 1 when they agree\nThe worst over those depths"],
+  acceptance: ["Moves accepted", "The share of the moves the chains accepted, the median"],
+  ess: ["Effective samples", "The independent samples the chains hold, the fewest over the depths watched"],
+  autocorrelation: [
+    "Lag-1 autocorrelation",
+    "How much each sample repeats the one before it, the most over the depths watched",
+  ],
+  samples_per_chain: ["Samples per chain", "The models each chain keeps after its burn-in"],
+  at_bound: [
+    "Samples at a bound",
+    "The share of a parameter's samples at the edge of its allowed range, the most over the parameters",
+  ],
+  depth_informed: ["Depth informed", ""],
+  useful_depth: ["Depth informed", ""], // its name in older logs
+  depth_informed_spread: [
+    "Spread of the depths informed",
+    "How much the depth informed varies along the line\nThe median absolute deviation over the median",
+  ],
+  // In older logs, the models were compared down to half their curve's longest wavelength.
+  useful_depth_spread: ["Spread of the depths of investigation", "How much the depth of investigation varies along the line"],
+  contrast: [
+    "Least contrast between layers",
+    "The smallest Vs difference between adjacent layers of the layered median, over their mean",
+  ],
+  // The line's models
+  models: ["Models passed", "The windows whose model passed the model check"],
+  without_model: ["Windows without a model", "The windows not inverted, or whose model was rejected"],
+  shallow_models: [
+    "Models informed too shallow",
+    "Informed above the depths the line's models are compared at\nNot compared with their neighbours",
+  ],
+  // A soil column, and the line's
+  water_table: ["Water table", "The depth to water in the soil column"],
+  water_table_jump: ["Water table against the neighbours", "The difference from the neighbours' water tables, the worse side"],
+  water_table_min: ["Shallowest water table", "Over the line's soil columns"],
+  water_table_max: ["Deepest water table", "Over the line's soil columns"],
+};
+// ...where a measure's name says something else at another check.
+const GATE_METRICS: Record<string, Record<string, [string, string]>> = {
+  G8: {
+    models: ["Soil columns passed", "The windows whose soil column passed its check"],
+    without_model: ["Windows without a soil column", "The windows with no soil column, or whose soil column was rejected"],
+  },
 };
 
 // The inversion's models, as the figures name them.
@@ -105,12 +206,35 @@ export const MODEL_LABELS: Record<string, string> = {
   smooth_best: "best, smooth",
 };
 
-// The things a gate's measures describe, a menu each: a window's signal is its stacked
-// correlations (the virtual shot's); "neighbours" and "line", what each line check compares.
+// The checks, by what they judge: a unit's, and the line's (its measures "of" the line).
+const CHECK_NAMES: Record<string, string> = {
+  G1: "Signal check",
+  G2: "Dispersion image check",
+  G3: "Curve check",
+  G4: "Curve against its neighbours",
+  G5: "Model check",
+  G6: "Model against its neighbours",
+  G7: "Soil column check",
+  G8: "Soil column against its neighbours",
+};
+const LINE_CHECK_NAMES: Record<string, string> = {
+  G1: "The line's receivers",
+  G4: "The line's curves",
+  G6: "The line's models",
+  G8: "The line's soil columns",
+};
+
+/** A check's name, as its menu of measures is titled: the line's own (`line`) or a unit's. */
+export function checkName(gate: string, line = false): string {
+  return (line ? LINE_CHECK_NAMES[gate] : undefined) ?? CHECK_NAMES[gate] ?? gate;
+}
+
+// The things a check measures, titled within its menu when it measures several: a window's
+// signal is its stacked correlations (the virtual shot's).
 const OBJECT_TITLES: Record<string, string> = {
   signal: "Signal",
   spectrum: "Spectrum",
-  selection: "fk selection",
+  selection: "FK selection",
   image: "Image",
   curve: "Curve",
   fit: "Fit to the curve",
@@ -119,32 +243,27 @@ const OBJECT_TITLES: Record<string, string> = {
   soil: "Soil column",
 };
 const GATE_OBJECTS: Record<string, Record<string, string>> = {
-  G1: { line: "The line's receivers" },
   G2: { signal: "Stacked correlations", spectrum: "Their spectrum" },
-  G4: { neighbours: "Curve against its neighbours", line: "The line's curves" },
-  G6: { neighbours: "Model against its neighbours", line: "The line's models" },
-  G8: { neighbours: "Soil column against its neighbours", line: "The line's soil columns" },
-};
-// What each gate measures, for one that measured nothing.
-const GATE_OBJECT: Record<string, string> = {
-  G1: "signal",
-  G2: "image",
-  G3: "curve",
-  G4: "neighbours",
-  G5: "model",
-  G6: "neighbours",
-  G7: "soil",
-  G8: "neighbours",
 };
 
-/** The title of a gate's menu of the measures of one thing it measures. */
+/** The title of the measures of one thing a check measures. */
 export function objectTitle(gate: string, of: string): string {
-  const thing = of || GATE_OBJECT[gate] || "";
-  return GATE_OBJECTS[gate]?.[thing] ?? OBJECT_TITLES[thing] ?? capitalized(thing || gate);
+  return GATE_OBJECTS[gate]?.[of] ?? OBJECT_TITLES[of] ?? capitalized(of);
 }
 
-export function metricLabel(name: string): string {
-  return METRIC_LABELS[name] ?? name.replaceAll("_", " ");
+function metricWords(name: string, gate?: string): [string, string] {
+  return (gate ? GATE_METRICS[gate]?.[name] : undefined) ?? METRICS[name] ?? [name.replaceAll("_", " "), ""];
+}
+
+export function metricLabel(name: string, gate?: string): string {
+  return metricWords(name, gate)[0];
+}
+
+/** What a measure is, on its name's hover: its name, then a line a fact. */
+export function metricTip(name: string, gate?: string): string {
+  if (name === "depth_informed" || name === "useful_depth") return DEPTH_INFORMED_TIP;
+  const [label, meaning] = metricWords(name, gate);
+  return meaning ? `${label}\n${meaning}` : "";
 }
 
 // Shares shown as percentages; a boolean metric (1 or 0) as yes or no.
@@ -192,9 +311,17 @@ export function range(r: [number, number] | null | undefined, unit: string, digi
   return r ? `${num(r[0], digits)}–${num(r[1], digits)} ${unit}` : "—";
 }
 
+// The measures whose value none says all of it: the depth informed, down to the model's bottom.
+const WHOLE = new Set(["depth_informed", "useful_depth"]);
+
+/** Whether a metric has a value to judge: measured, or all of it (WHOLE). */
+export function measured(metric: Metric): boolean {
+  return metric.value != null || WHOLE.has(metric.name);
+}
+
 /** A metric's value (or threshold) as it is judged, with its unit. */
 export function metricValue(metric: Metric, value: number | null = metric.value): string {
-  if (value == null) return "—";
+  if (value == null) return WHOLE.has(metric.name) ? "the whole model" : "not measured";
   if (BOOLEANS.has(metric.name)) return value ? "yes" : "no";
   // A share in whole percents; a small one to two significant digits, never 0 when some are
   // (the fk selection's 1 segment of 2,736: 0.04 %).
@@ -205,11 +332,18 @@ export function metricValue(metric: Metric, value: number | null = metric.value)
   return metric.unit ? `${num(value)} ${metric.unit}` : num(value);
 }
 
-/** The metric's limit: "≤ 1.1", "≥ 400"; empty when it is reported only. */
+// The measures judged by their size whichever their sign: a trigger early or late.
+const SIGNED = new Set(["trigger_error_s", "trigger_shift_s"]);
+
+/** The metric's limit in words: "at most 1.1", "at least 400 m/s", "none" (none allowed),
+ * "within ±10 ms"; "no limit" when it is reported only. */
 export function metricLimit(metric: Metric): string {
-  if (metric.threshold == null || metric.bound == null) return "";
-  if (BOOLEANS.has(metric.name)) return "no";
-  return `${metric.bound === "max" ? "≤" : "≥"} ${metricValue(metric, metric.threshold)}`;
+  if (metric.threshold == null || metric.bound == null) return "no limit";
+  if (BOOLEANS.has(metric.name)) return "not allowed";
+  if (metric.bound === "max" && metric.threshold === 0) return "none";
+  const limit = metricValue(metric, metric.threshold);
+  if (SIGNED.has(metric.name)) return `within ±${limit}`;
+  return `${metric.bound === "max" ? "at most" : "at least"} ${limit}`;
 }
 
 /** An inversion parameter's name as the figures say it: vs1 as Vs1, thick1 as H1. */
@@ -222,44 +356,6 @@ export function parameterLabel(name: string, unit = true): string {
   if (name === "layers") return "Layers";
   if (name === "noise") return "Noise factor";
   return name;
-}
-
-/** Why an attempt ran, in words. */
-export function triggerLabel(triggeredBy: string): string {
-  if (triggeredBy === "initial") return "first run";
-  if (triggeredBy === "backtrack") return "an earlier stage ran again";
-  return triggeredBy.replace(":", " · ").replaceAll("_", " ");
-}
-
-/** A stage's parameters an attempt changed, as "key value" pairs, nested keys dotted. */
-export function changes(parameters: Record<string, unknown>): string[] {
-  return Object.entries(flat(parameters)).map(([name, value]) => shown(name, value));
-}
-
-/** What `after` changed of `before`: the values that differ, as "key value" pairs. */
-export function changedSince(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
-  const was = flat(before);
-  return Object.entries(flat(after))
-    .filter(([name, value]) => JSON.stringify(was[name]) !== JSON.stringify(value))
-    .map(([name, value]) => shown(name, value));
-}
-
-/** The parameters by dotted key: nested objects opened, lists kept whole. */
-function flat(parameters: Record<string, unknown>, prefix = "", into: Record<string, unknown> = {}) {
-  for (const [key, value] of Object.entries(parameters)) {
-    const name = prefix ? `${prefix}.${key}` : key;
-    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-      flat(value as Record<string, unknown>, name, into);
-    } else {
-      into[name] = value;
-    }
-  }
-  return into;
-}
-
-function shown(name: string, value: unknown): string {
-  if (Array.isArray(value)) return `${name} [${value.length}]`;
-  return `${name} ${typeof value === "number" ? num(value, 4) : String(value)}`;
 }
 
 /** Where a setting comes from, in two words. */
@@ -283,27 +379,27 @@ export const MAKER_LABELS: Record<Maker, string> = {
  * badge, `short` on the line's hover and legend. */
 export const STATE_MEANINGS: Record<StageKey, Record<Status, { full: string; short: string }>> = {
   records: {
-    pass: { full: "The windows stack it.", short: "stacked by its windows" },
-    warn: { full: "The windows stack it; worth a look.", short: "stacked, with a warning" },
+    pass: { full: "Passed the signal check.\nUsed by its windows.", short: "used by its windows" },
+    warn: { full: "Flagged by the signal check.\nUsed by its windows.", short: "used by its windows, flagged" },
     fail: { full: "Left out of every window.", short: "left out of every window" },
     none: { full: "Not checked.", short: "" },
   },
   dispersion: {
-    pass: { full: "Its curve goes on to the inversion.", short: "its curve goes on to the inversion" },
-    warn: { full: "Its curve goes on to the inversion; worth a look.", short: "its curve goes on to the inversion, flagged" },
-    fail: { full: "Its curve is not inverted.", short: "its curve is not inverted" },
-    none: { full: "No curve: nothing to invert here.", short: "" },
+    pass: { full: "Its curve went on to the inversion.", short: "its curve went on to the inversion" },
+    warn: { full: "Flagged.\nIts curve went on to the inversion.", short: "its curve went on to the inversion, flagged" },
+    fail: { full: "Its curve was not inverted.", short: "its curve was not inverted" },
+    none: { full: "No curve.", short: "" },
   },
   inversion: {
-    pass: { full: "Its model can be trusted.", short: "its model is trusted" },
-    warn: { full: "Its model is kept; read it with care.", short: "its model is kept, flagged" },
-    fail: { full: "Its model is not to be trusted.", short: "its model is not trusted" },
+    pass: { full: "Passed the model checks.", short: "passed the model checks" },
+    warn: { full: "Flagged by the model checks.", short: "flagged by the model checks" },
+    fail: { full: "Rejected by the model checks.", short: "rejected by the model checks" },
     none: { full: "Not inverted.", short: "" },
   },
   petro: {
-    pass: { full: "Its soil column can be trusted.", short: "its soil column is trusted" },
-    warn: { full: "Its soil column is kept; read it with care.", short: "its soil column is kept, flagged" },
-    fail: { full: "Its soil column is not to be trusted.", short: "its soil column is not trusted" },
+    pass: { full: "Passed the soil column checks.", short: "passed the soil column checks" },
+    warn: { full: "Flagged by the soil column checks.", short: "flagged by the soil column checks" },
+    fail: { full: "Rejected by the soil column checks.", short: "rejected by the soil column checks" },
     none: { full: "Not inverted.", short: "" },
   },
 };

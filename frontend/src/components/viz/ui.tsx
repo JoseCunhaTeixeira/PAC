@@ -2,18 +2,18 @@ import type { ReactNode } from "react";
 import { BoxTools, Callout, Segmented } from "../kit";
 import {
   capitalized,
-  changedSince,
-  changes,
+  checkName,
+  measured,
   metricLabel,
   metricLimit,
+  metricTip,
   metricValue,
   objectTitle,
   ORIGIN_LABELS,
+  runDate,
   STATUS_LABELS,
-  triggerLabel,
 } from "./format";
 import type {
-  AttemptSummary,
   GateView,
   Mark,
   Metric,
@@ -22,6 +22,7 @@ import type {
   Sentence,
   Setting,
   Status,
+  Step,
   Verdict,
 } from "./types";
 import { useRunMaker } from "./maker";
@@ -29,8 +30,8 @@ import type { SavedFigure } from "./runFigures";
 import "./viz.css";
 
 // The pieces every panel of Visualization says things with: a state's badge, a card's
-// sentences, the settings a stage ran with and why, and folded under a card, each gate's
-// metrics and the attempts.
+// sentences, the settings a stage ran with, and folded under a card, each check's measures and
+// what was done, a step each.
 
 const MARK_ICONS: Record<Mark, string> = { pass: "✓", warn: "!", fail: "✕", info: "i" };
 const VERDICT_STATUS: Record<Verdict, Status> = { pass: "pass", retry: "warn", reject: "fail" };
@@ -43,21 +44,8 @@ const STATUS_MEANINGS: Record<Status, string> = {
   none: "No check judged it.",
 };
 const STATUS_TITLES: Record<Status, string> = { pass: "Passed", warn: "Flagged", fail: "Rejected", none: "Not judged" };
-const GATE_NAMES: Record<string, string> = {
-  G1: "the records' signal check",
-  G2: "the dispersion image's check",
-  G3: "the curve's check",
-  G4: "the check of the curves along the line",
-  G5: "the model's check",
-  G6: "the check of the models along the line",
-  G7: "the soil column's check",
-  G8: "the check of the soil columns along the line",
-};
-const VERDICT_MEANINGS: Record<Verdict, string> = {
-  pass: "passed",
-  retry: "still flagged after its retries",
-  reject: "rejected",
-};
+// A check's verdict, as its badge says it.
+const VERDICT_WORDS: Record<Verdict, string> = { pass: "passed", retry: "flagged", reject: "rejected" };
 
 export function StatusBadge({ status, label, meaning }: { status: Status; label?: string; meaning?: string }) {
   return (
@@ -76,8 +64,8 @@ const PART_WORDS: Record<PartState, string> = {
   none: "not checked",
 };
 const PART_GATES: Record<string, string> = {
-  image: "G2: the dispersion image's check",
-  curve: "G3 and G4: the curve's checks, alone and along the line",
+  image: "The dispersion image check",
+  curve: "The curve check, and the check against the neighbouring curves",
 };
 
 /** One of a unit's checks said apart (a window's image, its curve): what it checks, its state,
@@ -93,35 +81,27 @@ export function PartBadge({ part }: { part: { label: string; state: PartState } 
   );
 }
 
-/** A gate's verdict, or for a run PAC made, that it measured without judging. */
+/** A check's verdict, in a word; for a run made by hand, that it was measured, not judged. */
 export function GateBadge({ gate }: { gate: GateView }) {
-  const name = GATE_NAMES[gate.gate] ?? gate.gate;
   if (gate.by_hand) {
     const passed = gate.verdict === "pass";
     return (
       <span
         className={`viz-badge ${passed ? "hand" : "none"}`}
-        data-tip={`${gate.gate}: ${name}\n${passed ? "Picked by hand: passed as it is" : "Not checked: its curve was picked by hand"}`}
+        data-tip={passed ? "Picked by hand\nPassed as it is" : "Not checked\nIts curve was picked by hand"}
       >
-        {gate.gate} {passed ? "by hand" : "not checked"}
+        {passed ? "by hand" : "not checked"}
       </span>
     );
   }
   if (gate.verdict === null) {
     return (
-      <span className="viz-badge none" data-tip={`${gate.gate}: ${name}\nMeasured, not judged (made by hand)`}>
-        {gate.gate}: measured
+      <span className="viz-badge none" data-tip={"Measured\nAgainst the agent's limits, not judged: made by hand"}>
+        measured
       </span>
     );
   }
-  return (
-    <span
-      className={`viz-badge ${VERDICT_STATUS[gate.verdict]}`}
-      data-tip={`${gate.gate}: ${name}\n${capitalized(VERDICT_MEANINGS[gate.verdict])}`}
-    >
-      {gate.gate} {gate.verdict}
-    </span>
-  );
+  return <span className={`viz-badge ${VERDICT_STATUS[gate.verdict]}`}>{VERDICT_WORDS[gate.verdict]}</span>;
 }
 
 /** A sentence's whole, as a tooltip: what it found in bold, then why it matters and what to do,
@@ -171,8 +151,11 @@ export function OriginTag({ origin, tip = true }: { origin: Origin; tip?: boolea
   );
 }
 
-/** Settings as a definition list: each its value, then why, then how the line's other units
- * differ in it. */
+// A setting's parameters apart, as the run card's tiles say them: a line each.
+const SEP = " · ";
+
+/** Settings as a definition list: each its value and who set it, its other parameters a line
+ * each, why when its unit's own, then how the line's other units differ in it. */
 export function SettingsList({ settings }: { settings: Setting[] }) {
   return (
     <dl className="viz-settings">
@@ -181,14 +164,48 @@ export function SettingsList({ settings }: { settings: Setting[] }) {
           <dt>{setting.label}</dt>
           <dd>
             <b>{setting.value}</b>
-            {setting.detail && <span className="viz-muted">{setting.detail} </span>}
             <OriginTag origin={setting.origin} />
-            <span className="viz-why">{capitalized(setting.why)}.</span>
+            {setting.detail
+              .split(SEP)
+              .filter(Boolean)
+              .map((line) => (
+                <span key={line} className="viz-why">
+                  {line}
+                </span>
+              ))}
+            {setting.why && <span className="viz-why">{capitalized(setting.why)}.</span>}
             {setting.spread && <span className="viz-why viz-muted">{capitalized(setting.spread)}.</span>}
           </dd>
         </div>
       ))}
     </dl>
+  );
+}
+
+/** What was done: a step after another along a timeline, each its number on the line in the
+ * colour of who did it, its title, then its facts, a line each. */
+export function Timeline({ steps }: { steps: Step[] }) {
+  return (
+    <ol className="viz-timeline">
+      {steps.map((step, index) => (
+        <li key={index} className="viz-step" data-tip={step.detail || undefined}>
+          <span
+            className={`viz-step-node ${step.by}`}
+            data-tip={`${ORIGIN_LABELS[step.by]}${step.at ? `\n${runDate(step.at)}` : ""}`}
+          >
+            {index + 1}
+          </span>
+          <div className="viz-step-title">{step.title}</div>
+          {step.lines.length > 0 && (
+            <ul className="viz-step-lines">
+              {step.lines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -234,17 +251,16 @@ export function Fold({
 
 interface MetricRow {
   label: string;
+  tip: string;
   value: string;
   limit: string;
   judged: boolean;
   passed: boolean;
-  /** What it covers; empty when its log does not say. */
-  over: string;
 }
 
-/** A gate's metrics as rows, a measure held between a floor and a ceiling (the acceptance
+/** A check's measures as rows, a measure held between a floor and a ceiling (the acceptance
  * between 20 and 30 %) in one row, its band as its limit. */
-function metricRows(metrics: Metric[]): MetricRow[] {
+function metricRows(gate: string, metrics: Metric[]): MetricRow[] {
   const rows: MetricRow[] = [];
   const merged = new Set<number>();
   metrics.forEach((metric, i) => {
@@ -260,42 +276,43 @@ function metricRows(metrics: Metric[]): MetricRow[] {
         metric.bound != null &&
         other.bound !== metric.bound,
     );
+    const label = metricLabel(metric.name, gate);
+    const tip = metricTip(metric.name, gate);
     if (j >= 0) {
       merged.add(j);
       const [low, high] = metric.bound === "min" ? [metric, metrics[j]] : [metrics[j], metric];
       rows.push({
-        label: metricLabel(metric.name),
+        label,
+        tip,
         value: metricValue(metric),
         limit: band(low, high),
-        judged: true,
+        judged: measured(metric),
         passed: low.passed && high.passed,
-        over: metric.over ?? "",
       });
       return;
     }
-    const judged = metric.threshold != null && metric.bound != null;
     rows.push({
-      label: metricLabel(metric.name),
+      label,
+      tip,
       value: metricValue(metric),
-      limit: metricLimit(metric) || "reported",
-      judged,
+      limit: metricLimit(metric),
+      judged: metric.threshold != null && metric.bound != null && measured(metric),
       passed: metric.passed,
-      over: metric.over ?? "",
     });
   });
   return rows;
 }
 
-/** A floor and a ceiling as one band: "≥ 20, ≤ 30 %". */
+/** A floor and a ceiling as one band: "20 to 30 %". */
 function band(low: Metric, high: Metric): string {
   const from = metricValue(low, low.threshold);
   const to = metricValue(high, high.threshold);
   const unit = / (\S+)$/.exec(to)?.[1];
-  return `≥ ${unit && from.endsWith(` ${unit}`) ? from.slice(0, -unit.length - 1) : from}, ≤ ${to}`;
+  return `${unit && from.endsWith(` ${unit}`) ? from.slice(0, -unit.length - 1) : from} to ${to}`;
 }
 
-/** A gate's metrics by the object they describe (its signal, its spectrum), in the order
- * measured; a log's older ones, one table without a title. */
+/** A check's measures by the thing they describe (a record's signal, its spectrum), in the order
+ * measured. */
 function byObject(metrics: Metric[]): [string, Metric[]][] {
   const objects = new Map<string, Metric[]>();
   for (const metric of metrics) {
@@ -305,37 +322,22 @@ function byObject(metrics: Metric[]): [string, Metric[]][] {
   return [...objects];
 }
 
-/** How many rows each row's coverage spans: the rows below it saying the same, 0 for them. */
-function overSpans(rows: MetricRow[]): number[] {
-  return rows.map((row, i) => {
-    if (i > 0 && rows[i - 1].over === row.over) return 0;
-    let span = 1;
-    while (i + span < rows.length && rows[i + span].over === row.over) span++;
-    return span;
-  });
-}
-
-/** One object's measures: each against its limit, what it covers said once for the rows it
- * covers alike. */
-function MetricTable({ metrics }: { metrics: Metric[] }) {
-  const rows = metricRows(metrics);
-  const covers = rows.some((row) => row.over);
-  const spans = overSpans(rows);
-  // The same columns in every table, their values aligned from one to the next; a measure
-  // over the coverage's column when none says it.
+/** Measures against their limits: each its name, what it is on the name's hover, its value
+ * and its limit. */
+function MetricTable({ gate, metrics, title }: { gate: string; metrics: Metric[]; title?: string }) {
+  const rows = metricRows(gate, metrics);
+  // The same columns in every table, their values aligned from one to the next.
   return (
     <div className="viz-table-wrap">
       <table className="viz-table viz-measures">
         <colgroup>
-          <col className="viz-col-measure" />
           <col />
           <col className="viz-col-num" />
-          <col className="viz-col-num" />
+          <col className="viz-col-limit" />
         </colgroup>
         <thead>
           <tr>
-            <th colSpan={covers ? 1 : 2}>Measure</th>
-            {covers && <th>Over</th>}
+            <th>{title ?? "Measure"}</th>
             <th className="num">Value</th>
             <th className="num">Limit</th>
           </tr>
@@ -343,12 +345,11 @@ function MetricTable({ metrics }: { metrics: Metric[] }) {
         <tbody>
           {rows.map((row, i) => (
             <tr key={i} className={row.judged && !row.passed ? "failed" : undefined}>
-              <td colSpan={covers ? 1 : 2}>{row.label}</td>
-              {covers && spans[i] > 0 && (
-                <td rowSpan={spans[i]} className="viz-over">
-                  {row.over}
-                </td>
-              )}
+              <td>
+                <span className={row.tip ? "viz-term" : undefined} data-tip={row.tip || undefined}>
+                  {row.label}
+                </span>
+              </td>
               <td className="num">
                 {row.value} {row.judged ? (row.passed ? "✓" : "✕") : ""}
               </td>
@@ -361,116 +362,64 @@ function MetricTable({ metrics }: { metrics: Metric[] }) {
   );
 }
 
-/** A card's measures in one menu, like its settings: a submenu for each thing they measure (a
- * record's signal, its spectrum; a window's image, its curve), its gate's verdict beside it. */
+/** A card's measures in one menu, like its settings: a submenu for each check, its verdict
+ * beside it, its measures in a table for each thing it measures (a record's signal, its
+ * spectrum), titled when it measures several. */
 export function GateTables({ gates }: { gates: GateView[] }) {
   // A curve picked by hand is measured, not judged (its badge says so); nothing of it is compared
   // along the line.
   const measured = gates.filter((gate) => !gate.by_hand || gate.metrics.length > 0);
   if (measured.length === 0) return null;
   return (
-    <Fold title="Measures, and limits">
+    <Fold title="Measures and limits">
       <div className="viz-measure-menus">
-        {measured.flatMap((gate) =>
-          (gate.metrics.length ? byObject(gate.metrics) : [["", []] as [string, Metric[]]]).map(
-            ([of, metrics]) => (
-              <Fold
-                key={`${gate.gate}-${of}`}
-                title={
-                  <span className="viz-measure-head">
-                    {objectTitle(gate.gate, of)}
-                    <GateBadge gate={gate} />
-                  </span>
-                }
-              >
-                {metrics.length ? (
-                  <MetricTable metrics={metrics} />
-                ) : (
-                  <p className="viz-muted viz-small">Nothing measured.</p>
-                )}
-              </Fold>
-            ),
-          ),
-        )}
+        {measured.map((gate) => {
+          const objects = byObject(gate.metrics);
+          const line = objects.length > 0 && objects.every(([of]) => of === "line");
+          return (
+            <Fold
+              key={gate.gate}
+              title={
+                <span className="viz-measure-head">
+                  {checkName(gate.gate, line)}
+                  <GateBadge gate={gate} />
+                </span>
+              }
+            >
+              {objects.length === 0 ? (
+                <p className="viz-muted viz-small">Nothing measured.</p>
+              ) : (
+                objects.map(([of, metrics]) => (
+                  <MetricTable
+                    key={of}
+                    gate={gate.gate}
+                    metrics={metrics}
+                    title={objects.length > 1 ? objectTitle(gate.gate, of) : undefined}
+                  />
+                ))
+              )}
+            </Fold>
+          );
+        })}
       </div>
     </Fold>
   );
 }
 
-/** A unit's attempts, the first first: why each ran, what the gates said, what it changed. */
-export function AttemptTable<T extends AttemptSummary>({
-  attempts,
-  extra = [],
-}: {
-  attempts: T[];
-  extra?: { label: string; render: (attempt: T) => ReactNode }[];
-}) {
-  if (attempts.length === 0) return null;
-  return (
-    <div className="viz-table-wrap">
-      <table className="viz-table">
-        <thead>
-          <tr>
-            <th className="num">#</th>
-            <th>Stage</th>
-            <th>Why</th>
-            {extra.map((column) => (
-              <th key={column.label}>{column.label}</th>
-            ))}
-            <th>Verdicts</th>
-            <th>Changed</th>
-          </tr>
-        </thead>
-        <tbody>
-          {attempts.map((attempt, index) => (
-            <tr key={`${attempt.stage}-${attempt.attempt}`}>
-              <td className="num">{attempt.attempt}</td>
-              <td>{attempt.stage.replaceAll("_", " ")}</td>
-              <td>{triggerLabel(attempt.triggered_by)}</td>
-              {extra.map((column) => (
-                <td key={column.label}>{column.render(attempt)}</td>
-              ))}
-              <td>
-                {attempt.status === "failed"
-                  ? "failed"
-                  : Object.entries(attempt.verdicts)
-                      .map(([gate, verdict]) => `${gate} ${verdict}`)
-                      .join(", ") || "—"}
-              </td>
-              <td>{changedText(attempt, attempts.slice(0, index).findLast((one) => one.stage === attempt.stage))}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/** What an attempt changed, short: against the stage's attempt before it, the values that
- * differ; a first run changes nothing (the run's own); with none before it (a stage started
- * afresh), what it ran with. The long lists (every layer's bounds) counted, not spelt out. */
-function changedText(attempt: AttemptSummary, before: AttemptSummary | undefined): string {
-  if (before === undefined && attempt.triggered_by === "initial") return "—";
-  const said =
-    before === undefined ? changes(attempt.parameters) : changedSince(before.parameters, attempt.parameters);
-  if (said.length > 6) return `${said.slice(0, 5).join(", ")}, … (${said.length})`;
-  return said.join(", ") || "—";
-}
-
-/** A card's details: each gate's measures, then its attempts, folded. */
-export function Details({ gates, attempts, children }: {
+/** A card's details: each check's measures, then what was done to its unit, a step each, when
+ * a step ran again, folded. */
+export function Details({ gates, steps = [], children }: {
   gates: GateView[];
-  attempts: AttemptSummary[];
+  steps?: Step[];
   children?: ReactNode;
 }) {
-  if (gates.length === 0 && attempts.length === 0 && !children) return null;
-  // The measures in their menu, the attempts in theirs.
+  if (gates.length === 0 && steps.length === 0 && !children) return null;
   return (
     <>
       <GateTables gates={gates} />
-      {(attempts.length > 0 || children) && (
-        <Fold title="Attempts">
-          <AttemptTable attempts={attempts} />
+      {(steps.length > 0 || children) && (
+        <Fold title="What was done">
+          {steps.length > 0 && <Timeline steps={steps} />}
           {children}
         </Fold>
       )}

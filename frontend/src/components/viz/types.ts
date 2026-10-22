@@ -220,19 +220,6 @@ export interface GateView {
   by_hand?: boolean;
 }
 
-export interface AttemptSummary {
-  attempt: number;
-  stage: string;
-  triggered_by: string;
-  status: string;
-  error: string | null;
-  started_at: string;
-  parameters: Record<string, unknown>;
-  notes: string[];
-  verdicts: Record<string, Verdict>;
-  flags: string[];
-}
-
 export interface Card {
   key: string;
   status: Status;
@@ -240,11 +227,12 @@ export interface Card {
   verdict: Sentence | null;
   sentences: Sentence[];
   gates: GateView[];
-  attempts: AttemptSummary[];
   /** Its checks said apart, as its cell's parts: for its badges. */
   parts?: { label: string; state: PartState }[];
-  /** What was done to it: each step with the settings it ran with, and why. */
+  /** What was done to it: each step with the settings it ran with. */
   settings?: Setting[];
+  /** Its attempts, a step each, when one ran again. */
+  steps?: Step[];
 }
 
 export interface RecordCard extends Card {
@@ -369,15 +357,9 @@ export interface Convergence {
   step_unit?: string; // "%": relative to the value (the layers chosen by the data)
 }
 
-export interface InversionAttempt extends AttemptSummary {
-  n_layers: number | null;
-  depth_m: number | null;
-}
-
 export type FigureName = "marginals" | "density_curves" | "dispersion_image" | "chains";
 
 export interface InversionCard extends Card {
-  attempts: InversionAttempt[];
   inverted: boolean;
   parameters: InversionParameters | null;
   tuning: [number, number][];

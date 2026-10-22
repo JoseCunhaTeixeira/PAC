@@ -1,6 +1,6 @@
 """The shots a window stacks, and every other shot of the line with why the window leaves it out:
-rejected by the assistant's signal check (G1), failed to preprocess, inside the window, too near
-or too far from its middle, or left with too few receivers once its bad traces were left out.
+left out by the agent's signal check (G1), failed to preprocess, within the window, too near or
+too far from its middle, or left with too few receivers once its bad traces were left out.
 From the window's window.json (the records it stacks, as the run built it), the run's manifest
 (its exclusions and distances) and, for a run the assistant made, its log (the reasons)."""
 
@@ -109,7 +109,7 @@ def _shots(
         if x is None:
             continue
         distance = abs(x - window.xmid)
-        away = f"{number(distance, 4)} m from the middle"
+        away = f"{number(distance, 4)} m from its middle"
         edge = max(first - x, x - last)  # from the nearest receiver
         in_field = field is not None and 0 < edge < field
         if record.name in stacked:
@@ -117,17 +117,17 @@ def _shots(
             given = len(own) if own is not None else width
             dropped = sorted(set(window.receiver_indices) - set(own or ()) - line_out)
             if own is not None and dropped:
-                why = f"stacked with {given} of the {width} receivers, {away}: " + _traces_text(
+                why = f"used with {given} of its {width} receivers, {away}: " + _traces_text(
                     dropped, line, log, record.name
                 )
                 shots.append(Shot(name=record.name, x=x, use="part", why=why, receivers=given))
             else:
-                why = f"stacked, {away}" + (
+                why = f"used, {away}" + (
                     ": in its near field, the window has no farther shot" if in_field else ""
                 )
                 shots.append(Shot(name=record.name, x=x, use="used", why=why, receivers=given))
         elif record.name in manifest.exclusions.records:
-            why = "left out of every window by the signal check (G1)"
+            why = "left out of every window by the signal check"
             reasons = _record_reasons(log, record.name)
             shots.append(
                 Shot(
@@ -147,7 +147,7 @@ def _shots(
                 )
             )
         elif first < x < last:
-            shots.append(Shot(name=record.name, x=x, use="inside", why="inside the window"))
+            shots.append(Shot(name=record.name, x=x, use="inside", why="within the window"))
         elif in_field and field is not None:
             shots.append(
                 Shot(
@@ -173,7 +173,7 @@ def _shots(
                     name=record.name,
                     x=x,
                     use="far",
-                    why=f"{away}: beyond the {number(far, 4)} m the windows stack",
+                    why=f"{away}: beyond the farthest shot used, {number(far, 4)} m",
                 )
             )
         else:
@@ -199,10 +199,10 @@ def _sentences(
         return (
             Sentence(
                 mark="info",
-                text=f"Its image stacks the cross-correlations of "
-                f"{plural(len(window.selected_files), 'record')}: every record of a passive line "
-                "serves every window.",
+                text="Its dispersion image stacks the cross-correlations of "
+                f"{plural(len(window.selected_files), 'record')}.",
             ),
+            Sentence(mark="info", text="On a passive line, every record serves every window."),
         )
     used = [shot for shot in shots if shot.use in ("used", "part")]
     what = "correlation gathers" if manifest.preset.mode == "passive-active" else "images"
@@ -210,19 +210,16 @@ def _sentences(
     if used:
         distances = [abs(shot.x - window.xmid) for shot in used]
         left = sum(shot.x < window.xmid for shot in used)
-        sides = ", ".join(
-            part
-            for part in (
-                f"{left} on the left" if left else "",
-                f"{len(used) - left} on the right" if len(used) > left else "",
-            )
-            if part
+        sides = (
+            ("all on its left" if left else "all on its right")
+            if left in (0, len(used))
+            else f"{left} on its left, {len(used) - left} on its right"
         )
         said.append(
             Sentence(
                 mark="info",
                 text=f"Its dispersion image stacks the {what} of {plural(len(used), 'shot')}, "
-                f"{span(min(distances), max(distances), 'm', digits=4)} from its middle: {sides}.",
+                f"{span(min(distances), max(distances), 'm', digits=4)} from its middle, {sides}.",
             )
         )
     line_out, _ = line_receivers(log)
@@ -235,9 +232,8 @@ def _sentences(
         said.append(
             Sentence(
                 mark="info",
-                text=f"{its} at {where} {'is' if len(out) == 1 else 'are'} left out, as of every "
-                "window: in most of the line's records, too weak or too strong for "
-                f"{'its' if len(out) == 1 else 'their'} distance from the shot (a bad geophone).",
+                text=f"{its} at {where} {'is' if len(out) == 1 else 'are'} left out, as from every "
+                "window: too weak or too loud in most of the line's records.",
             )
         )
     part = [shot for shot in used if shot.use == "part"]
@@ -247,29 +243,31 @@ def _sentences(
             Sentence(
                 mark="info",
                 text=f"{plural(len(part), 'shot')} {gives} only some of its "
-                f"{len(window.receiver_indices)} receivers: bad traces left out.",
+                f"{len(window.receiver_indices)} receivers: their bad traces left out.",
             )
         )
     near, far = shot_distances(preset_stage(manifest, "masw"))
     reasons = {
-        "excluded": "rejected by the signal check",
-        "failed": "failed to preprocess",
-        "far": f"beyond the {number(far, 4)} m reach" if far is not None else "beyond the reach",
+        "far": f"beyond the farthest shot used, {number(far, 4)} m"
+        if far is not None
+        else "too far",
         "near": (
-            f"in the near field (nearer than {number(field, 4)} m to the window)"
+            f"in the near field, nearer than {number(field, 4)} m to the window"
             if (field := near_field(log)) is not None
             else f"within {number(near, 4)} m"
         ),
-        "inside": "inside the window",
+        "inside": "within the window",
+        "excluded": "left out by the signal check",
+        "failed": "failed to preprocess",
         "traces": "left with too few receivers",
     }
     # In short: how many for each reason; the reasons in full, and the shots named, on hover.
     short = {
-        "excluded": "rejected (G1)",
-        "failed": "failed",
         "far": "too far",
         "near": "too near",
-        "inside": "inside",
+        "inside": "within the window",
+        "excluded": "left out by the signal check",
+        "failed": "failed to preprocess",
         "traces": "too few receivers",
     }
     left_out: list[str] = []
@@ -281,16 +279,15 @@ def _sentences(
             left_out.append(f"{len(names)} {short[use]}")
             detail.append(f"{len(names)} {reason}{listed}")
     if left_out:
-        excluded = any(shot.use in ("excluded", "failed") for shot in shots)
         said.append(
             Sentence(
-                mark="warn" if excluded else "info",
-                text=f"Shots left out: {', '.join(left_out)}.",
-                detail=f"Shots left out: {', '.join(detail)}.",
+                mark="info",
+                text=f"Shots not used: {', '.join(left_out)}.",
+                detail=f"Shots not used: {', '.join(detail)}.",
             )
         )
     elif not used:
-        said.append(Sentence(mark="fail", text="No shot stacked."))
+        said.append(Sentence(mark="fail", text="No shot used."))
     return tuple(said)
 
 
@@ -326,7 +323,7 @@ def _traces_text(dropped: list[int], line: Line, log: QCLog | None, record: str)
     ]
     reasons = dict.fromkeys(why[index] for index in dropped if index in why)
     return f"{'its trace' if len(said) == 1 else 'its traces'} at {', '.join(said)} left out" + (
-        f" ({', '.join(reasons)})" if reasons else ""
+        f": {', '.join(reasons)}" if reasons else ""
     )
 
 

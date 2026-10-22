@@ -1,15 +1,15 @@
 """The quality of a run's seismic inversions: what sigpipe measures of each window's posterior
 (sigpipe.masw.inversion.measuring: fits by band, R-hat, effective samples, autocorrelation,
 acceptance, piling at the prior's bounds, the depth the data inform), the model itself and the
-curve it gives back, the chains, and for a run the assistant made, its model checks (G5 on each
+curve it gives back, the chains, and for a run the agent made, its model checks (G5 on each
 window, G6 along the line) with the attempts and what each changed. Shown along the line at each
 window's middle: the inversion strip of Visualization, the selected window's card, and the
-parameters the line was inverted with, each with why. The measures of a window are read from the
-file the assistant writes next to its inversion, and written there when PAC inverted it."""
+parameters the line was inverted with. The measures of a window are read from the file the agent
+writes next to its inversion, and written there when PAC inverted it."""
 
 import logging
 import statistics
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import timedelta
 from itertools import pairwise
 from pathlib import Path
@@ -18,17 +18,14 @@ from typing import Literal
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-from masw.io.quality.done import trigger_text, with_spreads
+from masw.io.quality.done import attempt_steps, trigger_text, with_spreads
 from masw.io.quality.files import folder_path
 from masw.io.quality.log import (
-    Attempt,
-    AttemptSummary,
     GateResult,
     Metric,
     QCLog,
     config_section,
     read_log,
-    summarize,
 )
 from masw.io.quality.view import (
     Card,
@@ -49,6 +46,7 @@ from masw.io.quality.view import (
     span,
     verdict_sentence,
     verdict_status,
+    verdicts_said,
     warnings,
 )
 from sigpipe.base.dispersion_curve import DispersionCurve
@@ -82,7 +80,6 @@ from sigpipe.masw.inversion.window import (
     WINDOW_FIGURE,
     Spread,
     chain_series,
-    depth_of,
     load_profiles,
     load_samples,
     load_spread,
@@ -114,18 +111,15 @@ MODEL_WORDS: dict[str, str] = {
 }
 # The share of proposals the trial runs aimed at (%), for older runs.
 TRIAL_BAND = (20.0, 30.0)
-# How the assistant chooses its parameters, as it says it (PACo's inversion rules).
+# How PACo's workflow chooses each window's inversion parameters, its rules in short.
 RULES = {
-    "layers": "4 to start, never fewer than 3; one fewer where a layer was not resolved or two "
-    "were alike, one more where the model misfit its curve (G5)",
-    "vs": "wide at first (100 to 1,000 m/s, the half-space to 2,000), wider where a curve "
-    "needed it or a posterior piled at a bound (G5)",
-    "thickness": "a third of each curve's shortest wavelength: thinner is not resolved",
-    "depth": "half each curve's longest wavelength at first, shrunk to the depth the data "
-    "inform where that was shallower (G5)",
-    "drop": "a fifth at most: under a layer much stiffer than the next, the forward model's "
-    "fundamental mode is a wave trapped in the soft layer",
-    "effort": "the default effort, longer where the chains did not agree (G5)",
+    "layers": "4 at first, never fewer than 3",
+    "vs": "100 to 1000 m/s at first, the half-space up to 2000 m/s",
+    "thickness": "a third of the curve's shortest wavelength: thinner is not resolved",
+    "depth": "half the curve's longest wavelength at first",
+    "drop": "a fifth at most: below a much stiffer layer, the fundamental mode is trapped in the "
+    "soft one",
+    "effort": "the workflow's default",
 }
 
 type FigureName = Literal["marginals", "density_curves", "dispersion_image", "chains"]
@@ -201,15 +195,9 @@ class Convergence(BaseModel):
     step_unit: str = ""
 
 
-class InversionAttempt(AttemptSummary):
-    n_layers: int | None
-    depth_m: float | None  # every layer above the half-space at its thickest
-
-
 class InversionCard(Card):
     """A window's card: its model, its fit, how well its chains sampled, and what it ran with."""
 
-    attempts: tuple[InversionAttempt, ...] = ()  # with each attempt's layers and depth
     inverted: bool
     parameters: InversionParameters | None  # as run: each step as the trial runs tuned it
     tuning: tuple[tuple[float, float], ...]  # each trial run's step factor and acceptance (%)
@@ -357,9 +345,8 @@ def inversion_overview(folder: str) -> Overview:
                 if part
             )
         )
-        verdicts = [f"{one.gate} {one.verdict}" for one in (g5, g6) if one is not None]
-        if verdicts:
-            hover.append(" · ".join(verdicts))
+        if said := verdicts_said(g5, g6):
+            hover.append(said)
         flags = [flag.name for one in (g5, g6) if one is not None for flag in one.flags]
         if flags:
             hover.append("flags: " + ", ".join(flag_text(name) for name in dict.fromkeys(flags)))
@@ -368,39 +355,36 @@ def inversion_overview(folder: str) -> Overview:
         )
     paco = log is not None and any(attempt.stage == STAGE for attempt in log.attempts)
     assistant = len(runs) - by_hand
-    summary = f"{len(runs)} of {plural(len(cells), 'window')} inverted" + (
-        ""
-        if not runs
-        else " by hand"
-        if not assistant
-        else " by the agent"
-        if not by_hand
-        else f": {assistant} by the agent, {by_hand} by hand"
-    )
+    said = [plural(len(cells), "window")]
+    if assistant:
+        said.append(f"{assistant} inverted by the agent")
+    if by_hand:
+        said.append(f"{by_hand} inverted by hand")
     if runs:
-        passed, flagged, rejected = (statuses.count(one) for one in ("pass", "warn", "fail"))
-        summary += " · " + ", ".join(
-            part
-            for part in (
-                f"{passed} pass" if passed else "",
-                f"{flagged} flagged" if flagged else "",
-                f"{rejected} rejected" if rejected else "",
-            )
-            if part
+        words = (
+            {"pass": "passed", "warn": "flagged", "fail": "rejected"}
+            if paco
+            else {"pass": "within the agent's limits", "warn": "beyond the agent's limits"}
         )
+        said += [
+            f"{statuses.count(state)} {word}" for state, word in words.items() if state in statuses
+        ]
         if informed:
-            summary += f" · informed {span(min(informed), max(informed), 'm')} deep"
+            said.append(f"informed from {number(min(informed))} to {number(max(informed))} m deep")
     return Overview(
         paco=paco,
-        summary=summary,
+        summary=" · ".join(said),
+        # A run made by hand: measured, never rejected.
         legend={
-            "pass": "passed the model checks" if paco else "within the limits",
-            "warn": "kept, still flagged" if paco else "a measure beyond its limit",
-            "fail": "rejected",
+            "pass": "passed the model checks" if paco else "within the agent's limits",
+            "warn": "flagged" if paco else "a measure beyond the agent's limits",
+            **({"fail": "rejected"} if paco else {}),
             "none": "not inverted",
         },
         cells=tuple(cells),
-        track=Track(label="Depth informed, of the depth modelled (m)", short="Depth", kind="depth"),
+        track=Track(
+            label="Depth informed, of the depth modelled (m)", short="Depth informed", kind="depth"
+        ),
         gates=line_gate(log, "inversion", "G6"),
     )
 
@@ -422,37 +406,34 @@ _CHANGED_IN: dict[str, tuple[str, ...]] = {
 def window_inversion_settings(
     run_folder: Path, parameters: InversionParameters, log: QCLog | None, unit: str
 ) -> tuple[Setting, ...]:
-    """What window `unit`'s inversion ran with (`parameters`), each with why: the assistant's
-    rule and the checks' retries that changed it, or PAC's form."""
+    """What window `unit`'s inversion ran with (`parameters`), each with why: the workflow's
+    rule, and the checks' retries that changed it on this window; none when set by hand or
+    chosen by the agent (the run's card says why)."""
     assistant = by_assistant(log, unit, run_folder)
-    # Each setting the retries changed, with those retries, each once (the first run's own
-    # parameters changed nothing).
-    changed: dict[str, dict[int, str]] = {}
-    for attempt in log.of(unit, STAGE) if log is not None and assistant else ():
-        if attempt.triggered_by == "initial":
-            continue
-        for name in attempt.parameters:
+    # Each setting a later attempt changed, with what asked it, each once: the window's first
+    # attempt changed nothing, whatever ran it.
+    changed: dict[str, list[str]] = {}
+    attempts = log.of(unit, STAGE) if log is not None and assistant else ()
+    for before, attempt in pairwise(attempts):
+        for name, value in attempt.parameters.items():
+            if value == before.parameters.get(name):
+                continue
             for key in _CHANGED_IN.get(name, ()):
-                changed.setdefault(key, {})[attempt.attempt] = (
-                    f"attempt {attempt.attempt} ({trigger_text(attempt)})"
-                )
+                asked = changed.setdefault(key, [])
+                if (text := trigger_text(attempt)) not in asked:
+                    asked.append(text)
+    rules = assistant and log is not None and log.chooser == "workflow"
 
     def why(key: str) -> str:
-        if not assistant:
-            return "set by hand" + (
-                "" if (run_folder / PAC_CONFIG_FILE).exists() else " (or by the agent, earlier)"
-            )
-        retried = changed.get(key)
-        return RULES[key] + (
-            f"; the checks changed it on this window: {'; '.join(retried.values())}"
-            if retried
-            else ""
-        )
+        said = [RULES[key]] if rules else []
+        if retried := changed.get(key):
+            said.append(f"changed for this window, {'; '.join(retried)}")
+        return "; ".join(said)
 
     origin: Origin = log.chooser if assistant and log is not None else "you"
     free = parameters.free if parameters.layering == "free" else None
     if free is not None:
-        layers = ("chosen by the data", f"{free.max_layers} at most")
+        layers = ("chosen by the data", f"{free.max_layers} layers at most")
         vs = (free.vs_min or 0.0, free.vs_max or 0.0)
         thinnest = free.depth_min or 0.0
     else:
@@ -488,16 +469,15 @@ def window_inversion_settings(
         Setting(
             key="depth",
             label="Deepest interface",
-            value=f"{number(model_depth(parameters))} m",
-            detail="at most",
+            value=f"{number(model_depth(parameters))} m at most",
             why=why("depth"),
             origin=origin,
         ),
         Setting(
             key="drop",
             label="Vs drop",
-            value=f"{number(100 * parameters.max_vs_drop)} %",
-            detail="at most, from a layer to the next",
+            value=f"{number(100 * parameters.max_vs_drop)} % at most",
+            detail="from a layer to the next",
             why=why("drop"),
             origin=origin,
         ),
@@ -505,7 +485,7 @@ def window_inversion_settings(
             key="effort",
             label="Sampling",
             value=f"{grouped(parameters.n_iterations)} iterations",
-            detail=f"{grouped(parameters.n_burnin_iterations)} burn-in, "
+            detail=f"{grouped(parameters.n_burnin_iterations)} burn-in · "
             f"{plural(parameters.n_chains, 'chain')}",
             why=why("effort"),
             origin=origin,
@@ -578,13 +558,11 @@ def inversion_card(folder: str, xmid: float, model: ModelName = DEFAULT_MODEL) -
     g5, g6 = _results(log, unit, run_folder)
     metrics = model_metrics(parameters, measures, thresholds)
     said: list[Sentence] = []
-    verdict = verdict_sentence("model", g5, g6)
+    verdict = verdict_sentence(g5, g6)
     said += _depth_sentences(parameters, measures, thresholds)
     said += _fit_sentences(measures, thresholds, model)
     said.append(_convergence_sentence(measures, thresholds))
-    said.append(_run_sentence(parameters, ran.tuning, ours))
-    if log is not None and ours:
-        said += _history(log.of(unit, STAGE))
+    said += _run_sentences(parameters, ran.tuning, ours)
     said += warnings(g5, g6)
     return InversionCard(
         key=unit,
@@ -597,7 +575,7 @@ def inversion_card(folder: str, xmid: float, model: ModelName = DEFAULT_MODEL) -
         verdict=verdict,
         sentences=tuple(said),
         gates=(gate_view(GATE, g5, metrics),) + ((gate_view("G6", g6),) if g6 is not None else ()),
-        attempts=_attempts(log, unit) if ours else (),
+        steps=attempt_steps(log, unit, (STAGE,), 1.0, changes=_changes) if ours else (),
         inverted=True,
         parameters=parameters,
         tuning=ran.tuning,
@@ -653,11 +631,14 @@ def figure_path(folder: str, xmid: float, name: FigureName) -> Path:
 
 
 def by_assistant(log: QCLog | None, unit: str, run_folder: Path) -> bool:
-    """Whether the inversion in window `unit` is the assistant's: it logged one, and PAC did not
-    invert the window again after it."""
+    """Whether the inversion in window `unit` is the agent's: it logged one, and PAC did not
+    invert the window again after it. PAC writes its configuration into the run when it inverts:
+    without it, the inversion is the agent's, however a copy of the run dated its files."""
     latest = log.latest(unit, STAGE) if log is not None else None
     if latest is None:
         return False
+    if not (run_folder / PAC_CONFIG_FILE).exists():
+        return True
     samples = run_folder / unit / SAMPLES_FILE
     done = latest.finished_at or latest.started_at
     return not (samples.exists() and samples.stat().st_mtime > (done + LATER).timestamp())
@@ -683,8 +664,7 @@ def _not_inverted(
     said = (
         "Inverted before its measures were saved with it: invert it again to see them."
         if unmeasured
-        else "Not inverted"
-        + (": its curve was rejected by the curve check (G3)." if rejected else ".")
+        else "Not inverted" + (": its curve was rejected by the curve check." if rejected else ".")
     )
     return InversionCard(
         key=unit,
@@ -709,36 +689,30 @@ def _not_inverted(
 def _depth_sentences(
     parameters: InversionParameters, measures: InversionMeasures, thresholds: ModelLimits
 ) -> list[Sentence]:
-    """How deep the model goes, and how much of it the data inform: where the kept models'
-    relative uncertainty of Vs, U(z) = (P90 - P10) / (2 P50), gets above a limit, but at an
-    interface they place at depths a little apart (sigpipe's useful_depth)."""
+    """How much of the model the data inform: down to where the kept models' relative
+    uncertainty of Vs, U(z) = (P90 - P10) / (2 P50), gets above a limit, but at an interface they
+    place at depths a little apart (sigpipe's useful_depth); its definition, on the measure's
+    hover."""
     if informed_depth(measures) is None:
         return []
     bottom = measures.depth_max_m
     useful = measures.useful_depth_m
     enough = thresholds.min_useful_share * model_depth(parameters)
-    limit = f"{thresholds.useful_uncertainty:.0%}"
     if useful is None:
         return [
             Sentence(
-                mark="pass",
-                text=f"The data inform the whole model, down to {number(bottom)} m: the models' "
-                f"Vs uncertainty stays within {limit} outside their interfaces.",
+                mark="pass", text=f"The data inform the whole model, down to {number(bottom)} m."
             )
         ]
     if useful <= 0:
         return [
-            Sentence(
-                mark="warn",
-                text=f"The data inform none of the {number(bottom)} m modelled: at every depth, "
-                f"the models' Vs uncertainty is over {limit}.",
-            )
+            Sentence(mark="warn", text=f"The data inform none of the {number(bottom)} m modelled.")
         ]
     return [
         Sentence(
             mark="pass" if useful >= enough else "warn",
             text=f"The data inform it down to {number(useful)} m of the {number(bottom)} m "
-            f"modelled: deeper, the models' Vs uncertainty is over {limit}.",
+            "modelled.",
         )
     ]
 
@@ -746,22 +720,26 @@ def _depth_sentences(
 def _fit_sentences(
     measures: InversionMeasures, thresholds: ModelLimits, model: ModelName
 ) -> list[Sentence]:
-    """How `model` fits its curve when measured, else the monitored model, named."""
+    """How `model` fits its curve when measured, else the monitored model, named: its worst
+    band against the limit."""
     fit = next((one for one in measures.fits if one.model == model), measures.fits[0])
-    misfits = [band.misfit for band in fit.bands]
+    names = BAND_NAMES.get(len(fit.bands))
     said: list[Sentence] = []
-    known = [value for value in misfits if value is not None]
+    known = [(band.misfit, i) for i, band in enumerate(fit.bands) if band.misfit is not None]
     if known:
-        names = BAND_NAMES.get(len(misfits))
-        each = ", ".join(f"{value:.2f}" if value is not None else "no mode" for value in misfits)
-        where = f" over the {', '.join(names[:-1])} and {names[-1]} wavelengths" if names else ""
-        good = all(value is not None and value <= thresholds.max_misfit for value in misfits)
+        worst, at = max(known)
+        limit = number(thresholds.max_misfit)
+        who = MODEL_WORDS.get(fit.model, fit.model)
+        where = f" at the {names[at]} wavelengths" if names else ""
         said.append(
             Sentence(
-                mark="pass" if good else "warn",
-                text=f"{MODEL_WORDS.get(fit.model, fit.model)} {'fits' if good else 'misfits'} "
-                f"its curve: misfit {each}{where} (at most {number(thresholds.max_misfit)}, in "
-                "uncertainties).",
+                mark="pass",
+                text=f"{who} fits its curve: misfit {worst:.2f} at worst, {limit} allowed.",
+            )
+            if worst <= thresholds.max_misfit
+            else Sentence(
+                mark="warn",
+                text=f"{who} misfits its curve: {worst:.2f}{where}, {limit} allowed.",
             )
         )
     if fit.n_missing:
@@ -781,79 +759,37 @@ def _fit_sentences(
 
 
 def _convergence_sentence(measures: InversionMeasures, thresholds: ModelLimits) -> Sentence:
-    rhat, ess, acceptance = _convergence(measures)
+    """Whether the chains agree on Vs at the depths watched, and hold enough independent
+    samples; their numbers in the measures."""
+    rhat, ess, _ = _convergence(measures)
     agree = rhat is not None and rhat <= thresholds.max_rhat
     enough = ess is None or ess >= thresholds.min_ess
-    depths = [f"{number(depth_of(name))} m" for name in measures.watched]
-    parts = [
-        f"R-hat {number(rhat, 3)} (at most {number(thresholds.max_rhat)})"
-        if rhat is not None
-        else "",
-        f"{number(ess)} effective samples (at least {number(thresholds.min_ess)})"
-        if ess is not None
-        else "",
-        f"acceptance {number(acceptance)} %" if acceptance is not None else "",
-    ]
-    head = (
-        "The chains disagree"
-        if not agree
-        else "The chains agree"
-        if enough
-        else "The chains agree, but hold few independent samples"
-    )
-    at = f" on Vs at {', '.join(depths[:-1])} and {depths[-1]}" if len(depths) > 1 else ""
-    return Sentence(
-        mark="pass" if agree and enough else "warn",
-        text=f"{head}{at}: {', '.join(part for part in parts if part)}.",
-    )
+    watched = len(measures.watched)
+    at = f" on Vs at the {plural(watched, 'depth')} watched" if watched else ""
+    if not agree:
+        return Sentence(mark="warn", text=f"The chains disagree{at}.")
+    if not enough:
+        return Sentence(
+            mark="warn", text=f"The chains agree{at}, but hold few independent samples."
+        )
+    return Sentence(mark="pass", text=f"The chains agree{at}.")
 
 
-def _run_sentence(
+def _run_sentences(
     parameters: InversionParameters, tuning: tuple[tuple[float, float], ...], ours: bool
-) -> Sentence:
-    """What the inversion ran with, and who ran it: the assistant (`ours`), or PAC. The ranges
-    are the values sampled; the values fixed are said apart, layer by layer."""
-    if parameters.layering == "free":
-        free = parameters.free
-        parts = [
-            f"the layers chosen by the data, {plural(free.max_layers, 'layer')} at most",
-            f"Vs {span(free.vs_min or 0, free.vs_max or 0, 'm/s')}",
-            f"interfaces {span(free.depth_min or 0, free.depth_max or 0, 'm')} deep",
-        ]
-    else:
-        vs = [one for one in parameters.vs_layers[:-1] if one.vs_fixed is None]
-        half_space = parameters.vs_layers[-1]
-        thick = [one for one in parameters.thickness_layers if one.thickness_fixed is None]
-        ranges = [
-            f"Vs {span(min(one.vs_min for one in vs), max(one.vs_max for one in vs), 'm/s')}"
-            if vs
-            else "",
-            f"the half-space's up to {number(half_space.vs_max)} m/s"
-            if half_space.vs_fixed is None
-            else "",
-        ]
-        parts = [
-            f"{_layers(parameters.n_layers)} given",
-            ", ".join(part for part in ranges if part),
-            f"layers {span(min(one.thickness_min for one in thick), max(one.thickness_max for one in thick), 'm')} thick"
-            if thick
-            else "",
-        ]
-        fixed = _fixed(parameters)
-        if fixed:
-            parts.append(f"fixed: {fixed}")
-    parts.append(
-        f"Vs dropping by {number(100 * parameters.max_vs_drop)} % at most from a layer to the next"
-    )
-    text = (
-        ("Ran " if ours else "Inverted by hand: ")
-        + f"{plural(parameters.n_chains, 'chain')} of {grouped(parameters.n_iterations)} iterations "
-        f"({grouped(parameters.n_burnin_iterations)} burn-in); "
-        + "; ".join(part for part in parts if part)
-    )
+) -> list[Sentence]:
+    """Who ran the inversion, the agent (`ours`) or PAC; its steps' tuning; the values fixed,
+    layer by layer. What it ran with is in its settings."""
+    said = [
+        Sentence(mark="info", text="Inverted by the agent." if ours else "Inverted by hand in PAC.")
+    ]
     if tuning:
-        text += f"; steps tuned in {plural(len(tuning), 'trial run')}"
-    return Sentence(mark="info", text=text + ".")
+        said.append(
+            Sentence(mark="info", text=f"Its steps tuned in {plural(len(tuning), 'trial run')}.")
+        )
+    if fixed := _fixed(parameters):
+        said.append(Sentence(mark="info", text=f"Fixed, not sampled: {fixed}."))
+    return said
 
 
 def _fixed(parameters: InversionParameters) -> str:
@@ -872,56 +808,39 @@ def _fixed(parameters: InversionParameters) -> str:
     return ", ".join(said)
 
 
-def _history(attempts: tuple[Attempt, ...]) -> list[Sentence]:
-    """What each attempt after the first changed, and which flag asked for it."""
-    said: list[Sentence] = []
-    for before, attempt in pairwise(attempts):
-        gate, _, name = attempt.triggered_by.partition(":")
-        changed = _changed(before.parameters, attempt.parameters)
-        why = f"{gate}: {flag_text(name)}" if name else flag_text(gate)
-        said.append(
-            Sentence(
-                mark="info",
-                text=f"Attempt {attempt.attempt}"
-                + (f": {changed}" if changed else "")
-                + f" ({why}).",
-            )
-        )
-    return said
-
-
-def _changed(before: dict[str, object], after: dict[str, object]) -> str:
-    """What an attempt's parameters change on the one before, in words."""
+def _changes(before: Mapping[str, object], after: Mapping[str, object]) -> list[str]:
+    """What an attempt's parameters change on the one before, in words, a line each, the
+    settings' names first: "Sampling: 20 000 iterations, was 10 000"."""
     try:
         old = InversionParameters.model_validate(before)
         new = InversionParameters.model_validate(after)
     except ValueError:
-        return ""
+        return []
     said: list[str] = []
     if new.layering != old.layering:
-        said.append(
-            "the layers chosen by the data" if new.layering == "free" else "the layers given"
-        )
+        said.append("Layers: chosen by the data" if new.layering == "free" else "Layers: given")
     elif new.layering == "free" and new.free.max_layers != old.free.max_layers:
-        said.append(f"{new.free.max_layers} layers at most (was {old.free.max_layers})")
+        said.append(f"Layers: {new.free.max_layers} at most, was {old.free.max_layers}")
     elif new.layering == "fixed" and new.n_layers != old.n_layers:
-        said.append(f"{_layers(new.n_layers)} (was {old.n_layers - 1})")
+        said.append(f"Layers: {_layers(new.n_layers)}, was {old.n_layers - 1}")
     if model_depth(new) != model_depth(old):
         said.append(
-            f"the half-space's top at most {number(model_depth(new))} m "
-            f"(was {number(model_depth(old))} m)"
+            f"Deepest interface: {number(model_depth(new))} m at most, "
+            f"was {number(model_depth(old))} m"
         )
     if new.n_iterations != old.n_iterations:
-        said.append(f"{grouped(new.n_iterations)} iterations (was {grouped(old.n_iterations)})")
+        said.append(
+            f"Sampling: {grouped(new.n_iterations)} iterations, was {grouped(old.n_iterations)}"
+        )
     old_vs, new_vs = _highest_vs(old), _highest_vs(new)
     if new_vs is not None and new_vs != old_vs:
-        said.append(f"Vs up to {number(new_vs)} m/s (was {number(old_vs or 0)})")
+        said.append(f"Vs bounds: up to {number(new_vs)} m/s, was {number(old_vs or 0)} m/s")
     if new.layering == "fixed" and old.layering == "fixed":
         old_steps = [layer.vs_perturb_std for layer in old.vs_layers]
         new_steps = [layer.vs_perturb_std for layer in new.vs_layers]
         if len(old_steps) == len(new_steps) and old_steps != new_steps and not said:
-            said.append(f"steps scaled by {number(new_steps[0] / old_steps[0], 2)}")
-    return ", ".join(said)
+            said.append(f"Steps: scaled by {number(new_steps[0] / old_steps[0], 2)}")
+    return said
 
 
 def _highest_vs(parameters: InversionParameters) -> float | None:
@@ -1029,29 +948,6 @@ def _range(values: Iterable[float]) -> str:
     """The values' range in words: "4", or "3-5"."""
     ordered = sorted(float(value) for value in values)
     return span(ordered[0], ordered[-1], digits=4) if ordered else "n/a"
-
-
-def _attempts(log: QCLog | None, unit: str) -> tuple[InversionAttempt, ...]:
-    if log is None:
-        return ()
-    found: list[InversionAttempt] = []
-    for attempt in log.of(unit, STAGE):
-        try:
-            parameters = InversionParameters.model_validate(attempt.parameters)
-        except ValueError:
-            parameters = None
-        found.append(
-            InversionAttempt(
-                **summarize(attempt).model_dump(),
-                n_layers=(
-                    parameters.n_layers
-                    if parameters is not None and parameters.layering == "fixed"
-                    else None
-                ),
-                depth_m=model_depth(parameters) if parameters is not None else None,
-            )
-        )
-    return tuple(found)
 
 
 def _chains(values: np.ndarray, n_chains: int) -> np.ndarray:

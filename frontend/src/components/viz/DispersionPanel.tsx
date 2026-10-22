@@ -191,7 +191,7 @@ export function DispersionPanel({
             details={
               shown && (
                 <>
-                  <Details gates={shown.gates} attempts={shown.attempts} />
+                  <Details gates={shown.gates} steps={shown.steps} />
                   <SavedFigures
                     figures={runFigures(
                       folder,

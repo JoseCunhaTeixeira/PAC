@@ -20,7 +20,6 @@ import { CurveFitPlot, VsProfilePlot, type CurveAxis } from "./plots";
 import type { Chains, InversionCard, ModelName, Overview } from "./types";
 import { runFigures, useRunFigures } from "./runFigures";
 import {
-  AttemptTable,
   Empty,
   ErrorBox,
   Fold,
@@ -29,12 +28,13 @@ import {
   SavedFigures,
   Skeleton,
   SmoothingSwitch,
+  Timeline,
 } from "./ui";
 import { nearestCell } from "./cells";
 import { useJson } from "./useJson";
 
 // The seismic inversion stage: the display settings, the selected window's card (how deep its
-// data inform its model, its fit, its chains, what it ran with and each attempt's change), its
+// data inform its model, its fit, its chains, what it ran with and what was done to it), its
 // model against depth beside its curve against the model's, and along the line, the Vs section
 // and its spread, and the picked curves against the models'.
 
@@ -75,29 +75,31 @@ function ModelTable({ card }: { card: InversionCard }) {
   const n = card.parameters?.layering === "free" ? 0 : (card.parameters?.vs_layers.length ?? 0);
   return (
     <div className="viz-section">
-      <h3 className="viz-h3">Model, priors and sampling</h3>
-      <p className="viz-small viz-muted" style={{ margin: "0 0 6px" }}>
-        {card.parameters?.n_chains} chains, {written(card.samples_per_chain)} samples each kept;
-        acceptance by chain: {card.acceptance.map((rate) => `${num(rate)} %`).join(", ")}
-        {card.tuning.length > 0 &&
-          `; steps tuned in ${card.tuning.length} trial run${card.tuning.length > 1 ? "s" : ""} (${card.tuning
-            .map(([factor, rate]) => `×${num(factor, 2)}: ${num(rate)} %`)
-            .join(", ")})`}
-        {card.exchanges != null && `; exchanges between tempered copies ${num(card.exchanges)} %`}
-        .
-      </p>
+      <ul className="viz-step-lines viz-model-facts">
+        <li>
+          {card.parameters?.n_chains} chains, {written(card.samples_per_chain)} samples each kept
+        </li>
+        <li>Moves accepted by each chain: {card.acceptance.map((rate) => `${num(rate)} %`).join(" · ")}</li>
+        {card.tuning.length > 0 && (
+          <li>
+            Steps tuned in {card.tuning.length} trial run{card.tuning.length > 1 ? "s" : ""}:{" "}
+            {card.tuning.map(([factor, rate]) => `×${num(factor, 2)}, ${num(rate)} % accepted`).join(" · ")}
+          </li>
+        )}
+        {card.exchanges != null && <li>Exchanges between tempered copies: {num(card.exchanges)} %</li>}
+      </ul>
       <div className="viz-table-wrap">
         <table className="viz-table">
           <thead>
             <tr>
               <th>Parameter</th>
-              <th className="num">Prior</th>
-              <th className="num" data-tip="Median of all chains' models">Result</th>
-              <th className="num" data-tip="Where 80 % of the models lie">10–90 %</th>
-              <th className="num">R-hat</th>
-              <th className="num">Effective samples</th>
-              <th className="num">Lag-1 autocorr.</th>
-              <th className="num">Step</th>
+              <th className="num" data-tip={"Prior\nThe range the chains could sample"}>Prior</th>
+              <th className="num" data-tip={"Median\nOf every chain's models"}>Median</th>
+              <th className="num" data-tip={"10–90 %\nWhere 80 % of the models lie"}>10–90 %</th>
+              <th className="num" data-tip={"R-hat\nHow well the chains agree: 1 when they agree"}>R-hat</th>
+              <th className="num" data-tip={"Effective samples\nThe independent samples the chains hold"}>Effective samples</th>
+              <th className="num" data-tip={"Lag-1 autocorrelation\nHow much each sample repeats the one before it"}>Lag-1 autocorrelation</th>
+              <th className="num" data-tip={"Step\nThe sampler's typical move"}>Step</th>
             </tr>
           </thead>
           <tbody>
@@ -373,21 +375,14 @@ export function InversionPanel({
                   inversionCard?.inverted && (
                     <>
                       <GateTables gates={inversionCard.gates} />
-                      <Fold title="Model and attempts">
+                      <Fold title="Model and sampling">
                         <ModelTable card={inversionCard} />
-                        {inversionCard.attempts.length > 0 && (
-                          <div className="viz-section">
-                            <h3 className="viz-h3">Attempts</h3>
-                            <AttemptTable
-                              attempts={inversionCard.attempts}
-                              extra={[
-                                { label: "Layers", render: (one) => (one.n_layers ? one.n_layers - 1 : "—") },
-                                { label: "Half-space top", render: (one) => (one.depth_m ? `≤ ${num(one.depth_m)} m` : "—") },
-                              ]}
-                            />
-                          </div>
-                        )}
                       </Fold>
+                      {(inversionCard.steps?.length ?? 0) > 0 && (
+                        <Fold title="What was done">
+                          <Timeline steps={inversionCard.steps ?? []} />
+                        </Fold>
+                      )}
                       <Fold title="Chains and marginals" open={chainsOpen} onToggle={setChainsOpen}>
                         {chainsOpen && xmid !== null && <ChainsView folder={folder} xmid={xmid} />}
                       </Fold>

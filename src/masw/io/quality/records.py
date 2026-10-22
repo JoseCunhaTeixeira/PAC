@@ -1,23 +1,22 @@
 """The quality of a run's records: sigpipe's measures of each preprocessed record
 (sigpipe.masw.quality.signal: dead, clipped and NaN traces, the SNR and usable band from a
 surface-wave window against a noise window, the neighbouring traces' coherence, the trigger the
-first breaks point to), the records and traces the run left out, and for a run the assistant
-made, its signal check's verdicts (G1) and the preprocessing's attempts. Shown along the line at
-each record's shot: the records strip of Visualization, and the selected record's card."""
+first breaks point to), the records and traces the run left out, and for a run the agent made,
+its signal check's verdicts (G1) and the preprocessing's attempts. Shown along the line at each
+record's shot: the records strip of Visualization, and the selected record's card."""
 
 import logging
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from masw.io.paths import workspace
-from masw.io.quality.done import record_ranges, record_settings, with_spreads
+from masw.io.quality.done import attempt_steps, record_ranges, record_settings, with_spreads
 from masw.io.quality.files import folder_path, line_geometry, read_manifest
 from masw.io.quality.log import (
-    AttemptSummary,
     GateResult,
     Metric,
     QCLog,
@@ -25,7 +24,6 @@ from masw.io.quality.log import (
     line_receivers,
     read_log,
 )
-from masw.io.quality.runs import stage_text
 from masw.io.quality.sources import stacking_windows
 from masw.io.quality.view import (
     Card,
@@ -179,7 +177,6 @@ def before_muting(
 class RecordCard(Card):
     """A record's card: its measures and verdict, what the windows took of it."""
 
-    attempts: tuple[AttemptSummary, ...] = ()
     x: float | None  # its shot along the line; None: no source (passive)
     windows: tuple[str, ...]  # the windows that stack it
     excluded_traces: tuple[int, ...]
@@ -244,9 +241,12 @@ def records_overview(folder: str) -> Overview:
     preprocessed = len(manifest.records) - len(failed)
     used = len(manifest.records) - len(excluded | failed)
     traces = sum(len(one) for one in manifest.exclusions.traces.values())
-    summary = f"{preprocessed} of {plural(len(manifest.records), 'record')} preprocessed" + (
-        " and used" if used == preprocessed else f", {used} used"
-    )
+    total = len(manifest.records)
+    summary = (
+        f"{plural(total, 'record')} preprocessed"
+        if preprocessed == total
+        else f"{preprocessed} of {plural(total, 'record')} preprocessed"
+    ) + f" · {used} used"
     if excluded:
         summary += f" · {len(excluded)} left out by the signal check"
     if traces:
@@ -256,9 +256,9 @@ def records_overview(folder: str) -> Overview:
         paco=paco,
         summary=summary,
         legend={
-            "pass": "passed the signal check (G1)" if paco else "measures within the limits",
-            "warn": "used, still flagged" if paco else "a measure beyond its limit",
-            "fail": "left out of every window" if paco else "failed to preprocess",
+            "pass": "passed the signal check" if paco else "measures within the agent's limits",
+            "warn": "flagged, used" if paco else "a measure beyond the agent's limits",
+            "fail": "left out" if paco else "failed to preprocess",
             "none": "not measured",
         },
         cells=tuple(cells),
@@ -401,30 +401,31 @@ def record_card(folder: str, name: str) -> RecordCard:
     line_out, why_out = line_receivers(log)
     own = tuple(trace for trace in excluded_traces if trace not in line_out)
     said: list[Sentence] = []
-    verdict = verdict_sentence("record", g1)
+    verdict = verdict_sentence(g1)
     if record.status == "failed":
         said.append(Sentence(mark="fail", text=f"Failed to preprocess: {record.error}."))
     elif name in manifest.exclusions.records and (g1 is None or g1.verdict != "reject"):
-        said.append(
-            Sentence(mark="fail", text="Left out of every window by the signal check (G1).")
-        )
+        said.append(Sentence(mark="fail", text="Left out of every window by the signal check."))
     if own:
         said.append(_traces(log, name, own, run_folder, manifest))
     if len(own) < len(excluded_traces):
         said.append(Sentence(mark="info", text=why_out))
-    said += _redone(log, name)
     said += warnings(g1)
     if windows:
         xmids = [xmid_of(unit) for unit in windows]
         said.append(
             Sentence(
                 mark="info",
-                text=f"Stacked by {plural(len(windows), 'window')}, xmid "
-                f"{span(min(xmids), max(xmids), 'm', digits=4)}.",
+                text=f"Used by the {plural(len(windows), 'window')} centred from "
+                f"{number(min(xmids), 4)} to {number(max(xmids), 4)} m."
+                if len(windows) > 1
+                else f"Used by the window centred at {number(xmids[0], 4)} m.",
             )
         )
     elif record.status == "succeeded" and name not in manifest.exclusions.records:
-        said.append(Sentence(mark="info", text="No window stacks it: its shot is out of reach."))
+        said.append(
+            Sentence(mark="info", text="Used by no window: its shot is beyond the shots used.")
+        )
     x = sources.get(name)
     status: Status = (
         "fail"
@@ -440,7 +441,7 @@ def record_card(folder: str, name: str) -> RecordCard:
         verdict=verdict,
         sentences=tuple(said),
         gates=(gate_view(GATE, g1, metrics),),
-        attempts=log.summaries(name, STAGE) if log is not None else (),
+        steps=attempt_steps(log, name, (STAGE,), manifest.profile.receiver_spacing_m),
         x=x,
         windows=windows,
         excluded_traces=excluded_traces,
@@ -491,32 +492,9 @@ def _traces(
     return Sentence(
         mark="info",
         text=f"Its {'trace' if len(traces) == 1 else 'traces'} at {where} left out of the windows"
-        + (f" ({', '.join(reasons)})" if reasons else "")
+        + (f": {', '.join(reasons)}" if reasons else "")
         + ".",
     )
-
-
-def _redone(log: QCLog | None, name: str) -> list[Sentence]:
-    """Each time the signal check had the record preprocessed again, and with what."""
-    if log is None:
-        return []
-    said: list[Sentence] = []
-    for attempt in log.of(name, STAGE)[1:]:
-        flag = attempt.triggered_by.split(":", 1)[-1]
-        changed = "; ".join(
-            stage_text(stage, cast(dict[str, object], values))
-            for stage, values in attempt.parameters.items()
-            if isinstance(values, dict)
-        )
-        said.append(
-            Sentence(
-                mark="info",
-                text=f"Preprocessed again ({flag_text(flag)})"
-                + (f": {changed}" if changed else "")
-                + ".",
-            )
-        )
-    return said
 
 
 def signal_metrics(

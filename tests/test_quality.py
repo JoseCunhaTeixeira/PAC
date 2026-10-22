@@ -211,8 +211,8 @@ def test_a_window_says_which_shots_it_stacks(run: str) -> None:
         ("2.mseed", "used"),
     ]
     assert _texts(sources) == [
-        "Its dispersion image stacks the images of 2 shots, 7.5 m from its middle: "
-        "1 on the left, 1 on the right."
+        "Its dispersion image stacks the images of 2 shots, 7.5 m from its middle, "
+        "1 on its left, 1 on its right."
     ]
 
 
@@ -233,13 +233,14 @@ def test_a_window_says_why_it_leaves_shots_out(run: str) -> None:
 
     shots = {one["name"]: one for one in sources["shots"]}
     assert shots["1.mseed"]["use"] == "excluded"
-    assert shots["1.mseed"]["why"] == "left out of every window by the signal check (G1)"
+    assert shots["1.mseed"]["why"] == "left out of every window by the signal check"
     assert shots["2.mseed"]["use"] == "far"
-    assert shots["2.mseed"]["why"] == "10.5 m from the middle: beyond the 10 m the windows stack"
+    assert shots["2.mseed"]["why"] == "10.5 m from its middle: beyond the farthest shot used, 10 m"
     # In short, the reasons in full and the shots named on hover.
-    assert _texts(sources) == ["Shots left out: 1 rejected (G1), 1 too far."]
+    assert _texts(sources) == ["Shots not used: 1 too far, 1 left out by the signal check."]
     assert sources["sentences"][0]["detail"] == (
-        "Shots left out: 1 rejected by the signal check (1.mseed), 1 beyond the 10 m reach."
+        "Shots not used: 1 beyond the farthest shot used, 10 m, 1 left out by the signal check "
+        "(1.mseed)."
     )
     card = client.get(f"/quality/run/{folder}").json()
     reach = next(one for one in card["settings"] if one["key"] == "reach")
@@ -286,7 +287,7 @@ def test_a_passive_window_stacks_every_record() -> None:
     sources = client.get(f"/quality/sources/{job['run']}/{xmid}").json()
 
     assert sources["passive"] is True and sources["shots"] == []
-    assert "every record of a passive line" in _texts(sources)[0]
+    assert _texts(sources)[1] == "On a passive line, every record serves every window."
     # Its stacked correlations' spectra, as the job saved them: each trace's, 0 to 1.
     spectra = client.get(f"/quality/dispersion/spectrum/{job['run']}/{xmid}").json()
     assert len(spectra["amplitude"]) == len(spectra["positions"]) > 1
@@ -307,7 +308,7 @@ def test_a_passive_window_stacks_every_record() -> None:
     assert metrics["fk_kept"]["threshold"] == 0.01 and metrics["fk_kept"]["of"] == "selection"
     snr = metrics["snr_db"]
     assert snr["of"] == "signal" and snr["threshold"] == 6.0
-    assert "the virtual source's own aside" in snr["over"]
+    assert "the virtual source's own aside" in snr["over"]  # in the log, not on the page
     assert {"lateral_coherence", "usable_band_hz", "dead_traces"} <= set(metrics)
 
 
@@ -315,7 +316,7 @@ def test_a_pac_run_shows_its_records_measures_without_verdicts(run: str) -> None
     overview = client.get(f"/quality/records/overview/{run}").json()
 
     assert overview["paco"] is False
-    assert overview["summary"] == "2 of 2 records preprocessed and used"
+    assert overview["summary"] == "2 records preprocessed · 2 used"
     # Measured by the job, beside each preprocessed record.
     assert len(list((OUTPUT_DIR / run).glob("records/*/SignalMeasures_0000.json"))) == 2
     cells = overview["cells"]
@@ -337,10 +338,10 @@ def test_a_pac_run_shows_its_records_measures_without_verdicts(run: str) -> None
         "spectral_outliers",
         "rms_outliers",
     ]
-    assert card["attempts"] == [] and card["windows"] == ["xmid_2.50", "xmid_5.50", "xmid_8.50"]
+    assert card["steps"] == [] and card["windows"] == ["xmid_2.50", "xmid_5.50", "xmid_8.50"]
     # Its measures in their tables, by object; its sentences, what they do not say.
     assert {metric["of"] for metric in gate["metrics"]} == {"signal", "spectrum"}
-    assert _texts(card) == [f"Stacked by 3 windows, xmid 2.5{DASH}8.5 m."]
+    assert _texts(card) == ["Used by the 3 windows centred from 2.5 to 8.5 m."]
     assert client.get(f"/quality/records/card/{run}/nope.mseed").status_code == 404
     # Its spectra, preprocessed, as the job saved them: each trace's, its usable band drawn.
     spectra = client.get(f"/quality/records/spectrum/{run}/1.mseed").json()
@@ -434,7 +435,7 @@ def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:
     overview = client.get(f"/quality/dispersion/overview/{run}").json()
 
     assert overview["paco"] is False
-    assert overview["summary"] == "3 of 3 windows computed · 2 picked by hand · 1 without a curve"
+    assert overview["summary"] == "3 windows · 2 picked by hand · 1 without a curve"
     cells = {one["x"]: one for one in overview["cells"]}
     assert cells[8.5]["status"] == "none" and cells[8.5]["value"] is None
     # A curve picked by hand is the user's: passed as it is, said so, nothing more.
@@ -453,7 +454,7 @@ def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:
     # Who picked it, among its settings, with how the line's other windows differ.
     picking = next(one for one in card["settings"] if one["key"] == "picking")
     assert (picking["value"], picking["origin"]) == ("by hand", "you")
-    assert picking["spread"] == "along the line: none on xmid 8.5 m"
+    assert picking["spread"] == "other windows: none on xmid 8.5 m"
     low, high = card["band_hz"]
     assert low < 20 < high
     gates = {gate["gate"]: gate for gate in card["gates"]}
@@ -477,7 +478,7 @@ def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:
     assert card["status"] == "pass" and card["verdict"]["text"] == "Picked by hand."
     assert card["parts"] == [{"label": "curve", "state": "hand"}]
     assert not any(text.startswith("M0 picked") for text in _texts(card))
-    assert card["attempts"] == []
+    assert card["steps"] == []
 
     unpicked = client.get(f"/quality/dispersion/card/{run}/8.5").json()
     assert unpicked["status"] == "none" and "No curve picked." in _texts(unpicked)
@@ -493,7 +494,7 @@ def test_a_pac_inversion_saves_its_measures_as_the_assistant_does(run: str) -> N
     overview = client.get(f"/quality/inversion/overview/{run}").json()
 
     assert overview["paco"] is False
-    assert overview["summary"].startswith("2 of 3 windows inverted by hand")
+    assert overview["summary"].startswith("3 windows · 2 inverted by hand")
     cells = {one["x"]: one for one in overview["cells"]}
     assert cells[8.5]["status"] == "none" and cells[8.5]["hover"][-1] == "not inverted"
     assert 0 <= cells[2.5]["value"] <= cells[2.5]["total"]
@@ -502,7 +503,7 @@ def test_a_pac_inversion_saves_its_measures_as_the_assistant_does(run: str) -> N
     card = client.get(f"/quality/inversion/card/{run}/2.5").json()
     settings = {one["key"]: one for one in card["settings"]}
     assert (settings["layers"]["value"], settings["layers"]["detail"]) == ("1", "over a half-space")
-    assert settings["depth"]["value"] == "5 m"  # the sum of the thickness_max as run
+    assert settings["depth"]["value"] == "5 m at most"  # the sum of the thickness_max as run
     assert all(one["origin"] == "you" and not one["spread"] for one in settings.values())
     assert path.stat().st_mtime_ns == saved
 
@@ -613,10 +614,18 @@ def test_every_card_says_what_was_done_and_why(run: str) -> None:
     }
 
     labels = {kind: [one["label"] for one in card["settings"]] for kind, card in cards.items()}
-    assert labels["record"][-2:] == ["Muting", "Filter"] and "Detrend" in labels["record"]
-    # A window's: its records' preprocessing, then how its image was made and picked.
-    assert labels["window"][:5] == ["Trigger", "Detrend", "Muting", "Filter", "Window"]
-    assert labels["window"][-3:] == ["Phase shift", "Images stacked", "Picking"]
+    # In the run card's words; a step every run does (the detrend), or off by default and left
+    # off (the mute, the filter), not said.
+    assert labels["record"] == ["Trigger"]
+    # A window's: its receivers, its records' preprocessing, then how its image was made and
+    # picked.
+    assert labels["window"] == [
+        "Window",
+        "Trigger",
+        "Dispersion image",
+        "Image stacking",
+        "Picking",
+    ]
     assert labels["inversion"] == [
         "Layers",
         "Vs bounds",
@@ -635,7 +644,7 @@ def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> N
     card = client.get(f"/quality/inversion/card/{run}/2.5").json()
 
     assert card["inverted"] is True and card["title"] == "xmid 2.5 m · 1 layer over a half-space"
-    assert card["parameters"]["n_layers"] == 2 and card["attempts"] == []
+    assert card["parameters"]["n_layers"] == 2 and card["steps"] == []
     # No trial runs: the chains' moves follow the posterior.
     assert card["tuning"] == [] and card["step_factor"] is None
     assert len(card["acceptance"]) == PARAMETERS["n_chains"]
@@ -718,7 +727,7 @@ def test_a_pac_petrophysical_inversion_shows_its_soil_column_and_fit(run: str) -
     overview = client.get(f"/quality/petro/overview/{run}").json()
 
     (model,) = client.get("/petro_inversion/models").json()
-    assert overview["paco"] is False and overview["summary"].startswith("2 of 3 windows inverted")
+    assert overview["paco"] is False and overview["summary"].startswith("3 windows · 2 inverted")
     cells = {one["x"]: one for one in overview["cells"]}
     assert cells[8.5]["status"] == "none" and cells[2.5]["value"] > 0
 
@@ -952,7 +961,7 @@ def test_an_assistant_run_card_says_why_its_windows_are_what_they_are(judged: st
     # A record the checks preprocessed again, said with the records, theirs.
     records = settings["records"]
     assert records["origin"] == "checks"
-    assert records["why"].endswith("preprocessed again: 1 record (1 shifted trigger)")
+    assert records["why"].endswith("preprocessed again: 1 record (1 trigger off)")
 
 
 def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
@@ -1049,7 +1058,8 @@ def test_a_record_made_again_by_a_change_of_the_lines_settings_is_the_lines(run:
 
     setting = next(one for one in record_settings(manifest, log, "1.mseed") if one.key == "muting")
 
-    assert (setting.origin, setting.why) == ("workflow", "the checks changed it on the line")
+    # The line's: who set it, the run's card saying why.
+    assert (setting.origin, setting.why) == ("workflow", "")
 
 
 def test_an_assistant_run_shows_g1_and_what_it_redid(judged: str) -> None:
@@ -1062,12 +1072,20 @@ def test_an_assistant_run_shows_g1_and_what_it_redid(judged: str) -> None:
     assert second["status"] == "pass"  # measured: G1 said nothing of it
 
     card = client.get(f"/quality/records/card/{judged}/1.mseed").json()
-    assert card["verdict"]["text"] == "The agent's checks (G1) passed this record."
-    assert "Preprocessed again (shifted trigger): trigger at 12 ms." in _texts(card)
-    first_attempt, retried = card["attempts"]
-    assert first_attempt["verdicts"] == {"G1": "retry"}
-    assert first_attempt["flags"] == ["shifted_trigger"]
-    assert retried["parameters"] == {"trigger": {"t0": 0.012}}
+    assert card["verdict"]["text"] == "Passed the signal check."
+    # What was done, a step each: its first run flagged, its second asked by the check.
+    first_step, again = card["steps"]
+    assert (first_step["title"], first_step["lines"]) == ("Preprocessed", ["Signal check: flagged"])
+    assert (again["title"], again["by"]) == ("Preprocessed again", "checks")
+    assert again["lines"] == [
+        "Asked by the signal check: trigger off",
+        "Trigger: delay 12 ms",
+        "Signal check: passed",
+    ]
+    # Not muted: its trigger left as recorded, whatever the check asked.
+    trigger = next(one for one in card["settings"] if one["key"] == "trigger")
+    assert (trigger["value"], trigger["origin"]) == ("none", "checks")
+    assert trigger["why"] == "changed for this record, asked by the signal check: trigger off"
 
 
 def test_an_assistant_run_shows_g2_g3_g4(judged: str) -> None:
@@ -1077,7 +1095,7 @@ def test_an_assistant_run_shows_g2_g3_g4(judged: str) -> None:
     cells = {one["x"]: one for one in overview["cells"]}
     # Its hover says its image and its curve apart, each with the gates that judged it.
     assert cells[2.5]["status"] == "pass"
-    assert cells[2.5]["hover"][1:3] == ["Image: passed (G2)", "Curve: passed (G3, G4)"]
+    assert cells[2.5]["hover"][1:3] == ["Image: passed", "Curve: passed"]
     # Its image and its curve apart; a window without a curve says none, whatever its image.
     assert cells[2.5]["parts"] == ["pass", "pass"]
     assert cells[8.5]["parts"][1] == "none" and cells[8.5]["status"] == "none"
@@ -1090,18 +1108,21 @@ def test_an_assistant_run_shows_g2_g3_g4(judged: str) -> None:
     gates = {gate["gate"]: gate for gate in card["gates"]}
     assert [gates[gate]["verdict"] for gate in ("G2", "G3", "G4")] == ["pass"] * 3
     assert [metric["name"] for metric in gates["G3"]["metrics"]] == ["sharpness", "prominence"]
-    assert card["verdict"]["text"] == "The agent's checks (G2, G3, G4) passed this window."
+    assert card["verdict"]["text"] == (
+        "Passed the dispersion image check, the curve check and the check against the "
+        "neighbouring curves."
+    )
     assert card["parts"] == [
         {"label": "image", "state": "pass"},
         {"label": "curve", "state": "pass"},
     ]
-    assert len(card["attempts"]) == 2  # the phase shift's and the picking's
+    assert card["steps"] == []  # each stage ran once
 
 
 def test_each_stage_shows_the_check_over_its_line(judged: str) -> None:
     # G4 checked this line's curves and G6 its models; G1 not its receivers, G8 not its soil
     # columns. Each stage holds its own, in the menu a unit's measures are in: from a log
-    # before the measures said what they cover, said generally.
+    # before the measures said what they describe, the line's.
     gates = {
         stage: client.get(f"/quality/{stage}/overview/{judged}").json()["gates"]
         for stage in ("records", "dispersion", "inversion", "petro")
@@ -1111,10 +1132,8 @@ def test_each_stage_shows_the_check_over_its_line(judged: str) -> None:
     ((curves,),) = [gate["metrics"] for gate in gates["dispersion"]]
     assert [(gate["gate"], gate["verdict"]) for gate in gates["dispersion"]] == [("G4", "pass")]
     assert (curves["name"], curves["of"]) == ("curves", "line")
-    assert curves["over"] == "the line's windows: a curve G3 passed"
     ((models,),) = [gate["metrics"] for gate in gates["inversion"]]
-    assert gates["inversion"][0]["gate"] == "G6"
-    assert (models["of"], models["over"]) == ("line", "the line's windows: a model G5 passed")
+    assert gates["inversion"][0]["gate"] == "G6" and models["of"] == "line"
 
 
 def test_a_pick_changed_by_hand_leaves_the_assistants_curve_checks_behind(
@@ -1133,8 +1152,7 @@ def test_a_pick_changed_by_hand_leaves_the_assistants_curve_checks_behind(
     assert card["picked_by"] == "hand" and card["verdict"]["text"] == "Picked by hand."
     gates = {gate["gate"]: (gate["verdict"], gate["by_hand"]) for gate in card["gates"]}
     assert gates == {"G2": ("pass", False), "G3": ("pass", True), "G4": (None, True)}
-    assert [attempt["stage"] for attempt in card["attempts"]] == ["phase_shift"]
-    assert not any("Picked again" in text for text in _texts(card))
+    assert card["steps"] == []
     cells = {
         one["key"]: one
         for one in client.get(f"/quality/dispersion/overview/{folder}").json()["cells"]
@@ -1158,7 +1176,6 @@ def test_a_mode_picked_in_pac_keeps_the_assistants_history_of_the_window(judged:
     assert card["picked_by"] == "auto"
     gates = {gate["gate"]: (gate["verdict"], gate["by_hand"]) for gate in card["gates"]}
     assert gates == {"G2": ("pass", False), "G3": ("pass", False), "G4": ("pass", False)}
-    assert [attempt["stage"] for attempt in card["attempts"]] == ["phase_shift", "picking"]
 
     # M0 picked again by PAC's own automatic picking: the assistant's checks were of another
     # curve, not shown; its history stays in the log.
@@ -1166,7 +1183,6 @@ def test_a_mode_picked_in_pac_keeps_the_assistants_history_of_the_window(judged:
     card = client.get(f"/quality/dispersion/card/{folder}/2.5").json()
     gates = {gate["gate"]: gate["verdict"] for gate in card["gates"]}
     assert card["picked_by"] == "auto" and "G4" not in gates
-    assert [attempt["stage"] for attempt in card["attempts"]] == ["phase_shift"]
     picking = [line for line in log.read_text().splitlines() if '"stage": "picking"' in line]
     assert any('"unit": "xmid_2.50"' in line for line in picking)
 
@@ -1176,32 +1192,40 @@ def test_an_assistant_run_shows_g5_and_what_each_attempt_changed(judged: str) ->
 
     assert overview["paco"] is True
     # 5.5 inverted by hand before (test_api's run): who made each model now.
-    assert overview["summary"].startswith("2 of 3 windows inverted: 1 by the agent, 1 by hand")
+    assert overview["summary"].startswith(
+        "3 windows · 1 inverted by the agent · 1 inverted by hand"
+    )
     cells = {one["x"]: one for one in overview["cells"]}
-    assert cells[2.5]["status"] == "pass" and "G5 pass · G6 pass" in cells[2.5]["hover"]
+    assert cells[2.5]["status"] == "pass" and (
+        "The model check passed, the check against the neighbouring models passed"
+        in cells[2.5]["hover"]
+    )
 
     card = client.get(f"/quality/inversion/card/{judged}/2.5").json()
     assert card["status"] == "pass"
-    # The assistant's rules; the sampling, as its retry changed it, with that retry.
+    # The workflow's rules; the sampling, as its retry changed it, with what asked it.
     settings = {one["key"]: one for one in card["settings"]}
     assert all(one["origin"] == "workflow" for one in settings.values())
-    assert settings["effort"]["why"].endswith(
-        "; the checks changed it on this window: attempt 2 (G5 not converged)"
+    assert settings["effort"]["why"] == (
+        "the workflow's default; changed for this window, asked by the model check: chains not "
+        "converged"
     )
-    assert "changed it" not in settings["drop"]["why"]
-    assert card["verdict"]["text"] == "The agent's checks (G5, G6) passed this model."
-    assert "Attempt 2: 2000 iterations (was 1000) (G5: not converged)." in _texts(card)
-    # The run's own thresholds.
-    assert any("(at most 1.2)" in text for text in _texts(card))
+    assert "changed" not in settings["drop"]["why"]
+    assert card["verdict"]["text"] == (
+        "Passed the model check and the check against the neighbouring models."
+    )
+    # What was done, a step each: the retry's change and what asked it.
+    retried, passed = card["steps"]
+    assert (retried["title"], retried["lines"]) == ("Inverted", ["Model check: flagged"])
+    assert passed["title"] == "Inverted again" and passed["lines"][:2] == [
+        "Asked by the model check: chains not converged",
+        "Sampling: 2000 iterations, was 1000",
+    ]
     gates = {gate["gate"]: gate for gate in card["gates"]}
     assert gates["G5"]["verdict"] == "pass" and gates["G6"]["metrics"][0]["name"] == "misfit"
-    retried, passed = card["attempts"]
-    assert (retried["triggered_by"], retried["verdicts"], retried["flags"]) == (
-        "initial",
-        {"G5": "retry"},
-        ["not_converged"],
-    )
-    assert (passed["n_layers"], passed["depth_m"]) == (2, 5.0)
+    # Its measures against the limits the check judged them by.
+    rhat = next(one for one in gates["G5"]["metrics"] if one["name"] == "rhat")
+    assert (rhat["value"], rhat["threshold"]) == (1.02, 1.1)
 
 
 def test_a_window_inverted_again_in_pac_drops_the_assistants_verdict(judged: str) -> None:
@@ -1216,11 +1240,10 @@ def test_a_window_inverted_again_in_pac_drops_the_assistants_verdict(judged: str
 
     # The checks, the attempts and what each changed were of the assistant's model.
     assert card["verdict"] is None and card["gates"][0]["verdict"] is None
-    assert card["attempts"] == [] and len(card["gates"]) == 1
-    assert any(text.startswith("Inverted by hand: ") for text in _texts(card))
-    assert not any(text.startswith("Attempt ") for text in _texts(card))
+    assert card["steps"] == [] and len(card["gates"]) == 1
+    assert "Inverted by hand in PAC." in _texts(card)
     overview = client.get(f"/quality/inversion/overview/{folder}").json()
-    assert overview["summary"].startswith("2 of 3 windows inverted by hand")
+    assert overview["summary"].startswith("3 windows · 2 inverted by hand")
 
 
 def test_a_soil_column_made_again_in_pac_drops_the_assistants_checks(judged: str) -> None:
@@ -1233,7 +1256,7 @@ def test_a_soil_column_made_again_in_pac_drops_the_assistants_checks(judged: str
 
     card = client.get(f"/quality/petro/card/{folder}/2.5").json()
 
-    assert card["verdict"] is None and card["attempts"] == []
+    assert card["verdict"] is None and card["steps"] == []
     assert {gate["gate"]: gate["verdict"] for gate in card["gates"]} == {"G7": None}
     assert card["column"] is not None
 
@@ -1241,10 +1264,12 @@ def test_a_soil_column_made_again_in_pac_drops_the_assistants_checks(judged: str
 def test_an_assistant_run_shows_g7_and_g8(judged: str) -> None:
     card = client.get(f"/quality/petro/card/{judged}/2.5").json()
 
-    gates = {gate["gate"]: gate["verdict"] for gate in card["gates"]}
-    assert gates == {"G7": "pass", "G8": "pass"}
-    assert "Against its neighbours: water table 0.5 m off theirs (at most 1 m)." in _texts(card)
-    assert [attempt["verdicts"] for attempt in card["attempts"]] == [{"G7": "pass", "G8": "pass"}]
+    gates = {gate["gate"]: gate for gate in card["gates"]}
+    assert {gate: one["verdict"] for gate, one in gates.items()} == {"G7": "pass", "G8": "pass"}
+    # Against its neighbours, in G8's measures: the sentences say what they do not.
+    jump = next(one for one in gates["G8"]["metrics"] if one["name"] == "water_table_jump")
+    assert (jump["value"], jump["threshold"]) == (0.5, 1.0)
+    assert "Water table at 1 m." in _texts(card) and card["steps"] == []
 
 
 def test_the_endpoints_write_nothing(judged: str) -> None:
@@ -1330,10 +1355,11 @@ def test_a_receiver_the_line_left_out_is_the_windows_and_near_shots_the_near_fie
         "longest wavelength)"
     )
     texts = _texts(sources)
-    assert any(
-        text.startswith("Its receiver at 3 m is left out, as of every window") for text in texts
+    assert (
+        "Its receiver at 3 m is left out, as from every window: too weak or too loud in most of "
+        "the line's records." in texts
     )
-    assert "Shots left out: 1 too near." in texts
+    assert "Shots not used: 1 too near." in texts
     card = client.get(f"/quality/run/{folder}").json()
     settings = {one["key"]: one for one in card["settings"]}
     assert (
@@ -1452,11 +1478,13 @@ def test_a_windows_records_muted_each_with_its_own_pulse_are_said_together(run: 
 
     muting = settings["muting"]
     assert (muting.value, muting.detail) == (
-        "mute",
-        f"vmin 80 m/s, vmax 1500 m/s, width 0.035{DASH}0.094 s",
+        f"80{DASH}1500 m/s",
+        f"signal width 0.035{DASH}0.094 s",
     )
     assert muting.origin == "checks" and not muting.spread
-    assert muting.why == "the checks changed it on 2 records (G2 weak coherence)"
+    assert muting.why == (
+        "changed for 2 records, asked by the dispersion image check: weak coherence"
+    )
     # The run's card counts a redo's fresh attempts as done again.
     card = {one.key: one for one in processing_settings(manifest, log, None)}
     assert card["records"].why.endswith("preprocessed again: 2 records (2 weak coherence)")
@@ -1509,16 +1537,14 @@ def test_a_window_says_the_muting_most_of_its_records_ran_with() -> None:
     def muted(width: float) -> Setting:
         return Setting(
             key="muting",
-            label="Muting",
-            value="mute",
-            detail=f"vmin 80 m/s, vmax 1500 m/s, width {width} s",
-            why=f"the checks changed it on this unit: attempt 1 (G2 weak coherence): width {width} s",
+            label="Mute",
+            value=f"80{DASH}1500 m/s",
+            detail=f"signal width {width} s",
+            why="changed for this record, asked by the dispersion image check: weak coherence",
             origin="workflow",
         )
 
-    unmuted = Setting(
-        key="muting", label="Muting", value="none", why="the preset's default", origin="default"
-    )
+    unmuted = Setting(key="muting", label="Mute", value="none", why="", origin="default")
     widths = {"r1": 0.035, "r2": 0.05, "r3": 0.094}
     per_unit = {name: [muted(width)] for name, width in widths.items()}
     per_unit |= {"r4": [unmuted], "r5": [unmuted]}
@@ -1529,12 +1555,12 @@ def test_a_window_says_the_muting_most_of_its_records_ran_with() -> None:
 
     (muting,) = in_common(per_unit, values, causes, "record")
 
-    # Three of five muted, each its own width: mute, not the two left unmuted.
+    # Three of five muted, each its own width: muted, not the two left unmuted.
     assert (muting.value, muting.detail) == (
-        "mute",
-        f"vmin 80 m/s, vmax 1500 m/s, width 0.035{DASH}0.094 s",
+        f"80{DASH}1500 m/s",
+        f"signal width 0.035{DASH}0.094 s",
     )
-    assert muting.spread == "among its records: none on r4, r5"
+    assert muting.spread == "other records: none on r4, r5"
 
 
 def test_a_records_muting_the_mute_trial_chose_comes_from_the_data(run: str) -> None:
@@ -1545,7 +1571,8 @@ def test_a_records_muting_the_mute_trial_chose_comes_from_the_data(run: str) -> 
 
     muting = next(one for one in record_settings(manifest, log, "1.mseed") if one.key == "muting")
 
-    assert (muting.origin, muting.why) == ("workflow", "the checks changed it on the line")
+    # The line's: who set it, the run's card saying why.
+    assert (muting.origin, muting.why) == ("workflow", "")
 
 
 def _lines(path: Path, records: list[dict[str, Any]]) -> None:

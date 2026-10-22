@@ -1,16 +1,15 @@
 """The quality of a run's dispersion images and picks: sigpipe's measures of each window's image
 (sigpipe.masw.quality.image: the coherent band, peaks on the grid's edges, competing ridges) and
 what the picked curve's file gives (its points, band, wavelengths and uncertainties); for a run
-the assistant made, its image and curve checks (G2 on the image, G3 on the M0 pick, G4 along the
+the agent made, its image and curve checks (G2 on the image, G3 on the M0 pick, G4 along the
 line), with the attempts of the phase shift and of the picking, and who picked each window: the
-assistant automatically, or a person by hand in PAC. Shown along the line at each window's
-middle: the dispersion strip of Visualization, and the selected window's card."""
+agent automatically, or a person by hand in PAC. Shown along the line at each window's middle:
+the dispersion strip of Visualization, and the selected window's card."""
 
 import logging
 from collections import Counter
 from collections.abc import Callable, Mapping
 from functools import partial
-from itertools import pairwise
 from pathlib import Path
 from typing import Any, cast
 
@@ -20,15 +19,16 @@ from pydantic import BaseModel, ConfigDict
 from masw.io.paths import workspace
 from masw.io.pick_origin import assistant_picked, checks_current_in, pick_origin
 from masw.io.quality.done import (
+    Changes,
+    attempt_steps,
     records_in_common,
+    steps_changed,
     window_ranges,
     window_settings,
     with_spreads,
 )
 from masw.io.quality.files import folder_path, fundamental, read_manifest, wavelengths
 from masw.io.quality.log import (
-    Attempt,
-    AttemptSummary,
     GateResult,
     Metric,
     QCLog,
@@ -99,9 +99,6 @@ logger = logging.getLogger(__name__)
 # saved stream).
 WINDOW_STREAM = "Stream_0000.hdf5"
 
-# The units the attempts' overrides are said in.
-UNITS = {"fmin": "Hz", "fmax": "Hz", "vmin": "m/s", "vmax": "m/s", "wavelength_step": "m"}
-
 
 class DispersionThresholds(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -125,7 +122,6 @@ class CurveStats(BaseModel):
 class DispersionCard(Card):
     """A window's card: its image's coherent band, its picks and who made them."""
 
-    attempts: tuple[AttemptSummary, ...] = ()
     picked_by: Origin | None  # None: nothing picked
     curves: tuple[CurveStats, ...]
     band_hz: tuple[float, float] | None  # the image's coherent band
@@ -210,33 +206,28 @@ def dispersion_overview(folder: str) -> Overview:
             )
         )
     picked = sum(origins.values())
-    how = (
-        "by hand"
-        if not origins["auto"]
-        else "automatically"
-        if not origins["hand"]
-        else f"({origins['auto']} automatically, {origins['hand']} by hand)"
-    )
-    summary = f"{computed} of {plural(len(cells), 'window')} computed"
-    if picked and picked == computed:
-        summary += f" and picked {how}"
-    elif picked:
-        summary += f" · {picked} picked {how}"
+    said = [plural(len(cells), "window")]
+    if computed < len(cells):
+        said.append(f"{computed} with a dispersion image")
+    if origins["auto"]:
+        said.append(f"{origins['auto']} picked automatically")
+    if origins["hand"]:
+        said.append(f"{origins['hand']} picked by hand")
     if picked < computed:
-        summary += f" · {computed - picked} without a curve"
+        said.append(f"{computed - picked} without a curve")
     paco = log is not None
     return Overview(
         paco=paco,
-        summary=summary,
+        summary=" · ".join(said),
         legend={
-            "pass": "passed the image and curve checks" if paco else "picked, within the limits",
-            "warn": "kept, still flagged" if paco else "a measure beyond its limit",
+            "pass": "passed the image and curve checks" if paco else "within the agent's limits",
+            "warn": "flagged" if paco else "a measure beyond the agent's limits",
             "fail": "rejected",
             "none": "no curve",
         },
         cells=tuple(cells),
         parts=_legends(paco, present),
-        track=Track(label="Longest wavelength picked (m)", short="Longest λ", kind="value"),
+        track=Track(label="Longest wavelength picked (m)", short="λmax", kind="value"),
         gates=line_gate(log, "picking", "G4"),
     )
 
@@ -255,10 +246,10 @@ CURVE_STATES: dict[PartState, str] = {
     "hand": "by hand",
     "none": "no curve",
 }
-# A run PAC made: its curves' measures against the assistant's limits, not judged.
+# A run PAC made: its curves' measures against the agent's limits, not judged.
 MEASURED_CURVE_STATES: dict[PartState, str] = {
-    "pass": "within the limits",
-    "warn": "a measure beyond its limit",
+    "pass": "within the agent's limits",
+    "warn": "a measure beyond the agent's limits",
     "hand": "by hand",
     "none": "no curve",
 }
@@ -297,9 +288,11 @@ def _saved_curve_measures(
 
 def _nearest(window: Path) -> float | None:
     """The distance from the window's nearest shot to its receivers (sigpipe's nearest_offset,
-    G3's)."""
+    G3's); none on a passive line, whose records hold no shot (their source at the origin only by
+    default)."""
     path = window / "window.json"
-    if not path.exists():
+    manifest = read_manifest(window.parent)
+    if not path.exists() or (manifest is not None and manifest.profile.kind == "passive"):
         return None
     return nearest_offset(MASWWindow.model_validate_json(path.read_text()))
 
@@ -307,16 +300,15 @@ def _nearest(window: Path) -> float | None:
 def _part_line(
     part: str, state: PartState, states: Mapping[PartState, str], *results: GateResult | None
 ) -> str:
-    """One of a window's parts on its cell's hover: its state and, judged, the gates that judged
-    it with their flags ("Image: flagged (G2: competing ridges)"); no curve said so."""
+    """One of a window's parts on its cell's hover: its state and, judged, the checks' flags
+    ("Image: flagged (second ridge)"); no curve said so."""
     if part == "Curve" and state == "none":
         return "No curve"
     said = f"{part}: {states[state]}"
     judged = [one for one in results if one is not None]
     if judged and state != "hand":
         flags = dict.fromkeys(flag_text(flag.name) for one in judged for flag in one.flags)
-        said += f" ({', '.join(one.gate for one in judged)}"
-        said += f": {', '.join(flags)})" if flags else ")"
+        said += f" ({', '.join(flags)})" if flags else ""
     return said
 
 
@@ -390,17 +382,23 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
     verdict = (
         Sentence(mark="pass", text="Picked by hand.")
         if by_hand
-        else verdict_sentence("window", g2, g3, g4)
+        else verdict_sentence(g2, g3, g4)
         if judged
         else None
     )
     if image is None:
         said.append(Sentence(mark="fail", text="No dispersion image."))
     elif band is None:
-        said.append(Sentence(mark="warn", text="No coherent band in the image."))
+        said.append(Sentence(mark="warn", text="No coherent band in its dispersion image."))
     else:
         # Its measures (the share of its columns coherent) in its table.
-        said.append(Sentence(mark="info", text=f"Its image is coherent from {span(*band, 'Hz')}."))
+        said.append(
+            Sentence(
+                mark="info",
+                text=f"Its dispersion image is coherent from {number(band[0])} to "
+                f"{number(band[1])} Hz.",
+            )
+        )
     selection = load_selection(window)
     stats = [curve_stats(curve) for curve in curves]
     if not by_hand:
@@ -413,10 +411,6 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
             judged,
             assistant_picked(window, log),
         )
-    if log is not None:
-        said += _again(log.of(unit, "phase_shift"), "Imaged again")
-        if current:
-            said += _again(log.of(unit, "picking"), "Picked again")
     said += warnings(g2, g3, g4)
     # The image's measures; a passive or passive-active window's, its stacked correlations' and
     # its fk selection's too: G2's own when it judged the window, else as PAC's job saved them.
@@ -457,25 +451,69 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         sentences=tuple(said),
         gates=tuple(gates),
         parts=(*parts, Part(label="curve", state=curve_state)),
-        attempts=(
-            log.summaries(unit, "phase_shift") + (log.summaries(unit, "picking") if current else ())
-            if log is not None
-            else ()
+        steps=attempt_steps(
+            log,
+            unit,
+            ("phase_shift", "picking") if current else ("phase_shift",),
+            spacing := manifest.profile.receiver_spacing_m if manifest is not None else 1.0,
+            changes=_changes(spacing),
         ),
         picked_by=picked_by,
         curves=tuple(stats),
-        settings=_records_settings(window, manifest, log)
-        + with_spreads(
-            unit,
-            _line_settings(run_folder, manifest, log),
-            "window",
-            ranges=window_ranges(manifest, log, window_folders(run_folder)),
-        )
-        if manifest is not None
-        else (),
+        settings=_settings(run_folder, window, manifest, log) if manifest is not None else (),
         band_hz=band,
         wavelength_limits_m=(lambda_min, lambda_max),
     )
+
+
+# A pick's parameters as a step says them, by name: what it sets, its value in words.
+_PICKING: dict[str, tuple[str, Callable[[Any], str]]] = {
+    "wavelength_step": ("Resampling", lambda value: f"every {number(value)} m of wavelength"),
+    "min_relative_coherence": (
+        "Points kept",
+        lambda value: f"down to {number(value)} of the ridge's median coherence",
+    ),
+    "mode_min_ratio": ("Mode rule", lambda value: f"{number(value)} times the noise floor"),
+    "corridor": ("Tracking corridor", lambda value: f"{number(100 * value)} % of the velocity"),
+    "max_wavelength": (
+        "Longest wavelength searched",
+        lambda value: "any" if value is None else f"{number(value)} window lengths",
+    ),
+    "guide": ("Guided", lambda value: "by the neighbours' median curve" if value else "no"),
+}
+
+
+def _changes(spacing: float) -> Changes:
+    """What a window's attempt changed, in words: the phase shift's steps as the run card says
+    them; a pick's parameters, its band first."""
+
+    def said(before: Mapping[str, Any], after: Mapping[str, Any]) -> list[str]:
+        if any(isinstance(value, Mapping) for value in after.values()):
+            return steps_changed(before, after, spacing)
+        changed = [key for key, value in after.items() if before.get(key) != value]
+        lines: list[str] = []
+        if {"fmin", "fmax"} & set(changed):
+            low, high = after.get("fmin"), after.get("fmax")
+            band = (
+                span(low, high, "Hz", 4)
+                if low is not None and high is not None
+                else f"from {number(low, 4)} Hz"
+                if low is not None
+                else f"up to {number(high, 4)} Hz"
+                if high is not None
+                else "the image's"
+            )
+            lines.append(f"Picking band: {band}")
+        for key in changed:
+            if key in ("fmin", "fmax"):
+                continue
+            name, words = _PICKING.get(
+                key, (key.replace("_", " ").capitalize(), lambda value: str(value))
+            )
+            lines.append(f"{name}: {words(after[key])}")
+        return lines
+
+    return said
 
 
 def _results(
@@ -507,8 +545,8 @@ def _picks(
     paco: bool,
     assistant: bool,
 ) -> list[Sentence]:
-    """What was picked, by whom (`assistant`: the assistant's automatic pick, else PAC's), and
-    how deep it reaches."""
+    """What was picked and by whom (`assistant`: the agent's automatic pick, else PAC's), the
+    wavelengths it spans, where they may alias."""
     if not stats:
         return [Sentence(mark="fail" if paco else "info", text="No curve picked.")]
     first, *others = stats
@@ -519,124 +557,70 @@ def _picks(
         if assistant
         else "automatically"
     )
-    text = (
-        f"{first.label} picked {by}: {first.n_points} points, {span(*first.band_hz, 'Hz')}, "
-        f"wavelengths {span(*first.wavelength_m, 'm')}"
-    )
-    if first.uncertainty is not None:
-        text += f", median uncertainty {first.uncertainty:.0%}"
     status = verdict_status(g3) if g3 is not None else measured_status(measures)
-    said = [Sentence(mark="info" if status == "none" else status, text=text + ".")]
-    deepest = f"its longest wavelength sets models about {number(first.wavelength_m[1] / 2)} m deep"
-    said.append(
+    low, high = first.band_hz
+    shortest, longest = first.wavelength_m
+    said = [
+        Sentence(
+            mark="info" if status == "none" else status,
+            text=f"{first.label} picked {by}: {first.n_points} points from {number(low)} to "
+            f"{number(high)} Hz.",
+        ),
         Sentence(
             mark="info",
-            text=(
-                f"Shorter than {number(lambda_min)} m, wavelengths alias at this receiver "
-                f"spacing; {deepest} at most."
-                if lambda_min is not None
-                else f"{deepest[:1].upper()}{deepest[1:]} at most."
-            ),
+            text=f"Its wavelengths from {number(shortest)} to {number(longest)} m: λmax / 2 = "
+            f"{number(longest / 2)} m.",
+        ),
+    ]
+    if lambda_min is not None:
+        said.append(
+            Sentence(
+                mark="info",
+                text=f"Under {number(lambda_min)} m, wavelengths may alias at this receiver "
+                "spacing.",
+            )
         )
-    )
     if others:
         said.append(
             Sentence(
                 mark="info",
-                # Higher modes: a person's alone, the assistant picking M0.
+                # Higher modes: a person's alone, the agent picking M0.
                 text="Also picked by hand: "
                 + ", ".join(f"{one.label} ({one.n_points} points)" for one in others)
                 + ".",
             )
         )
-    failed = [
-        metric.name for metric in measures if metric.threshold is not None and not metric.passed
-    ]
-    if failed and not paco:
-        said.append(
-            Sentence(
-                mark="warn",
-                text="Beyond the agent's limits: "
-                + ", ".join(flag_text(name) for name in failed)
-                + ".",
-            )
-        )
     return said
-
-
-def _again(attempts: tuple[Attempt, ...], done: str) -> list[Sentence]:
-    """Each attempt after the first: what the check before it asked to change, and why."""
-    said: list[Sentence] = []
-    for before, attempt in pairwise(attempts):
-        gate, _, name = attempt.triggered_by.partition(":")
-        flag = next(
-            (
-                flag
-                for result in before.results.values()
-                for flag in result.flags
-                if flag.name == name
-            ),
-            None,
-        )
-        changed = _overrides(flag.action.overrides or {}) if flag is not None else ""
-        why = f"{gate}: {flag_text(name)}" if name else flag_text(gate)
-        said.append(
-            Sentence(
-                mark="info",
-                text=f"{done}" + (f" with {changed}" if changed else "") + f" ({why}).",
-            )
-        )
-    return said
-
-
-def _overrides(overrides: Mapping[str, Any]) -> str:
-    """An override in words: {"dispersion": {"fmax": 49}} as "fmax 49 Hz"."""
-    said: list[str] = []
-    for key, value in overrides.items():
-        if isinstance(value, Mapping):
-            said.append(_overrides(cast(Mapping[str, Any], value)))
-        elif isinstance(value, int | float) and not isinstance(value, bool):
-            said.append(f"{flag_text(key)} {number(value)} {UNITS.get(key, '')}".rstrip())
-        else:
-            said.append(f"{flag_text(key)} {value}")
-    return ", ".join(part for part in said if part)
 
 
 def _picking_setting(
     log: QCLog | None, unit: str, picked_by: Origin | None, assistant: bool
 ) -> Setting:
-    """Who picked window `unit`'s curves, and why: by hand or PAC's automatic picking (the
-    Dispersion picking page), or the assistant's picker along M0's ridge (`assistant`), picked
-    again by the curve check (G3) when it was."""
+    """Who picked window `unit`'s curves: by hand or PAC's automatic picking (the Dispersion
+    picking page), or the agent's picker along M0's ridge (`assistant`), picked again when the
+    curve check asked it."""
     if picked_by is None:
-        return Setting(
-            key="picking", label="Picking", value="none", why="no curve picked", origin="default"
-        )
+        return Setting(key="picking", label="Picking", value="none", why="", origin="default")
     if picked_by == "hand" or log is None or not assistant:
         return Setting(
             key="picking",
             label="Picking",
             value="by hand" if picked_by == "hand" else "automatic",
-            why="in the Dispersion picking page"
-            if picked_by == "hand"
-            else "PAC's automatic picking, in the Dispersion picking page",
+            detail="in the Dispersion picking page",
+            why="",
             origin="you",
         )
     again = [one for one in log.of(unit, "picking") if one.attempt > 1]
     asked = Counter(flag_text(one.triggered_by.partition(":")[2]) for one in again)
-    why = "the agent's picker tracked M0 along its ridge"
-    if again:
-        why += (
-            "; picked again by the curve check (G3: "
-            + ", ".join(f"{count} {name}" for name, count in asked.most_common())
-            + ")"
-        )
     return Setting(
         key="picking",
         label="Picking",
         value="automatic",
-        detail=f"picked {len(again) + 1} times" if again else "",
-        why=why,
+        detail="M0 tracked along its ridge",
+        why=f"picked {plural(len(again) + 1, 'time')}, asked again by the curve check: "
+        + ", ".join(f"{count} {name}" if count > 1 else name for name, count in asked.most_common())
+        if again
+        else "",
         origin=log.chooser,
     )
 
@@ -656,6 +640,21 @@ def _records_settings(
         if one.name not in manifest.exclusions.records
     ]
     return records_in_common(manifest, log, names)
+
+
+def _settings(
+    run_folder: Path, window: Path, manifest: RunManifest, log: QCLog | None
+) -> tuple[Setting, ...]:
+    """What window folder `window`'s display was made with, in the run card's order: its
+    receivers, its records' preprocessing, its image's steps, its pick; each with how the line's
+    other windows differ."""
+    own = with_spreads(
+        window.name,
+        _line_settings(run_folder, manifest, log),
+        "window",
+        ranges=window_ranges(manifest, log, window_folders(run_folder)),
+    )
+    return (*own[:1], *_records_settings(window, manifest, log), *own[1:])
 
 
 def _line_settings(

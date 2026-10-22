@@ -50,8 +50,8 @@ const STATUSES: Status[] = ["pass", "warn", "fail", "none"];
 // A part's states in the legend's order, and what each part checks, on its title's hover.
 const PART_STATES: PartState[] = ["pass", "warn", "fail", "hand", "none"];
 const PART_TIPS: Record<string, string> = {
-  Image: "Image\nG2: the dispersion image's check",
-  Curve: "Curve\nG3 and G4: the curve's checks, alone and along the line",
+  Image: "Image\nThe dispersion image check",
+  Curve: "Curve\nThe curve check, and the check against the neighbouring curves",
 };
 
 // What a window's (or record's) state implies for what comes after it, said on the line plot's
@@ -126,10 +126,10 @@ function RecordsOnly({
 // The selected window's shots in the legend, by how it uses them: only the uses it has, and
 // not those it leaves out by the geometry (inside it, out of its reach: grey, said on hover).
 const SHOT_KEYS: { uses: Use[]; label: string; hollow?: boolean }[] = [
-  { uses: ["used"], label: "stacked" },
-  { uses: ["part"], label: "stacked, some traces left out", hollow: true },
-  { uses: ["excluded"], label: "rejected" },
-  { uses: ["failed"], label: "failed" },
+  { uses: ["used"], label: "used" },
+  { uses: ["part"], label: "used, some traces left out", hollow: true },
+  { uses: ["excluded"], label: "left out by the signal check" },
+  { uses: ["failed"], label: "failed to preprocess" },
   { uses: ["traces"], label: "too few receivers" },
 ];
 
@@ -200,7 +200,7 @@ function LineLegend({
       {!windows && (
         <span>
           <i className="viz-swatch series" />{" "}
-          windows stacking the record
+          windows using the record
         </span>
       )}
     </div>

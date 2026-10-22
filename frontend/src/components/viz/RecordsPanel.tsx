@@ -227,7 +227,7 @@ export function RecordsPanel({
               <GateTables gates={card.gates} />
             ) : (
               <>
-                <Details gates={card.gates} attempts={card.attempts} />
+                <Details gates={card.gates} steps={card.steps} />
                 <SavedFigures figures={runFigures(folder, figures, "", place ?? {})} />
               </>
             ))

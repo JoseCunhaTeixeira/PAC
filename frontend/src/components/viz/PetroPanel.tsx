@@ -110,7 +110,7 @@ export function PetroPanel({
                 details={
                   petroCard && (
                     <>
-                      <Details gates={petroCard.gates} attempts={petroCard.attempts} />
+                      <Details gates={petroCard.gates} steps={petroCard.steps} />
                       <SavedFigures
                         figures={runFigures(folder, windowSaved, "PetroInversion_", xmid !== null ? { xmid } : {})}
                       />

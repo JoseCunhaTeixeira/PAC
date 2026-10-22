@@ -1011,15 +1011,27 @@ button.viz-option:active {
   min-width: 560px;
 }
 
-.viz-col-measure {
-  width: 30%;
-}
-
 .viz-col-num {
-  width: 12%;
+  width: 18%;
 }
 
-/* A card's measures: a submenu for each thing they measure, its gate's verdict beside it. */
+.viz-col-limit {
+  width: 20%;
+}
+
+/* A measure's name that says what it is on hover: a dotted line under it. */
+.viz-term {
+  text-decoration: underline dotted var(--text-faint);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+/* A check's measures of several things, a table each: room between them. */
+.viz-measure-menus .viz-table-wrap + .viz-table-wrap {
+  margin-top: 12px;
+}
+
+/* A card's measures: a submenu for each check, its verdict beside it. */
 .viz-measure-menus {
   padding-left: 14px;
 }
@@ -1033,14 +1045,6 @@ button.viz-option:active {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-}
-
-/* What a measure covers, one cell for the rows it covers alike; a failed row's own colour
- * left to its value. */
-.viz table.viz-table tr td.viz-over {
-  color: var(--text-muted);
-  font-size: var(--fs-small);
-  vertical-align: middle;
 }
 
 .viz-gates {
@@ -1254,18 +1258,6 @@ button.viz-option:active {
   margin-left: auto;
   color: var(--text-faint);
   cursor: help;
-}
-
-/* A unit card's other sentences, folded under its verdict and warnings. */
-/* A card's head: its verdict first, then each check's, set apart and quieter. */
-
-.viz-gate-list {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 4px;
-  padding-left: 10px;
-  border-left: 1px solid var(--border-strong);
 }
 
 /* A field beside its label, in a card's head (the model shown). */
