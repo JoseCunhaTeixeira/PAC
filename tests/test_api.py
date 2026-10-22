@@ -338,7 +338,7 @@ def test_a_window_done_again_by_hand_keeps_nothing_older(run: str) -> None:
     assert len(log.read_text().splitlines()) == len(lines) + 1
     card = client.get(f"/quality/inversion/card/{run}/2.5").json()
     assert card["steps"] == [] and any(
-        one["text"].startswith("Inverted by hand") for one in card["sentences"]
+        one["text"] == "Inverted by the user." for one in card["sentences"]
     )
     section = run_folder / "SeismicInversion_VelocitySection_0000.png"
     assert section.exists()

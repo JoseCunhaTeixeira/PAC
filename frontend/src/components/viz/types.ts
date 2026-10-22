@@ -1,7 +1,10 @@
 // What Visualization reads of a run (src/masw/io/quality): the runs, a run's card and line, each
 // stage's units along the line, and the selected unit's card.
 
-export type Status = "pass" | "warn" | "fail" | "none";
+// A unit's state, one logic for every run: as a check judged it, passed, flagged (warn) or
+// rejected (fail); made by the user, within the agent's limits (pass) or beyond them (note);
+// without a result (none).
+export type Status = "pass" | "note" | "warn" | "fail" | "none";
 // A sentence's badge: passed, a warning (kept, information), flagged (asked and not done),
 // rejected; or what was done.
 export type Mark = "pass" | "warn" | "flag" | "fail" | "info";
@@ -191,7 +194,7 @@ export interface Track {
 export interface Overview {
   paco: boolean;
   summary: string;
-  legend: Partial<Record<Status, string>>;
+  legend: Partial<Record<PartState, string>>;
   cells: Cell[];
   track: Track | null;
   /** The cells' parts, when they say their checks apart. */
@@ -234,7 +237,7 @@ export interface Card {
   sentences: Sentence[];
   gates: GateView[];
   /** Its checks said apart, as its cell's parts: for its badges. */
-  parts?: { label: string; state: PartState }[];
+  parts?: { label: string; state: PartState; judged?: boolean }[];
   /** What was done to it: each step with the settings it ran with. */
   settings?: Setting[];
   /** Its attempts, a step each, when one ran again. */

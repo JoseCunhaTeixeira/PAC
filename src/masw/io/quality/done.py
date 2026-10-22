@@ -21,6 +21,7 @@ from masw.io.quality.view import (
     Origin,
     Setting,
     Step,
+    by_whom,
     counted,
     flag_text,
     number,
@@ -94,13 +95,13 @@ _NUMBERS = re.compile(r"\d[\d.,]*")
 # From sigpipe c17b3de on (its commit's time, in UTC), a shot's trigger is corrected with its
 # muting only; the runs before corrected it whatever the muting.
 _TRIGGER_WITH_MUTING = datetime(2026, 9, 28, 14, 46, tzinfo=UTC)
-# What asked a stage to run again, other than a check's flag, in words.
+# What asked a stage to run again, other than a check's flag, in words: a redo of the agent's
+# (backtrack) said by its kind, the run's.
 _CAUSES = {
     "initial": "",
-    "backtrack": "by the agent",
     "mute trial": "with the mute trial's mute",
     "line change": "with a change of the line's settings",
-    "asked": "at the agent's request",
+    "asked": "asked by the user",
 }
 # What each stage did, as a step's title.
 _DONE = {
@@ -113,18 +114,20 @@ _DONE = {
 _VERDICTS = {"pass": "passed", "retry": "flagged", "reject": "rejected"}
 
 
-def cause(triggered_by: str) -> str:
-    """Why an attempt ran, in words ("asked by the curve check: points off the ridge's top");
-    "" for a first run."""
+def cause(triggered_by: str, log: QCLog | None = None) -> str:
+    """Why an attempt ran, in words ("asked by the curve check: points off the ridge's top",
+    "asked by the autonomous agent" for a redo `log`'s agent chose); "" for a first run."""
     gate, _, flag = triggered_by.partition(":")
     if flag:
         return f"asked by {CHECK_NAMES.get(gate, gate)}: {flag_text(flag)}"
+    if triggered_by == "backtrack":
+        return f"asked {by_whom(log, True) if log is not None else 'by the agent'}"
     return _CAUSES.get(triggered_by, triggered_by.replace("_", " "))
 
 
-def trigger_text(attempt: Attempt) -> str:
+def trigger_text(attempt: Attempt, log: QCLog | None = None) -> str:
     """Why an attempt ran, in words: its first run said so."""
-    return cause(attempt.triggered_by) or "first run"
+    return cause(attempt.triggered_by, log) or "first run"
 
 
 def trigger_words(t0: object, own: str = "its") -> str:
@@ -157,6 +160,7 @@ class _Origins:
         self, manifest: RunManifest, log: QCLog | None, unit: str, log_stage: str, noun: str
     ) -> None:
         self.noun = noun
+        self.log = log
         self.chooser: Origin = log.chooser if log is not None else "you"
         # Each of its attempts with the stages it changed on the one before (the first, its
         # overrides of the run's); a change of the line's that made the unit again says what it
@@ -180,7 +184,7 @@ class _Origins:
     def of(self, stage: str) -> tuple[Origin, str]:
         changed = [one for one, stages in self.own if stage in stages]
         if changed:
-            asked = list(dict.fromkeys(trigger_text(one) for one in changed))
+            asked = list(dict.fromkeys(trigger_text(one, self.log) for one in changed))
             return "checks", f"changed for this {self.noun}, {'; '.join(asked)}"
         line = next(
             (one for one in (self.line, self.trial) if one is not None and stage in one.parameters),
@@ -194,7 +198,7 @@ class _Origins:
 
     def causes(self, stage: str) -> list[str]:
         """What asked the unit's own retries that changed `stage`, in words, in order."""
-        return [trigger_text(one) for one, stages in self.own if stage in stages]
+        return [trigger_text(one, self.log) for one, stages in self.own if stage in stages]
 
 
 def _stages(
@@ -239,16 +243,18 @@ def record_settings(manifest: RunManifest, log: QCLog | None, name: str) -> tupl
     if "trigger" in fields:
         origin, why = origins.of("trigger")
         shifted = muted or before
-        settings.append(
-            Setting(
-                key="trigger",
-                label="Trigger",
-                value=trigger_words(stages["trigger"].get("t0")) if shifted else "none",
-                detail="" if shifted else "not muted: left as recorded",
-                why=why,
-                origin=origin,
+        # Not muted, the record is left as recorded: its trigger said only when not the preset's.
+        if shifted or origin != "default":
+            settings.append(
+                Setting(
+                    key="trigger",
+                    label="Trigger",
+                    value=trigger_words(stages["trigger"].get("t0")) if shifted else "none",
+                    detail="" if shifted else "not muted: left as recorded",
+                    why=why,
+                    origin=origin,
+                )
             )
-        )
     # A step off by default and left off is not said, as the run card says none.
     steps = [_said(name, stages, origins) for name in ("muting", "filtering") if name in fields]
     settings += [one for one in steps if not (one.value == "none" and one.origin == "default")]
@@ -509,7 +515,7 @@ def attempt_steps(
     for one in attempts:
         before = last.get(one.stage)
         lines: list[str] = []
-        if why := cause(one.triggered_by):
+        if why := cause(one.triggered_by, log):
             lines.append(_capitalized(why))
         if before is not None:
             lines += (changes or partial(steps_changed, spacing=spacing))(

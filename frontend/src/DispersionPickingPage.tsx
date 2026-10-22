@@ -42,24 +42,26 @@ import {
   type RailTone,
 } from "./components/PositionRail";
 import { useStoredState } from "./components/stored";
-import { judged, useReceivers, useStageStates, xmidKey } from "./components/railStates";
+import { judged, railItems, useReceivers, useStageStates, xmidKey } from "./components/railStates";
 import { num } from "./components/viz/format";
 
 const LABEL_PATTERN = /^[A-Z]{1,3}[0-9]+$/;
 // The rail's parts' states in words, in the legend's order: a window's image's (G2), its
 // curve's (G3, G4; or by hand).
 const IMAGE_TONES: [RailTone, string][] = [
-  ["pass", "passed"],
+  ["pass", "passed, or within the agent's limits"],
+  ["note", "beyond the agent's limits"],
   ["warn", "flagged"],
   ["fail", "rejected"],
-  ["none", "not checked"],
+  ["none", "not made"],
 ];
 const CURVE_TONES: [RailTone, string][] = [
-  ["pass", "passed"],
+  ["pass", "passed, or within the agent's limits"],
+  ["note", "beyond the agent's limits"],
   ["warn", "flagged"],
   ["fail", "rejected"],
   ["auto", "not checked"],
-  ["hand", "by hand"],
+  ["hand", "picked by the user"],
   ["none", "not picked"],
 ];
 const LABEL_PARTS = /^([A-Z]{1,3})([0-9]+)$/;
@@ -128,7 +130,7 @@ export default function DispersionPickingPage() {
   const [positionPicks, setPositionPicks] = useState<PositionPicks[]>([]);
   // Each window's checks, as Visualization shows them; again after every pick and deletion.
   const [picks, setPicks] = useState(0);
-  const { states, loading: statesLoading } = useStageStates(
+  const { states, loading: statesLoading, parts } = useStageStates(
     folder,
     "dispersion",
     picks,
@@ -406,7 +408,7 @@ export default function DispersionPickingPage() {
       ? "none"
       : hand
         ? "hand"
-        : checked === "pass" || checked === "warn" || checked === "fail"
+        : checked === "pass" || checked === "note" || checked === "warn" || checked === "fail"
           ? checked
           : "auto";
     const image = state?.parts && state.parts.length > 1 ? state.parts[0] : undefined;
@@ -417,10 +419,10 @@ export default function DispersionPickingPage() {
       ? state.hover.filter((line) => !MODES_LINE.test(line))
       : [
           `xmid ${num(position.xmid, 4)} m`,
-          hasCurve ? (hand ? "Curve: by hand" : "Curve: picked automatically") : "No curve",
+          hasCurve ? (hand ? "Curve: picked by the user" : "Curve: picked automatically") : "Curve: not picked",
         ];
-    const at = lines.findIndex((line) => line.startsWith("Curve") || line === "No curve");
-    const now = !hasCurve ? "No curve" : hand ? "Curve: by hand" : undefined;
+    const at = lines.findIndex((line) => line.startsWith("Curve"));
+    const now = !hasCurve ? "Curve: not picked" : hand ? "Curve: picked by the user" : undefined;
     if (now !== undefined && at >= 0) lines[at] = now;
     const n = position.labels.length;
     if (hasCurve)
@@ -440,11 +442,11 @@ export default function DispersionPickingPage() {
   // What the rail's colours say, each part's states present: the image's, the curve's.
   const imageTones = new Set(cells.flatMap((cell) => (cell.parts ? [cell.parts[0]] : [])));
   const curveTones = new Set(cells.map((cell) => (cell.parts ? cell.parts[1] : cell.tone)));
+  // In Visualization's words where its legend has the state.
+  const words = (title: string) => parts.find((part) => part.title === title)?.legend;
   const legend = [
-    ...(imageTones.size
-      ? [{ title: "Image", items: IMAGE_TONES.filter(([tone]) => imageTones.has(tone)) }]
-      : []),
-    { title: "Curve", items: CURVE_TONES.filter(([tone]) => curveTones.has(tone)) },
+    ...(imageTones.size ? [{ title: "Image", items: railItems(IMAGE_TONES, imageTones, words("Image")) }] : []),
+    { title: "Curve", items: railItems(CURVE_TONES, curveTones, words("Curve")) },
   ];
   const index = xmid === null ? -1 : xmids.indexOf(xmid);
   const chooseRun = useCallback(

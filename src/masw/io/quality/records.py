@@ -6,6 +6,7 @@ its signal check's verdicts (G1) and the preprocessing's attempts. Shown along t
 record's shot: the records strip of Visualization, and the selected record's card."""
 
 import logging
+from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -30,8 +31,10 @@ from masw.io.quality.view import (
     Cell,
     Overview,
     Sentence,
+    States,
     Status,
     Track,
+    by_whom,
     flag_text,
     gate_view,
     line_gate,
@@ -39,6 +42,7 @@ from masw.io.quality.view import (
     number,
     plural,
     span,
+    state_lines,
     verdict_sentence,
     verdict_status,
     warnings,
@@ -197,7 +201,12 @@ def records_overview(folder: str) -> Overview:
     excluded = set(manifest.exclusions.records)
     cells: list[Cell] = []
     line_out, _ = line_receivers(log)
+    # A record's red: not used, rejected by the signal check, or failed (left out) otherwise.
+    states = States(none="not measured", failed="not used")
+    # Who preprocessed each record: the agent when its log has the record's run, else by hand.
+    makers: Counter[str] = Counter()
     for record in manifest.records:
+        makers[_maker(log, record.name)] += 1
         g1, metrics, band = _judged(run_folder, manifest, log, record.name)
         snr = next((one.value for one in metrics if one.name == "snr_db"), None)
         # The record's own, the receivers left out of every window apart.
@@ -206,28 +215,34 @@ def records_overview(folder: str) -> Overview:
             for trace in manifest.exclusions.traces.get(record.name, ())
             if trace not in line_out
         ]
-        status: Status
-        if record.status == "failed" or record.name in excluded:
-            status = "fail"
+        if record.status == "failed":
+            status = states.add("fail", judged=False)
+            said = ["Failed to preprocess"]
+        elif record.name in excluded and g1 is None:
+            status = states.add("fail", judged=False)
+            said = ["Left out by the user"]
         else:
-            status = verdict_status(g1) if g1 is not None else measured_status(metrics)
+            judged = g1 is not None
+            status = states.add(
+                "fail"
+                if record.name in excluded
+                else verdict_status(g1)
+                if judged
+                else measured_status(metrics),
+                judged=judged,
+            )
+            said = state_lines(status, g1)
         hover = [
             record.name
             + (f" · shot at {number(sources[record.name], 4)} m" if record.name in sources else ""),
-            "failed to preprocess"
-            if record.status == "failed"
-            else "left out of every window"
-            if record.name in excluded
-            else f"median SNR {number(snr)} dB"
-            if snr is not None
-            else "not measured",
+            *said,
         ]
+        if snr is not None:
+            hover.append(f"Median SNR {number(snr)} dB")
         if band is not None:
-            hover.append(f"usable band {span(*band, 'Hz')}")
+            hover.append(f"Usable band {span(*band, 'Hz')}")
         if left:
             hover.append(f"{plural(len(left), 'trace')} left out")
-        if g1 is not None and g1.flags:
-            hover.append("flags: " + ", ".join(flag_text(flag.name) for flag in g1.flags))
         cells.append(
             Cell(
                 key=record.name,
@@ -237,30 +252,19 @@ def records_overview(folder: str) -> Overview:
                 value=snr,
             )
         )
-    failed = {record.name for record in manifest.records if record.status == "failed"}
-    preprocessed = len(manifest.records) - len(failed)
-    used = len(manifest.records) - len(excluded | failed)
     traces = sum(len(one) for one in manifest.exclusions.traces.values())
-    total = len(manifest.records)
-    summary = (
-        f"{plural(total, 'record')} preprocessed"
-        if preprocessed == total
-        else f"{preprocessed} of {plural(total, 'record')} preprocessed"
-    ) + f" · {used} used"
-    if excluded:
-        summary += f" · {len(excluded)} left out by the signal check"
-    if traces:
-        summary += f" · {plural(traces, 'trace')} left out"
     paco = log is not None
+    said = [
+        plural(len(manifest.records), "record"),
+        *(f"{count} preprocessed {by}" for by, count in makers.items()),
+        *states.counts(),
+    ]
+    if traces:
+        said.append(f"{plural(traces, 'trace')} left out")
     return Overview(
         paco=paco,
-        summary=summary,
-        legend={
-            "pass": "passed the signal check" if paco else "measures within the agent's limits",
-            "warn": "flagged, used" if paco else "a measure beyond the agent's limits",
-            "fail": "left out" if paco else "failed to preprocess",
-            "none": "not measured",
-        },
+        summary=" · ".join(said),
+        legend=states.legend(),
         cells=tuple(cells),
         gates=line_gate(log, "preprocessing", "G1"),
         track=Track(
@@ -402,6 +406,8 @@ def record_card(folder: str, name: str) -> RecordCard:
     own = tuple(trace for trace in excluded_traces if trace not in line_out)
     said: list[Sentence] = []
     verdict = verdict_sentence(g1)
+    if record.status != "failed":
+        said.append(Sentence(mark="info", text=f"Preprocessed {_maker(log, name)}."))
     if record.status == "failed":
         said.append(Sentence(mark="fail", text=f"Failed to preprocess: {record.error}."))
     elif name in manifest.exclusions.records and (g1 is None or g1.verdict != "reject"):
@@ -452,6 +458,12 @@ def record_card(folder: str, name: str) -> RecordCard:
             ranges=record_ranges(manifest, log),
         ),
     )
+
+
+def _maker(log: QCLog | None, name: str) -> str:
+    """Who preprocessed record `name`: the run's agent, when its log holds the record's
+    preprocessing; else the user."""
+    return by_whom(log, log is not None and bool(log.of(name, STAGE)))
 
 
 def _judged(

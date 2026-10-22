@@ -198,10 +198,15 @@
   color: var(--text-muted);
 }
 
-.viz-tile .viz-origin {
+.viz-tile .viz-origin,
+.viz-step .viz-origin {
   margin-top: auto;
   padding: 0 7px;
   font-size: 0.66rem;
+}
+
+.viz-step .viz-origin {
+  margin-top: 4px;
 }
 
 .viz-origin {
@@ -657,6 +662,10 @@ button.viz-option:active {
   background: color-mix(in srgb, var(--ok) 50%, transparent);
 }
 
+.viz-swatch.note {
+  background: color-mix(in srgb, var(--note) 58%, transparent);
+}
+
 .viz-swatch.warn {
   background: color-mix(in srgb, var(--warn) 58%, transparent);
 }
@@ -781,6 +790,11 @@ button.viz-option:active {
 .viz-badge.pass {
   background: var(--ok-soft);
   color: var(--ok);
+}
+
+.viz-badge.note {
+  background: var(--note-soft);
+  color: var(--note);
 }
 
 .viz-badge.warn {

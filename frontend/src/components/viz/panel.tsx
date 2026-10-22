@@ -8,7 +8,7 @@ import {
   PulseIcon,
 } from "../icons";
 import { neighbours } from "./cells";
-import { metricLabel, STATE_MEANINGS } from "./format";
+import { MEASURED_LABELS, metricLabel, STATE_MEANINGS } from "./format";
 import type { Card, Cell, GateView, Overview, Sentence, StageKey } from "./types";
 import {
   Empty,
@@ -119,7 +119,6 @@ export function UnitCard({
   children,
   details,
   stage,
-  bare = false,
 }: {
   card: Card | null;
   error: string | null;
@@ -135,9 +134,6 @@ export function UnitCard({
   details?: ReactNode;
   /** The stage the card is of: what its state means there. */
   stage?: StageKey;
-  /** Its name and its neighbours alone above its displays, and its details (a passive record's
-   * signal and spectrum, and its measures). */
-  bare?: boolean;
 }) {
   const { before, after } = neighbours(cells, selected ?? card?.key ?? null);
   const arrows = <StepArrows before={step(before)} after={step(after)} onSelect={onSelect} />;
@@ -160,31 +156,42 @@ export function UnitCard({
     );
   }
   // The verdict is the badges': folded under the unit, why it was rejected or flagged first,
-  // then the rest the card says. The measures in their tables, the sentences say what they do not.
+  // then who made it (the card's first sentence), what it was made from, the rest the card says.
+  // The measures in their tables, the sentences say what they do not.
   const verdict = card.verdict ?? beyondLimits(card.gates);
-  const said = [...(verdict && verdict.mark !== "pass" ? [verdict] : []), ...lead, ...card.sentences];
+  const [made, ...rest] = card.sentences;
+  const said = [
+    ...(verdict && verdict.mark !== "pass" ? [verdict] : []),
+    ...(made ? [made] : []),
+    ...lead,
+    ...rest,
+  ];
+  const judged = card.gates.some((gate) => gate.verdict !== null && !gate.by_hand);
   return (
     <section className={`viz-card${loading ? " viz-stale" : ""}`}>
       <div className="viz-unit-head">
         {stage && <span className="card-icon">{STAGE_ICONS[stage]}</span>}
         <strong>{card.title}</strong>
-        {bare
-          ? null
-          : card.parts?.length
+        {card.parts?.length
           ? // Its checks said apart (a window's image, its curve): a badge each.
             card.parts.map((part) => <PartBadge key={part.label} part={part} />)
           : card.status !== "none" && (
-              <StatusBadge status={card.status} meaning={stage ? STATE_MEANINGS[stage][card.status].full : undefined} />
+              <StatusBadge
+                status={card.status}
+                // Made by the user, no check judged it: against the agent's limits.
+                label={judged ? undefined : MEASURED_LABELS[card.status]}
+                meaning={stage ? STATE_MEANINGS[stage][card.status].full : undefined}
+              />
             )}
         {arrows}
       </div>
       {children}
-      {!bare && said.length > 0 && (
+      {said.length > 0 && (
         <Fold title="Details">
           <Sentences sentences={said} />
         </Fold>
       )}
-      {!bare && card.settings && card.settings.length > 0 && (
+      {card.settings && card.settings.length > 0 && (
         <Fold title="Settings">
           <SettingsList settings={card.settings} />
         </Fold>

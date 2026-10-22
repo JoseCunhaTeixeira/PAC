@@ -8,7 +8,7 @@ import math
 import re
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict
 
 from masw.io.folders import get_input_folders, get_output_folders
 from masw.io.paths import INPUT_DIR
+from masw.io.pick_origin import assistant_picked, pick_origin
 from masw.io.quality.files import (
     folder_path,
     line_geometry,
@@ -43,6 +44,7 @@ from masw.io.quality.log import (
     line_receivers,
     read_log,
 )
+from masw.io.quality.makers import inversion_by_agent, soil_by_agent
 from masw.io.quality.sources import near_field
 from masw.io.quality.tried import (
     SEP,
@@ -60,6 +62,8 @@ from masw.io.quality.tried import (
     tried_tables,
 )
 from masw.io.quality.view import (
+    BY_AGENT,
+    BY_USER,
     REFUSALS,
     Origin,
     Setting,
@@ -70,8 +74,9 @@ from masw.io.quality.view import (
     receivers,
 )
 from sigpipe.masw.inversion.section import is_inverted
+from sigpipe.masw.inversion.window import SAMPLES_FILE
 from sigpipe.masw.petro.window import MODEL_FILE
-from sigpipe.masw.picks import CURVES_FILE
+from sigpipe.masw.picks import CURVES_FILE, load_curves
 from sigpipe.masw.presets.making import make_preset
 from sigpipe.masw.runs import RunManifest, window_folders, xmid_of
 
@@ -79,14 +84,15 @@ from sigpipe.masw.runs import RunManifest, window_folders, xmid_of
 type Maker = Literal["manual", "workflow", "autonomous"]
 type StageKey = Literal["records", "dispersion", "inversion", "petro"]
 
-GIVEN = "given in your request"
+GIVEN = "given in the user's request"
 # A workflow run's request, which the assistant writes: the user's values, or its own choices.
-REQUESTED = "given in the request: by you, or chosen by the agent"
+REQUESTED = "given in the request: by the user, or chosen by the workflow agent"
 DEFAULT = "the preset's default"
-PAC = "set by hand"
+PAC = "set by the user"
 # How the autonomous agent's commits give a setting the user gave, in the line's notes.
 USER_REASON = "given by the user"
 ALL_RECORDS = "every record, none left out"
+MOST_LISTED = 6  # the windows a step names; more, counted only
 # The keys of the card's settings, by their stage, where not the stage's name.
 _KEYS = {"dispersion": "band", "muting": "mute"}
 # The origins, the one to show first for values set together.
@@ -255,9 +261,9 @@ def run_card(folder: str) -> RunCard:
         reasons=_reasons(
             journal, settings, given_settings(run_folder), spacing, int(masw["length"])
         ),
-        history=_study_history(journal, search, survey, manifest, log, picked)
+        history=_study_history(journal, search, survey, manifest, log, picked, run_folder)
         if study is not None
-        else _run_history(run_folder, manifest, log, stages),
+        else (*_run_history(run_folder, manifest, log, stages), *_redone(run_folder, log)),
         stages=stages,
         receivers=line.receivers,
         sources=line.sources,
@@ -670,6 +676,12 @@ MODEL_CHECK = "passed, flagged or rejected by the model's check"
 _FROZEN = re.compile(r"(\d+) curves accepted, (\d+) windows rejected")
 # Who chose what a run's maker chose, as the card tags it.
 _MAKERS: dict[Maker, Origin] = {"autonomous": "agent", "workflow": "workflow", "manual": "you"}
+# Who made what a run's maker made, in the stages' words.
+_BY: dict[Maker, str] = {
+    "autonomous": BY_AGENT["agent"],
+    "workflow": BY_AGENT["workflow"],
+    "manual": BY_USER,
+}
 # The settings as the commits' reasons name them ("<stage> <key>", or a stage), by the names the
 # card gives them.
 _SETTING_NAMES = {
@@ -713,7 +725,7 @@ def _curves(stages: Iterable[StageCount], journal: Sequence[JournalEntry], maker
             label="Curves",
             value=f"{accepted} of {accepted + rejected} accepted",
             detail=f"{rejected} rejected" if rejected else "",
-            why="the agent accepted or rejected each window's curve",
+            why="the autonomous agent accepted or rejected each window's curve",
             origin=by,
         )
     return Setting(
@@ -721,7 +733,7 @@ def _curves(stages: Iterable[StageCount], journal: Sequence[JournalEntry], maker
         label="Curves",
         value=f"{picked.done} of {picked.total}",
         detail="windows picked",
-        why="picked by the agent" if maker != "manual" else "picked by you",
+        why=f"picked {_BY[maker]}",
         origin=by if picked.done else "default",
     )
 
@@ -749,7 +761,7 @@ def _profiles(
             label="Vs profiles",
             value=f"{inverted.done} of {inverted.total}",
             detail="windows inverted",
-            why="inverted by the agent" if maker != "manual" else "inverted by you",
+            why=f"inverted {_BY[maker]}",
             origin=_MAKERS[maker],
         )
     return Setting(
@@ -855,10 +867,11 @@ def _study_history(
     manifest: RunManifest,
     log: QCLog | None,
     picked: int,
+    run_folder: Path,
 ) -> tuple[Step, ...]:
     """What the autonomous mode did, a step each, in order: what the user asked, the records, the
-    choice of the settings, the line processed, the curves picked, the Vs profiles; the
-    assistant's own reasoning left to its journal."""
+    choice of the settings, the line processed, the curves picked, the Vs profiles, then what the
+    user did again in PAC; the assistant's own reasoning left to its journal."""
     spacing = manifest.profile.receiver_spacing_m
     length = int(preset_stage(manifest, "masw")["length"])
     steps: list[Step] = []
@@ -867,18 +880,22 @@ def _study_history(
         if entry.kind == "objective":
             said = entry.text.removeprefix(entry.id).strip()
             lines = tuple(part.strip().capitalize() for part in said.split(",") if part.strip())
-            steps.append(
-                Step(kind="objective", by="you", at=entry.at, title="You asked", lines=lines)
-            )
+            steps.append(Step(kind="objective", by="you", at=entry.at, title="Asked", lines=lines))
         elif entry.kind == "settings":
             changed = tuple(str(one) for one in cast(list[Any], entry.data.get("changed") or []))
             steps.append(
-                Step(kind="settings", by="you", at=entry.at, title="You changed", lines=changed)
+                Step(
+                    kind="settings",
+                    by="you",
+                    at=entry.at,
+                    title="Changed the settings",
+                    lines=changed,
+                )
             )
         elif entry.kind == "reopen":
             asked = str(entry.data.get("request") or "")
             steps.append(
-                Step(kind="reopen", by="you", at=entry.at, title="You asked again", lines=(asked,))
+                Step(kind="reopen", by="you", at=entry.at, title="Asked again", lines=(asked,))
             )
         elif entry.kind == "commit":
             commits += 1
@@ -895,9 +912,10 @@ def _study_history(
             )
         elif entry.kind == "freeze":
             found = _FROZEN.search(entry.text)
-            lines = [f"{plural(len(manifest.windows), 'window')} picked automatically"]
+            total = len(manifest.windows)
+            lines = [f"{total} of {plural(total, 'window')}"]
             if picked:
-                lines.append(f"{picked} picked again by the agent")
+                lines.append(f"{picked} picked again")
             if found:
                 lines += [f"{found.group(1)} accepted", f"{found.group(2)} rejected"]
             steps.append(
@@ -913,8 +931,9 @@ def _study_history(
         steps.append(_survey_step(survey, journal, manifest, log))
     if (tried := _tried_step(search)) is not None:
         steps.append(tried)
-    if (inverted := _inverted_step(journal)) is not None:
+    if (inverted := _inverted_step(journal, len(manifest.windows))) is not None:
         steps.append(inverted)
+    steps += _redone(run_folder, log)
     first = min((step.at for step in steps if step.at is not None), default=None)
     return tuple(sorted(steps, key=lambda step: step.at or first or datetime.min))
 
@@ -935,7 +954,7 @@ def _survey_step(
         lines += [one[:1].upper() + one[1:] for one in _left_out(log, excluded)]
     asked = next((entry.at for entry in journal if entry.kind == "objective"), None)
     return Step(
-        kind="survey", by="agent", at=asked, title="Looked at your records", lines=tuple(lines)
+        kind="survey", by="agent", at=asked, title="Looked at the records", lines=tuple(lines)
     )
 
 
@@ -959,8 +978,8 @@ def _tried_step(search: SearchDone | None) -> Step | None:
     )
 
 
-def _inverted_step(journal: Sequence[JournalEntry]) -> Step | None:
-    """The curves turned into Vs profiles: how many, and how many passed the model's check, were
+def _inverted_step(journal: Sequence[JournalEntry], total: int) -> Step | None:
+    """The curves inverted into Vs profiles: how many, and how many passed the model's check, were
     flagged and rejected."""
     runs = [entry for entry in journal if entry.kind == "inversion"]
     if not runs:
@@ -971,12 +990,62 @@ def _inverted_step(journal: Sequence[JournalEntry]) -> Step | None:
         kind="inversion",
         by="agent",
         at=runs[0].at,
-        title="Turned the curves into Vs profiles",
+        title="Inverted the curves into Vs profiles",
         lines=(
-            f"{plural(len(latest), 'curve')} inverted",
+            f"{len(latest)} of {plural(total, 'window')}",
             *_counted((passed, "passed"), (flagged, "flagged"), (rejected, "rejected")),
         ),
     )
+
+
+def _redone(run_folder: Path, log: QCLog | None) -> list[Step]:
+    """What the user did in PAC in a run an agent made (`log`'s), a step each: the curves picked,
+    the windows inverted into Vs profiles and into soil columns, with their windows; none for a
+    run PAC made."""
+    if log is None:
+        return []
+    done: dict[str, list[tuple[str, float]]] = {"picks": [], "inversion": [], "petro": []}
+    units = window_folders(run_folder)
+    for unit in units:
+        window = run_folder / unit
+        saved = load_curves(window)
+        modes = [one.mode for one in saved.dispersion_curves] if saved is not None else []
+        origin = pick_origin(window, log, modes)
+        if origin == "hand" or (origin == "auto" and not assistant_picked(window, log)):
+            done["picks"].append((unit, _newest(window, CURVES_FILE)))
+        if (window / SAMPLES_FILE).exists() and not inversion_by_agent(log, unit, run_folder):
+            done["inversion"].append((unit, _newest(window, SAMPLES_FILE)))
+        if (window / MODEL_FILE).exists() and not soil_by_agent(log, window):
+            done["petro"].append((unit, _newest(window, MODEL_FILE)))
+    titles = {
+        "picks": "Picked the curves",
+        "inversion": "Inverted the curves into Vs profiles",
+        "petro": "Inverted the curves into soil columns",
+    }
+    return [
+        Step(
+            kind=kind,
+            by="you",
+            at=datetime.fromtimestamp(max(at for _, at in made), UTC),
+            title=titles[kind],
+            lines=(
+                f"{len(made)} of {plural(len(units), 'window')}",
+                *(
+                    [", ".join(f"xmid {number(xmid_of(unit), 4)} m" for unit, _ in made)]
+                    if len(made) <= MOST_LISTED
+                    else []
+                ),
+            ),
+        )
+        for kind, made in done.items()
+        if made
+    ]
+
+
+def _newest(window: Path, name: str) -> float:
+    """When window folder `window`'s file `name` was written (its folder's, without it)."""
+    path = window / name
+    return (path if path.exists() else window).stat().st_mtime
 
 
 def _run_history(
@@ -987,13 +1056,13 @@ def _run_history(
 ) -> tuple[Step, ...]:
     """What PAC or the workflow did, from the run's files, a step each: the settings the user
     gave, the records read, the workflow's choices on the line, the line processed, the curves
-    picked, inverted and turned into soil columns, each by who did it."""
+    picked, inverted into Vs profiles and into soil columns, each by who did it."""
     spacing = manifest.profile.receiver_spacing_m
     done = {count.key: count for count in stages}
     given = given_settings(run_folder)
 
     def gave(family: str) -> list[Step]:
-        title = "Your settings" if family == "processing" else f"Your settings for the {family}"
+        title = "Gave the settings" if family == "processing" else f"Gave the {family} settings"
         return [
             Step(
                 kind="given",
@@ -1030,7 +1099,7 @@ def _run_history(
     if manifest.exclusions.records:
         lines += [one[:1].upper() + one[1:] for one in _left_out(log, manifest.exclusions.records)]
     steps.append(
-        stage("records", "preprocessing", "Read your records", lines, "record").model_copy(
+        stage("records", "preprocessing", "Read the records", lines, "record").model_copy(
             update={"at": manifest.started_at}
         )
     )
@@ -1061,8 +1130,8 @@ def _run_history(
     )
     steps += gave("inversion")
     for key, log_stage, title in (
-        ("inversion", "inversion", "Inverted the curves"),
-        ("petro", "petro_inversion", "Made the soil columns"),
+        ("inversion", "inversion", "Inverted the curves into Vs profiles"),
+        ("petro", "petro_inversion", "Inverted the curves into soil columns"),
     ):
         count = done[key]
         if count.done:

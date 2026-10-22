@@ -10,6 +10,7 @@ export function vizPalette(theme: Theme) {
   const dark = theme === "dark";
   const status: Record<Status, string> = {
     pass: dark ? "#34c46a" : "#1a9e4b",
+    note: dark ? "#e3c94b" : "#d1b000",
     warn: dark ? "#f5964a" : "#e07012",
     fail: dark ? "#f06a6a" : "#d63c3c",
     none: dark ? "#4a4d55" : "#d5d6da",

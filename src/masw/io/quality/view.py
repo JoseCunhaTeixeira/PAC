@@ -7,14 +7,16 @@ stage's modules fill them; the page draws them all alike."""
 from collections import Counter
 from collections.abc import Iterable
 from datetime import datetime
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from masw.io.quality.log import LINE, Flag, GateResult, Metric, QCLog, Verdict
+from masw.io.quality.log import LINE, Chooser, Flag, GateResult, Metric, QCLog, Verdict
 
-# A unit's state on the strip: passed, warned or retried, failed or rejected, not there.
-type Status = Literal["pass", "warn", "fail", "none"]
+# A unit's state on the strip, one logic for every run: as a check judged it, passed, flagged
+# (warn: a retry asked and not made) or rejected (fail); made by hand, within the agent's limits
+# (pass) or beyond them (note); without a result (none).
+type Status = Literal["pass", "note", "warn", "fail", "none"]
 # A sentence's badge: a check passed it, warned of it (kept, information), flagged it (asked what
 # was not done) or rejected it; "info" says what was done, without judging it.
 type Mark = Literal["pass", "warn", "flag", "fail", "info"]
@@ -25,7 +27,7 @@ type Origin = Literal["you", "workflow", "agent", "checks", "default"]
 
 STATUS_OF: dict[Verdict, Status] = {"pass": "pass", "retry": "warn", "reject": "fail"}
 DASH = "\u2013"  # an en dash, between a range's ends
-RANK: dict[Status, int] = {"none": 0, "pass": 1, "warn": 2, "fail": 3}
+RANK: dict[Status, int] = {"none": 0, "pass": 1, "note": 2, "warn": 3, "fail": 4}
 
 
 class Setting(BaseModel):
@@ -46,7 +48,7 @@ class Setting(BaseModel):
 
 # A check said apart from the others of its unit (the dispersion's: its image's, its curve's):
 # its state, or "hand" (made by hand: the user's, which no check judges).
-type PartState = Literal["pass", "warn", "fail", "none", "hand"]
+type PartState = Literal["pass", "note", "warn", "fail", "none", "hand"]
 
 
 class Part(BaseModel):
@@ -56,6 +58,7 @@ class Part(BaseModel):
 
     label: str  # "image", "curve"
     state: PartState
+    judged: bool = True  # False: made by the user, against the agent's limits
 
 
 class PartLegend(BaseModel):
@@ -145,7 +148,7 @@ class Overview(BaseModel):
 
     paco: bool  # a run the assistant judged: the cells are its gates' verdicts
     summary: str
-    legend: dict[Status, str]  # what each color says here
+    legend: dict[PartState, str]  # what each color says here
     cells: tuple[Cell, ...]
     parts: tuple[PartLegend, ...] = ()  # the cells' parts, when they say their checks apart
     track: Track | None = None
@@ -187,12 +190,110 @@ def verdict_status(*results: GateResult | None) -> Status:
 
 
 def measured_status(metrics: Iterable[Metric]) -> Status:
-    """A unit no gate judged, by its measures against the gates' limits: pass, or warn when one
-    is beyond its limit; none without a measure judged."""
+    """A unit no check judged (made by hand), by its measures against the agent's limits: within
+    them (pass), or one beyond its limit (note, a warning); none without a measure judged."""
     judged = [metric for metric in metrics if metric.threshold is not None]
     if not judged:
         return "none"
-    return "pass" if all(metric.passed for metric in judged) else "warn"
+    return "pass" if all(metric.passed for metric in judged) else "note"
+
+
+# A unit's state in words, as its badge, its stage's legend and summary say it: as a check said
+# it, or against the agent's limits when made by hand.
+JUDGED_WORDS: dict[Status, str] = {"pass": "passed", "warn": "flagged", "fail": "rejected"}
+MEASURED_WORDS: dict[Status, str] = {
+    "pass": "within the agent's limits",
+    "note": "beyond the agent's limits",
+}
+
+
+# Who made a unit's step, as its stage's summary and its card say it: the agent, in the run's
+# mode (autonomous, or the workflow's), or the user in PAC.
+BY_USER = "by the user"
+BY_AGENT: dict[Chooser, str] = {
+    "agent": "by the autonomous agent",
+    "workflow": "by the workflow agent",
+}
+
+
+def by_whom(log: QCLog | None, made: bool) -> str:
+    """Who made a unit's step: the agent of `log`'s run when it `made` it, else the user."""
+    return BY_AGENT[log.chooser] if made and log is not None else BY_USER
+
+
+def state_lines(status: Status, *results: GateResult | None) -> list[str]:
+    """A unit's state on its cell's hover, as its badge says it: what its checks found when they
+    flagged or rejected it; a warning they kept, a line of its own; made by hand, against the
+    agent's limits."""
+    judged = [result for result in results if result is not None]
+    if not judged:
+        said = MEASURED_WORDS.get(status, "")
+        return [said[:1].upper() + said[1:]] if said else []
+    acted = [
+        flag.name
+        for result in judged
+        for flag in result.flags
+        if flag.action.kind != "keep" and flag.name not in REFUSALS
+    ]
+    notes = [flag.name for result in judged for flag in result.flags if flag.action.kind == "keep"]
+    said = JUDGED_WORDS.get(status, "")
+    lines = [
+        said[:1].upper() + said[1:] + (f": {counted(acted)}" if acted and status != "pass" else "")
+    ]
+    if notes:
+        lines.append(f"Warning: {counted(notes)}")
+    return lines
+
+
+class States:
+    """A stage's units' states (or one of their parts': a window's image, its curve), each as a
+    check judged it, as made by hand (against the agent's limits), or picked by hand, said alike
+    on every run: its legend (the states on its line) and its summary's counts. `none`: the words
+    of a unit without a result; `failed`: of one made by hand that failed (a record failed to
+    preprocess)."""
+
+    ORDER: tuple[PartState, ...] = ("pass", "note", "warn", "fail", "hand", "none")
+
+    def __init__(self, none: str, failed: str = "failed") -> None:
+        self.none = none
+        self.failed = failed
+        self.judged: list[PartState] = []
+        self.measured: list[PartState] = []
+
+    def add[S: PartState](self, state: S, judged: bool) -> S:
+        """`state`, kept as a check judged it (`judged`) or as made by hand."""
+        (self.judged if judged and state not in ("none", "hand") else self.measured).append(state)
+        return state
+
+    def _measured(self, state: PartState) -> str:
+        if state == "none":
+            return self.none
+        if state == "hand":
+            return "picked by the user"
+        return self.failed if state == "fail" else MEASURED_WORDS[cast(Status, state)]
+
+    def legend(self) -> dict[PartState, str]:
+        """What each colour on the line says: the states its units are in."""
+        legend: dict[PartState, str] = {}
+        for state in self.ORDER:
+            words = [JUDGED_WORDS[cast(Status, state)]] if state in self.judged else []
+            words += [self._measured(state)] if state in self.measured else []
+            if words:
+                legend[state] = ", or ".join(words)
+        return legend
+
+    def counts(self) -> list[str]:
+        """How many units are in each state, in the legend's words: "47 passed", "21 flagged"; a
+        curve picked by the user left to who picked it, said apart."""
+        said: list[str] = []
+        for state in self.ORDER:
+            if state == "hand":
+                continue
+            if count := self.judged.count(state):
+                said.append(f"{count} {JUDGED_WORDS[state]}")
+            if count := self.measured.count(state):
+                said.append(f"{count} {self._measured(state)}")
+        return said
 
 
 def gate_view(gate: str, result: GateResult | None, measured: Iterable[Metric] = ()) -> GateView:
@@ -414,6 +515,7 @@ FLAG_WORDS = {
     # Why a check refused a retry
     "budget_spent": "retries spent",
     "nothing_to_try": "nothing left to try",
+    "locked": "asks a setting the user gave",
     "redone_once": "redone once, still short",
 }
 # The checks, as a sentence names them.
@@ -427,9 +529,9 @@ CHECK_NAMES = {
     "G7": "the soil column check",
     "G8": "the check against the neighbouring soil columns",
 }
-# Why a gate refused a unit the retry it asked (PACo's budgets.budget_spent): said with the flags
-# that asked it, never as the unit's reason.
-REFUSALS = frozenset({"budget_spent", "nothing_to_try", "redone_once"})
+# Why a gate refused a unit the retry it asked (PACo's budgets.refused): a note of a flagged
+# unit, never its reason.
+REFUSALS = frozenset({"budget_spent", "nothing_to_try", "locked", "redone_once"})
 
 
 def flag_text(name: str) -> str:
@@ -443,16 +545,13 @@ def first_sentence(text: str) -> str:
 
 
 def finding(text: str) -> str:
-    """What a flag's message found, in short: its first sentence up to its colon (or
-    semicolon), where the assistant's messages go on with why it matters ("The nearest shot is
+    """What a flag's message found, in short: its first sentence up to its first colon or
+    semicolon, where the assistant's messages go on with why it matters ("The nearest shot is
     0.75 m from the window, under half the longest wavelength kept (10.00 m): the long
     wavelengths...")."""
     head = first_sentence(text)
-    for mark in (": ", "; "):
-        found, cut, _ = head.partition(mark)
-        if cut:
-            return found.rstrip(".") + "."
-    return head
+    cuts = [at for mark in (": ", "; ") if (at := head.find(mark)) >= 0]
+    return head[: min(cuts)].rstrip(".") + "." if cuts else head
 
 
 def counted(names: Iterable[str], most: int = 4) -> str:
@@ -480,21 +579,6 @@ def warnings(*results: GateResult | None) -> tuple[Sentence, ...]:
         for flag in result.flags
         if kept(flag)
     )
-
-
-# A check's verdict in a word.
-VERDICT_WORDS: dict[Verdict, str] = {"pass": "passed", "retry": "flagged", "reject": "rejected"}
-
-
-def verdicts_said(*results: GateResult | None) -> str:
-    """The checks' verdicts in words: "The model check passed, the check against the
-    neighbouring models flagged"; "" when none judged."""
-    said = ", ".join(
-        f"{CHECK_NAMES.get(result.gate, result.gate)} {VERDICT_WORDS[result.verdict]}"
-        for result in results
-        if result is not None
-    )
-    return said[:1].upper() + said[1:]
 
 
 def checks_named(results: Iterable[GateResult]) -> str:
@@ -526,8 +610,15 @@ def verdict_sentence(*results: GateResult | None) -> Sentence | None:
         why = f": {after_colon(finding(reason.message))}" if reason is not None else "."
         return Sentence(mark="fail", text=f"Rejected by {checks_named(rejected)}{why}")
     flagged = [result for result in judged if result.verdict == "retry"]
-    raised = [flag.name for result in flagged for flag in result.flags]
-    return Sentence(mark="flag", text=f"Flagged by {checks_named(flagged)}: {counted(raised)}.")
+    # What asked the retry; its notes, why none was made among them, said as warnings.
+    raised = [
+        flag.name
+        for result in flagged
+        for flag in result.flags
+        if not kept(flag) and flag.name not in REFUSALS
+    ]
+    named = f": {counted(raised)}" if raised else ""
+    return Sentence(mark="flag", text=f"Flagged by {checks_named(flagged)}{named}.")
 
 
 # The thousands apart as SI writes them: a narrow space from five digits on, none in four.

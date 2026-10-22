@@ -13,7 +13,15 @@ import {
   RailLegend,
   type RailCell,
 } from "./components/PositionRail";
-import { judged, useReceivers, useStageStates, xmidKey } from "./components/railStates";
+import {
+  INVERTED_TONES,
+  judged,
+  OTHER_TONES,
+  railItems,
+  useReceivers,
+  useStageStates,
+  xmidKey,
+} from "./components/railStates";
 import { num } from "./components/viz/format";
 import { WorkersField } from "./components/computing";
 import { RunPanel } from "./components/RunPanel";
@@ -88,7 +96,7 @@ export default function PetroInversionPage() {
   const [error, setError] = useState<string | null>(null);
   // Which positions are inverted, and their checks, as Visualization shows them; again after a run.
   const [runs, setRuns] = useState(0);
-  const { states, loading: statesLoading } = useStageStates(
+  const { states, loading: statesLoading, legend } = useStageStates(
     folder,
     "petro",
     runs,
@@ -157,12 +165,12 @@ export default function PetroInversionPage() {
     const state = states.get(xmidKey(xmid));
     const verdict = judged(state);
     const lines = !can
-      ? [`xmid ${num(xmid, 4)} m`, "no fundamental mode picked"]
+      ? [`xmid ${num(xmid, 4)} m`, "No fundamental mode picked"]
       : state && verdict
         ? state.hover
         : [
             `xmid ${num(xmid, 4)} m`,
-            ...(state?.hover.slice(1) ?? ["not inverted"]),
+            ...(state?.hover.slice(1) ?? ["Not inverted"]),
           ];
     return {
       xmid,
@@ -170,6 +178,7 @@ export default function PetroInversionPage() {
       title: lines.join("\n"),
     };
   });
+  const tones = new Set(cells.map((cell) => cell.tone));
 
   const config = {
     folder,
@@ -208,21 +217,9 @@ export default function PetroInversionPage() {
               aside={
                 <RailLegend
                   groups={[
-                    {
-                      title: "Inverted",
-                      items: [
-                        ["pass", "passed"],
-                        ["warn", "flagged"],
-                        ["fail", "rejected"],
-                      ],
-                    },
-                    {
-                      items: [
-                        ["none", "Not inverted"],
-                        ["off", "No curve"],
-                      ],
-                    },
-                  ]}
+                    { title: "Inverted", items: railItems(INVERTED_TONES, tones, legend) },
+                    { items: railItems(OTHER_TONES, tones, legend) },
+                  ].filter((group) => group.items.length > 0)}
                 />
               }
             >

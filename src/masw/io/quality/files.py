@@ -2,6 +2,7 @@
 its preset gave each stage, each window's picked fundamental mode and window.json (the records it
 stacks), and the line's geometry: where every receiver and every shot of the profile lies."""
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
@@ -17,11 +18,20 @@ from sigpipe.dataio.stream.loading import load_stream
 from sigpipe.masw.picks import load_curves
 from sigpipe.masw.pipelines.common import PREPROCESSED
 from sigpipe.masw.profiles.loading import RECEIVER_POSITIONS_FILE, SOURCE_POSITIONS_FILE
-from sigpipe.masw.runs import RunManifest
+from sigpipe.masw.runs import RunManifest, xmid_of
 from sigpipe.masw.windows import MASWWindow
 
 MANIFEST_FILE = "run.json"
 WINDOW_FILE = "window.json"
+
+
+def pac_inverted(config: Path, unit: str) -> bool:
+    """Whether PAC's last inversion job in the run, as its configuration `config` says, inverted
+    window `unit`."""
+    if not config.exists():
+        return False
+    positions = json.loads(config.read_text()).get("positions") or ()
+    return any(abs(float(one) - xmid_of(unit)) < 1e-6 for one in positions)
 
 
 def folder_path(folder: str) -> Path:

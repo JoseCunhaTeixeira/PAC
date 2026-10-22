@@ -46,9 +46,9 @@ const TABS: { key: StageKey; label: string }[] = [
   { key: "petro", label: "Petrophysics" },
 ];
 
-const STATUSES: Status[] = ["pass", "warn", "fail", "none"];
+const STATUSES: Status[] = ["pass", "note", "warn", "fail", "none"];
 // A part's states in the legend's order, and what each part checks, on its title's hover.
-const PART_STATES: PartState[] = ["pass", "warn", "fail", "hand", "none"];
+const PART_STATES: PartState[] = ["pass", "note", "warn", "fail", "hand", "none"];
 const PART_TIPS: Record<string, string> = {
   Image: "Image\nThe dispersion image check",
   Curve: "Curve\nThe curve check, and the check against the neighbouring curves",

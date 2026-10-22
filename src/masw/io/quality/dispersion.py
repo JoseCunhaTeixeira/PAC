@@ -49,25 +49,29 @@ from masw.io.quality.records import (
 )
 from masw.io.quality.records import thresholds_of as thresholds_of_signal
 from masw.io.quality.view import (
+    BY_USER,
     Card,
     Cell,
     GateView,
+    Mark,
     Overview,
     Part,
     PartLegend,
     PartState,
     Sentence,
     Setting,
+    States,
     Status,
     Track,
+    by_whom,
     covered,
-    flag_text,
     gate_view,
     line_gate,
     measured_status,
     number,
     plural,
     span,
+    state_lines,
     verdict_sentence,
     verdict_status,
     warnings,
@@ -143,12 +147,14 @@ def dispersion_overview(folder: str) -> Overview:
     log = read_log(run_folder)
     thresholds = thresholds_of(run_folder)
     cells: list[Cell] = []
-    origins: Counter[Origin] = Counter()
-    computed = 0  # the windows with an image
-    present: set[tuple[int, PartState]] = set()  # each part's states on the line
+    # Each part's states, as its checks judged them or as made by hand, window by window.
+    images = States(none="not made")
+    curves = States(none="not picked")
+    windows = States(none="not picked")
+    manifest = read_manifest(run_folder)
+    pickers: Counter[str] = Counter()
     for unit in window_folders(run_folder):
         window = run_folder / unit
-        computed += (window / IMAGE_FILE).exists()
         curve = fundamental(window)
         saved = load_curves(window)
         modes = tuple(
@@ -162,7 +168,7 @@ def dispersion_overview(folder: str) -> Overview:
             window, log, [one.mode for one in saved.dispersion_curves] if saved is not None else ()
         )
         if picked_by is not None:
-            origins[picked_by] += 1
+            pickers[_picker(log, picked_by, assistant_picked(window, log))] += 1
         g2, g3, g4 = _results(log, window, picked_by)
         stats = curve_stats(curve) if curve is not None else None
         image, picks = _states(
@@ -172,18 +178,19 @@ def dispersion_overview(folder: str) -> Overview:
             curve,
             picked_by,
             partial(_saved_curve_measures, window, curve, thresholds),
+            partial(_image_metrics, run_folder, manifest, window, thresholds),
         )
-        # The image's state only when the assistant checked the images.
-        parts = (image, picks) if log is not None else (picks,)
-        present.update(enumerate(parts))
+        images.add(image, g2 is not None)
+        curves.add(picks, g3 is not None or g4 is not None)
+        status = windows.add(
+            _status(image, picks), g2 is not None or g3 is not None or g4 is not None
+        )
         # Its image and its curve apart, as its cell's parts, then its curve's figures.
         hover = [f"xmid {number(xmid_of(unit), 4)} m"]
-        if log is not None:
-            hover.append(_part_line("Image", image, IMAGE_STATES, g2))
-        curve_states = CURVE_STATES if log is not None else MEASURED_CURVE_STATES
-        hover.append(_part_line("Curve", picks, curve_states, g3, g4))
+        hover += _part_lines("Image", image, g2)
+        hover += _part_lines("Curve", picks, g3, g4)
         if stats is not None:
-            hover.append(f"{stats.label}: {stats.n_points} points, {span(*stats.band_hz, 'Hz')}")
+            hover.append(f"{stats.label}: {_points(stats)}")
             hover.append(f"λmax / 2 = {number(stats.wavelength_m[1] / 2)} m")
         if len(modes) > 1:
             hover.append(f"Also picked: {', '.join(modes[1:])}")
@@ -191,61 +198,48 @@ def dispersion_overview(folder: str) -> Overview:
             Cell(
                 key=unit,
                 x=xmid_of(unit),
-                status=_status(image, picks),
+                status=status,
                 hover=tuple(hover),
                 value=stats.wavelength_m[1] if stats is not None else None,
-                parts=parts,
+                parts=(image, picks),
                 modes=modes,
             )
         )
-    picked = sum(origins.values())
-    said = [plural(len(cells), "window")]
-    if computed < len(cells):
-        said.append(f"{computed} with a dispersion image")
-    if origins["auto"]:
-        said.append(f"{origins['auto']} picked automatically")
-    if origins["hand"]:
-        said.append(f"{origins['hand']} picked by hand")
-    if picked < computed:
-        said.append(f"{computed - picked} without a curve")
     paco = log is not None
+    said = [
+        plural(len(cells), "window"),
+        *(f"{count} picked {by}" for by, count in pickers.items()),
+        *windows.counts(),
+    ]
+    legends = (("Image", images), ("Curve", curves))
     return Overview(
         paco=paco,
         summary=" · ".join(said),
-        legend={
-            "pass": "passed the image and curve checks" if paco else "within the agent's limits",
-            "warn": "flagged" if paco else "a measure beyond the agent's limits",
-            "fail": "rejected",
-            "none": "no curve",
-        },
+        legend={},
         cells=tuple(cells),
-        parts=_legends(paco, present),
+        parts=tuple(PartLegend(title=title, legend=states.legend()) for title, states in legends),
         track=Track(label="Longest wavelength picked (m)", short="λmax", kind="value"),
         gates=line_gate(log, "picking", "G4"),
     )
 
 
-# Each part's states, in words: the image's (G2), the curve's (G3, G4; or by hand).
-IMAGE_STATES: dict[PartState, str] = {
-    "pass": "passed",
-    "warn": "flagged",
-    "fail": "rejected",
-    "none": "not checked",
-}
-CURVE_STATES: dict[PartState, str] = {
-    "pass": "passed",
-    "warn": "flagged",
-    "fail": "rejected",
-    "hand": "by hand",
-    "none": "no curve",
-}
-# A run PAC made: its curves' measures against the agent's limits, not judged.
-MEASURED_CURVE_STATES: dict[PartState, str] = {
-    "pass": "within the agent's limits",
-    "warn": "a measure beyond the agent's limits",
-    "hand": "by hand",
-    "none": "no curve",
-}
+def _picker(log: QCLog | None, picked_by: Origin, assistant: bool) -> str:
+    """Who picked a window's curve: the run's agent (its picker, automatically), or the user (by
+    hand, or with PAC's automatic picking)."""
+    if picked_by == "auto" and assistant:
+        return by_whom(log, True)
+    return f"{BY_USER}, automatically" if picked_by == "auto" else BY_USER
+
+
+def _part_lines(part: str, state: PartState, *results: GateResult | None) -> list[str]:
+    """One of a window's parts on its cell's hover, as its legend says it: its state, what its
+    checks found when they flagged or rejected it; a warning they kept, a line of its own."""
+    if state == "none":
+        return [f"{part}: {'not picked' if part == 'Curve' else 'not made'}"]
+    if state == "hand":
+        return [f"{part}: picked by the user"]
+    head, *rest = state_lines(cast(Status, state), *results)
+    return [f"{part}: {head[:1].lower()}{head[1:]}", *rest]
 
 
 def _states(
@@ -255,11 +249,18 @@ def _states(
     curve: DispersionCurve | None,
     picked_by: Origin | None,
     measured: Callable[[], tuple[Metric, ...]],
+    measured_image: Callable[[], tuple[Metric, ...] | None],
 ) -> tuple[PartState, PartState]:
-    """A window's image and curve apart: its image by G2's verdict (none: not checked); its curve
-    by hand, none (no curve), by G3's and G4's verdicts, or by its measures against their
-    limits (`measured`, when no check judged it)."""
-    image: PartState = verdict_status(g2) if g2 is not None else "none"
+    """A window's image and curve apart, each by its checks' verdicts or, when no check judged
+    it, by its measures against their limits (`measured`, `measured_image`): its image none when
+    not made; its curve by hand, or none (not picked)."""
+    image: PartState = (
+        verdict_status(g2)
+        if g2 is not None
+        else "none"
+        if (image_measures := measured_image()) is None
+        else measured_status(image_measures)
+    )
     if curve is None:
         return image, "none"
     if picked_by == "hand":
@@ -290,43 +291,33 @@ def _nearest(window: Path) -> float | None:
     return nearest_offset(MASWWindow.model_validate_json(path.read_text()))
 
 
-def _part_line(
-    part: str, state: PartState, states: Mapping[PartState, str], *results: GateResult | None
-) -> str:
-    """One of a window's parts on its cell's hover: its state and, judged, the checks' flags
-    ("Image: flagged (second ridge)"); no curve said so."""
-    if part == "Curve" and state == "none":
-        return "No curve"
-    said = f"{part}: {states[state]}"
-    judged = [one for one in results if one is not None]
-    if judged and state != "hand":
-        flags = dict.fromkeys(flag_text(flag.name) for one in judged for flag in one.flags)
-        said += f" ({', '.join(flags)})" if flags else ""
-    return said
+def _image_metrics(
+    run_folder: Path,
+    manifest: RunManifest | None,
+    window: Path,
+    thresholds: DispersionThresholds,
+    image: DispersionImage | None = None,
+) -> tuple[Metric, ...] | None:
+    """The measures of a window's image against G2's limits, as G2 measures it: a passive or
+    passive-active window's stacked correlations and fk selection too; None without its image."""
+    if image is None and not (window / IMAGE_FILE).exists():
+        return None
+    image = image if image is not None else load_image(window)
+    return (
+        image_metrics(image, thresholds.image, records_band(run_folder, manifest, window))
+        + _correlation_metrics(window)
+        + _selection_metrics(load_selection(window), thresholds_of_signal(run_folder))
+    )
 
 
 def _status(image: PartState, curve: PartState) -> Status:
-    """A window as one state: a curve by hand, passed as it is; without a curve, none, unless its
-    image was rejected; else the worse of its image and its curve."""
+    """A window as one state: a curve by hand, passed as it is, its image's state kept; without
+    a curve, none, unless its image was rejected; else the worse of its image and its curve."""
     if curve == "hand":
-        return "pass"
+        return "pass" if image in ("none", "hand") else cast(Status, image)
     if curve == "none":
         return "fail" if image == "fail" else "none"
     return worst(cast(Status, image), cast(Status, curve))
-
-
-def _legends(paco: bool, present: set[tuple[int, PartState]]) -> tuple[PartLegend, ...]:
-    """The cells' parts' legends, each state on the line said: the image's when the assistant
-    checked the images, then the curve's."""
-    curve = CURVE_STATES if paco else MEASURED_CURVE_STATES
-    parts = (("Image", IMAGE_STATES), ("Curve", curve)) if paco else (("Curve", curve),)
-    return tuple(
-        PartLegend(
-            title=title,
-            legend={state: said for state, said in states.items() if (i, state) in present},
-        )
-        for i, (title, states) in enumerate(parts)
-    )
 
 
 def dispersion_card(folder: str, xmid: float) -> DispersionCard:
@@ -347,9 +338,9 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
     lambda_min = min_resolvable_wavelength(image.acquisition) if image is not None else None
     lambda_max = longest_reached_wavelength(image.acquisition) if image is not None else None
     measured_image = (
-        image_metrics(image, thresholds.image, records_band(run_folder, manifest, window))
+        _image_metrics(run_folder, manifest, window, thresholds, image)
         if image is not None
-        else ()
+        else None
     )
     band = (
         g2.kept.band_hz
@@ -365,20 +356,15 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         if m0 is not None and image is not None
         else ()
     )
-    said: list[Sentence] = []
+    said = [Sentence(mark="info", text=f"Dispersion image made {_imaged_by(log, unit)}.")]
     # A pick changed by hand leaves the assistant's curve checks and picking attempts behind:
     # none of them is of the pick now in the window; nor after PAC picked it again itself, until
     # the assistant judges that pick.
     judged = log is not None and picked_by != "hand"
     current = judged and checks_current_in(window, log)
     by_hand = picked_by == "hand" and m0 is not None
-    verdict = (
-        Sentence(mark="pass", text="Picked by hand.")
-        if by_hand
-        else verdict_sentence(g2, g3, g4)
-        if judged
-        else None
-    )
+    # What the checks said; of a curve picked by hand, the image's alone.
+    verdict = verdict_sentence(g2, g3, g4) if log is not None else None
     if image is None:
         said.append(Sentence(mark="fail", text="No dispersion image."))
     elif band is None:
@@ -392,30 +378,20 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
                 f"{number(band[1])} Hz.",
             )
         )
-    selection = load_selection(window)
     stats = [curve_stats(curve) for curve in curves]
-    if not by_hand:
-        said += _picks(
-            stats,
-            picked_by,
-            g3,
-            curve_measures,
-            lambda_min,
-            judged,
-            assistant_picked(window, log),
-        )
+    said += _picks(
+        stats,
+        picked_by,
+        g3,
+        curve_measures,
+        lambda_min,
+        judged,
+        _picker(log, picked_by, assistant_picked(window, log)) if picked_by is not None else "",
+    )
     said += warnings(g2, g3, g4)
     # The image's measures; a passive or passive-active window's, its stacked correlations' and
     # its fk selection's too: G2's own when it judged the window, else as PAC's job saved them.
-    gates = [
-        gate_view(
-            "G2",
-            g2,
-            measured_image
-            + _correlation_metrics(window)
-            + _selection_metrics(selection, thresholds_of_signal(run_folder)),
-        )
-    ]
+    gates = [gate_view("G2", g2, measured_image or ())]
     if by_hand:
         # The user's curve: passed as it is, and not checked along the line; measured as G3
         # measures a pick.
@@ -434,8 +410,13 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
             gates.append(gate_view("G4", g4))
     # Its image and its curve apart, as its cell's parts: the image's only when the assistant
     # checked the images.
-    image_state, curve_state = _states(g2, g3, g4, m0, picked_by, lambda: curve_measures)
-    parts = (Part(label="image", state=image_state),) if log is not None else ()
+    image_state, curve_state = _states(
+        g2, g3, g4, m0, picked_by, lambda: curve_measures, lambda: measured_image
+    )
+    parts = (
+        Part(label="image", state=image_state, judged=g2 is not None),
+        Part(label="curve", state=curve_state, judged=g3 is not None or g4 is not None),
+    )
     return DispersionCard(
         key=unit,
         status=_status(image_state, curve_state),
@@ -443,7 +424,7 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         verdict=verdict,
         sentences=tuple(said),
         gates=tuple(gates),
-        parts=(*parts, Part(label="curve", state=curve_state)),
+        parts=parts,
         steps=attempt_steps(
             log,
             unit,
@@ -529,6 +510,17 @@ def _modes(window: Path) -> list[Mode]:
     return [one.mode for one in saved.dispersion_curves] if saved is not None else []
 
 
+def _imaged_by(log: QCLog | None, unit: str) -> str:
+    """Who made window `unit`'s dispersion image: the run's agent when it logged it, else the
+    user in PAC."""
+    return by_whom(log, log is not None and bool(log.of(unit, "phase_shift")))
+
+
+def _points(stats: CurveStats) -> str:
+    """A curve's points and band: "53 points, 6-41.5 Hz"."""
+    return f"{plural(stats.n_points, 'point')}, {span(*stats.band_hz, 'Hz')}"
+
+
 def _picks(
     stats: list[CurveStats],
     picked_by: Origin | None,
@@ -536,31 +528,27 @@ def _picks(
     measures: tuple[Metric, ...],
     lambda_min: float | None,
     paco: bool,
-    assistant: bool,
+    by: str,
 ) -> list[Sentence]:
-    """What was picked and by whom (`assistant`: the agent's automatic pick, else PAC's), the
-    wavelengths it spans, where they may alias."""
+    """What was picked and by whom (`by`: the run's agent, or the user), the wavelengths it
+    spans, where they may alias."""
     if not stats:
-        return [Sentence(mark="fail" if paco else "info", text="No curve picked.")]
+        return [Sentence(mark="fail" if paco else "info", text="Not picked.")]
     first, *others = stats
-    by = (
-        "by hand"
-        if picked_by != "auto"
-        else "automatically by the agent"
-        if assistant
-        else "automatically"
+    status = (
+        "info"
+        if picked_by == "hand"
+        else verdict_status(g3)
+        if g3 is not None
+        else measured_status(measures)
     )
-    status = verdict_status(g3) if g3 is not None else measured_status(measures)
-    low, high = first.band_hz
     shortest, longest = first.wavelength_m
-    # The curve check's flag, orange; beyond the agent's limits in a run made by hand, a warning.
-    mark = "info" if status == "none" else "flag" if status == "warn" and g3 is not None else status
+    # The pick's state as its sentence's mark: the curve check's flag, orange; beyond the agent's
+    # limits when the user made it, a warning.
+    marks: dict[str, Mark] = {"none": "info", "info": "info", "note": "warn", "warn": "flag"}
+    mark = marks.get(status, cast(Mark, status))
     said = [
-        Sentence(
-            mark=mark,
-            text=f"{first.label} picked {by}: {first.n_points} points from {number(low)} to "
-            f"{number(high)} Hz.",
-        ),
+        Sentence(mark=mark, text=f"{first.label} picked {by}: {_points(first)}."),
         Sentence(
             mark="info",
             text=f"Its wavelengths from {number(shortest)} to {number(longest)} m: λmax / 2 = "
@@ -579,9 +567,9 @@ def _picks(
         said.append(
             Sentence(
                 mark="info",
-                # Higher modes: a person's alone, the agent picking M0.
-                text="Also picked by hand: "
-                + ", ".join(f"{one.label} ({one.n_points} points)" for one in others)
+                # Higher modes: the user's alone, the agent picking M0.
+                text=f"Also picked {BY_USER}: "
+                + ", ".join(f"{one.label} ({plural(one.n_points, 'point')})" for one in others)
                 + ".",
             )
         )

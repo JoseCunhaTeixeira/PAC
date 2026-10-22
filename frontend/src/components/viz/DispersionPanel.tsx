@@ -207,7 +207,7 @@ export function DispersionPanel({
             <PlotBox>
               <div style={{ marginTop: 16 }} className={image.loading ? "viz-stale" : undefined}>
                 <PlotHead
-                  title={`Dispersion image${shown?.picked_by === "auto" ? " · picked automatically" : shown?.picked_by === "hand" ? " · picked by hand" : ""}`}
+                  title="Dispersion image"
                 />
                 {image.shown ? (
                   <DispersionImageCanvas key={imaged} image={image.shown} />

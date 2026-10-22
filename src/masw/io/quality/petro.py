@@ -7,7 +7,7 @@ the petrophysics strip of Visualization, and the selected window's card."""
 
 import json
 from collections import Counter
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -22,6 +22,7 @@ from masw.io.quality.log import (
     config_section,
     read_log,
 )
+from masw.io.quality.makers import PAC_PETRO_CONFIG, soil_by_agent
 from masw.io.quality.view import (
     Card,
     Cell,
@@ -29,17 +30,18 @@ from masw.io.quality.view import (
     Overview,
     Sentence,
     Setting,
-    Status,
+    States,
     Track,
+    by_whom,
     gate_view,
     line_gate,
     measured_status,
     number,
     plural,
     span,
+    state_lines,
     verdict_sentence,
     verdict_status,
-    verdicts_said,
     warnings,
 )
 from sigpipe.algorithms.inversion.rayleigh.petro.silex_catalog import (
@@ -59,10 +61,8 @@ from sigpipe.masw.quality.soil import SoilLimits, measure_soil
 from sigpipe.masw.runs import window_folders, xmid_of
 
 MEASURES_FILE = "PetroInversion_Measures_0000.json"  # the assistant's
-CONFIG_FILE = "petro_inversion_config.json"  # PAC's
 STAGE = "petro_inversion"
 # A soil column saved this long after the assistant's last attempt on the window was PAC's.
-LATER = timedelta(minutes=1)
 BAND_NAMES = {3: ("short", "middle", "long")}
 # How a curve falls outside a model's range, in words.
 GAPS: dict[RangeGap, str] = {
@@ -136,7 +136,9 @@ def petro_overview(folder: str) -> Overview:
     card = _card(model)
     cells: list[Cell] = []
     found: list[tuple[RangeGap, ...]] = []
-    statuses: list[Status] = []
+    states = States(none="not inverted")
+    # Who made each soil column: the run's agent, or the user (PAC's, after the agent's or alone).
+    makers: Counter[str] = Counter()
     for unit in window_folders(run_folder):
         window = run_folder / unit
         x = xmid_of(unit)
@@ -146,26 +148,27 @@ def petro_overview(folder: str) -> Overview:
             found.append(gaps)
         measures = _measures(window)
         hover = [f"xmid {number(x, 4)} m"]
-        if gaps and card is not None:
-            hover.append("outside the model's range: " + _gaps_text(card, gaps))
         if measures is None:
-            hover.append(_unmeasured(window))
+            states.add("none", judged=False)
+            hover.append(_unmeasured(window).capitalize())
             cells.append(Cell(key=unit, x=x, status="none", hover=tuple(hover)))
             continue
+        makers[by_whom(log, soil_by_agent(log, window))] += 1
         g7, g8 = _results(log, window)
-        status = (
+        status = states.add(
             verdict_status(g7, g8)
             if g7 is not None
-            else measured_status(fit_metrics(measures, thresholds))
+            else measured_status(fit_metrics(measures, thresholds)),
+            g7 is not None,
         )
-        statuses.append(status)
+        hover += state_lines(status, g7, g8)
+        if gaps and card is not None:
+            hover.append("Outside the model's range: " + _gaps_text(card, gaps))
+        hover.append(" / ".join(measures.soils) + ", top down")
+        hover.append(f"Water table at {number(measures.water_table_m)} m")
         misfits = [band.misfit for band in measures.fit.bands if band.misfit is not None]
-        hover.append(" / ".join(measures.soils) + " (top down)")
-        hover.append(f"water table at {number(measures.water_table_m)} m")
         if misfits:
-            hover.append(f"misfit {max(misfits):.2f} at worst")
-        if said := verdicts_said(g7, g8):
-            hover.append(said)
+            hover.append(f"Misfit {max(misfits):.2f} at worst")
         cells.append(
             Cell(
                 key=unit,
@@ -177,27 +180,16 @@ def petro_overview(folder: str) -> Overview:
             )
         )
     paco = log is not None and any(attempt.stage == STAGE for attempt in log.attempts)
-    said = [plural(len(cells), "window"), f"{len(statuses)} inverted"]
-    if model is not None and statuses:
-        said[-1] += f" with {model}"
-        words = (
-            {"pass": "passed", "warn": "flagged", "fail": "rejected"}
-            if paco
-            else {"pass": "fit their curve", "warn": "misfit their curve"}
-        )
-        said += [
-            f"{statuses.count(state)} {word}" for state, word in words.items() if state in statuses
-        ]
+    said = [
+        plural(len(cells), "window"),
+        *(f"{count} inverted {by}" for by, count in makers.items()),
+        *([f"soil model {model}"] if model is not None and makers else []),
+        *states.counts(),
+    ]
     return Overview(
         paco=paco,
         summary=" · ".join(said),
-        # A run made by hand: measured, never rejected.
-        legend={
-            "pass": "passed the soil column checks" if paco else "fits its curve",
-            "warn": "flagged" if paco else "misfits its curve",
-            **({"fail": "rejected"} if paco else {}),
-            "none": "not inverted",
-        },
+        legend=states.legend(),
         cells=tuple(cells),
         track=Track(label="Water table (m)", short="Water table", kind="depth"),
         gates=line_gate(log, "petro_inversion", "G8"),
@@ -218,10 +210,12 @@ def petro_card(folder: str, xmid: float) -> PetroCard:
     gaps = range_gaps(card, curve) if card is not None and curve is not None else ()
     measures = _measures(window)
     # A soil column PAC made again leaves the assistant's checks and attempts behind.
-    ours = measures is not None and by_assistant(log, window)
+    ours = measures is not None and soil_by_agent(log, window)
     g7, g8 = _results(log, window) if measures is not None else (None, None)
     said: list[Sentence] = []
     verdict = verdict_sentence(g7, g8)
+    if measures is not None:
+        said.append(Sentence(mark="info", text=f"Inverted {by_whom(log, ours)}."))
     if card is not None and curve is not None:
         said.append(_coverage(card, curve, gaps))
     metrics: tuple[Metric, ...] = ()
@@ -285,7 +279,7 @@ def model_of(run_folder: Path, log: QCLog | None) -> str | None:
         ),
         None,
     )
-    path = run_folder / CONFIG_FILE
+    path = run_folder / PAC_PETRO_CONFIG
     pac: object = json.loads(path.read_text()).get("model_name") if path.exists() else None
     if isinstance(pac, str) and (
         attempt is None or datetime.fromtimestamp(path.stat().st_mtime, UTC) > attempt.started_at
@@ -294,24 +288,9 @@ def model_of(run_folder: Path, log: QCLog | None) -> str | None:
     return str(attempt.parameters["model"]) if attempt is not None else None
 
 
-def by_assistant(log: QCLog | None, window: Path) -> bool:
-    """Whether the soil column in window folder `window` is the agent's: it logged one, and PAC
-    did not invert the window again after it. PAC writes its configuration into the run when it
-    inverts: without it, the soil column is the agent's, however a copy of the run dated its
-    files."""
-    latest = log.latest(window.name, STAGE) if log is not None else None
-    if latest is None:
-        return False
-    if not (window.parent / CONFIG_FILE).exists():
-        return True
-    model = window / MODEL_FILE
-    done = latest.finished_at or latest.started_at
-    return not (model.exists() and model.stat().st_mtime > (done + LATER).timestamp())
-
-
 def _results(log: QCLog | None, window: Path) -> tuple[GateResult | None, GateResult | None]:
     """G7's and G8's latest results on the window; none once PAC inverted it again after them."""
-    if log is None or not by_assistant(log, window):
+    if log is None or not soil_by_agent(log, window):
         return None, None
     return log.result(window.name, STAGE, "G7"), log.result(window.name, STAGE, "G8")
 

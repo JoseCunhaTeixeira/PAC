@@ -7,7 +7,7 @@ import { LineGather, type GatherData } from "./LineGather";
 import { UnitCard } from "./panel";
 import type { Overview, RecordCard } from "./types";
 import { runFigures, useRunFigures } from "./runFigures";
-import { Details, Empty, GateTables, PlotHead, SavedFigures, Skeleton } from "./ui";
+import { Details, Empty, PlotHead, SavedFigures, Skeleton } from "./ui";
 import { useJson, useShownUnit } from "./useJson";
 
 // The records: the selected record's card (its signal, what the checks said and redid, the
@@ -207,14 +207,13 @@ export function RecordsPanel({
 }) {
   const place = card ? { record: card.key } : null;
   const figures = useRunFigures(folder, place);
-  // A passive record (no shot): its signal and its spectrum, and its measures folded in their menu.
-  const passive = card !== null && card.x === null;
+  // Every record's card alike, a passive line's too: its badge, what it says, its settings, its
+  // measures and what was done to it.
   return (
     <>
       <div className="viz-section">
         <UnitCard
           stage="records"
-          bare={passive}
           card={card}
           error={cardError}
           selected={selected}
@@ -222,15 +221,12 @@ export function RecordsPanel({
           cells={overview?.cells ?? []}
           onSelect={onSelect}
           details={
-            card &&
-            (passive ? (
-              <GateTables gates={card.gates} />
-            ) : (
+            card && (
               <>
                 <Details gates={card.gates} steps={card.steps} />
                 <SavedFigures figures={runFigures(folder, figures, "", place ?? {})} />
               </>
-            ))
+            )
           }
         >
           {card && (

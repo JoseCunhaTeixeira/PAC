@@ -12,7 +12,7 @@ import { useContainerWidth } from "./useContainerWidth";
 /** pass / warn / fail: the checks' verdict (passed, flagged, rejected); hand: picked by hand;
  * auto: picked automatically, not judged; none: not picked, or not inverted; off: cannot be
  * chosen. */
-export type RailTone = "pass" | "warn" | "fail" | "hand" | "auto" | "none" | "off";
+export type RailTone = "pass" | "note" | "warn" | "fail" | "hand" | "auto" | "none" | "off";
 
 export interface RailCell {
   xmid: number;

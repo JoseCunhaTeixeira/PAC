@@ -9,8 +9,8 @@ writes next to its inversion, and written there when PAC inverted it."""
 
 import logging
 import statistics
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import timedelta
 from itertools import pairwise
 from pathlib import Path
 from typing import Literal
@@ -27,6 +27,7 @@ from masw.io.quality.log import (
     config_section,
     read_log,
 )
+from masw.io.quality.makers import inversion_by_agent
 from masw.io.quality.view import (
     Card,
     Cell,
@@ -34,9 +35,9 @@ from masw.io.quality.view import (
     Overview,
     Sentence,
     Setting,
-    Status,
+    States,
     Track,
-    flag_text,
+    by_whom,
     gate_view,
     grouped,
     line_gate,
@@ -44,9 +45,9 @@ from masw.io.quality.view import (
     number,
     plural,
     span,
+    state_lines,
     verdict_sentence,
     verdict_status,
-    verdicts_said,
     warnings,
 )
 from sigpipe.base.dispersion_curve import DispersionCurve
@@ -92,14 +93,12 @@ from sigpipe.masw.runs import window_folders, xmid_of
 
 logger = logging.getLogger(__name__)
 
-PAC_CONFIG_FILE = "seismic_inversion_config.json"  # what PAC's page inverted with
 STAGE = "inversion"
 GATE = "G5"
 TRACE_POINTS = 400  # the most points a chain's trace keeps
 BINS = 40  # a marginal's bins between the prior's bounds
 PROFILE_POINTS = 400  # the most layers a profile keeps of a smooth model
 # An inversion done this long after the assistant's last attempt on the window was PAC's.
-LATER = timedelta(minutes=1)
 BAND_NAMES = {3: ("short", "middle", "long")}
 # A model's name in a sentence.
 MODEL_WORDS: dict[str, str] = {
@@ -298,77 +297,57 @@ def inversion_overview(folder: str) -> Overview:
     log = read_log(run_folder)
     thresholds = thresholds_of(run_folder)
     cells: list[Cell] = []
-    runs: list[InversionParameters] = []
     informed: list[float] = []
-    statuses: list[Status] = []
-    by_hand = 0  # the windows whose model PAC made, after the assistant's or alone
+    states = States(none="not inverted")
+    # Who inverted each window: the run's agent, or the user (PAC's inversion, after the
+    # agent's or alone).
+    makers: Counter[str] = Counter()
     for unit in window_folders(run_folder):
         x = xmid_of(unit)
         measured = window_measures(run_folder / unit)
         measures = measured[1] if measured is not None else None
         if measured is None or measures is None:
-            said = "not inverted" if measured is None else "inverted before its measures were saved"
+            states.add("none", judged=False)
+            said = "Not inverted" if measured is None else "Inverted before its measures were saved"
             cells.append(Cell(key=unit, x=x, status="none", hover=(f"xmid {number(x, 4)} m", said)))
             continue
         ran = measured[0]
-        runs.append(ran.parameters)
-        if not by_assistant(log, unit, run_folder):
-            by_hand += 1
+        ours = inversion_by_agent(log, unit, run_folder)
+        makers[by_whom(log, ours)] += 1
         g5, g6 = _results(log, unit, run_folder)
         metrics = model_metrics(ran.parameters, measures, thresholds)
-        status = verdict_status(g5, g6) if g5 is not None else measured_status(metrics)
-        statuses.append(status)
+        status = states.add(
+            verdict_status(g5, g6) if g5 is not None else measured_status(metrics), g5 is not None
+        )
         bottom = measures.depth_max_m
         useful = informed_depth(measures)
-        hover = [
-            f"xmid {number(x, 4)} m",
-            f"{_layers(len(measures.vs_layers))}, modelled to {number(bottom)} m",
-        ]
+        hover = [f"xmid {number(x, 4)} m", *state_lines(status, g5, g6)]
+        layers = _layers(len(measures.vs_layers))
+        hover.append(f"{layers[:1].upper()}{layers[1:]}, modelled to {number(bottom)} m")
         if useful is not None:
             informed.append(useful)
             hover.append(
-                f"informed to {number(useful)} m"
-                + (" (its bottom)" if measures.useful_depth_m is None else "")
+                f"Informed to {number(useful)} m"
+                + (", its bottom" if measures.useful_depth_m is None else "")
             )
         misfits = [band.misfit for band in measures.fits[0].bands if band.misfit is not None]
         if misfits:
-            hover.append(f"misfit {number(max(misfits), 2)} at worst")
-        if said := verdicts_said(g5, g6):
-            hover.append(said)
-        flags = [flag.name for one in (g5, g6) if one is not None for flag in one.flags]
-        if flags:
-            hover.append("flags: " + ", ".join(flag_text(name) for name in dict.fromkeys(flags)))
+            hover.append(f"Misfit {number(max(misfits), 2)} at worst")
         cells.append(
             Cell(key=unit, x=x, status=status, hover=tuple(hover), value=useful, total=bottom)
         )
     paco = log is not None and any(attempt.stage == STAGE for attempt in log.attempts)
-    assistant = len(runs) - by_hand
-    said = [plural(len(cells), "window")]
-    if assistant:
-        said.append(f"{assistant} inverted by the agent")
-    if by_hand:
-        said.append(f"{by_hand} inverted by hand")
-    if runs:
-        words = (
-            {"pass": "passed", "warn": "flagged", "fail": "rejected"}
-            if paco
-            else {"pass": "within the agent's limits", "warn": "beyond the agent's limits"}
-        )
-        said += [
-            f"{statuses.count(state)} {word}" for state, word in words.items() if state in statuses
-        ]
-        if informed:
-            said.append(f"informed from {number(min(informed))} to {number(max(informed))} m deep")
+    said = [
+        plural(len(cells), "window"),
+        *(f"{count} inverted {by}" for by, count in makers.items()),
+        *states.counts(),
+    ]
+    if informed:
+        said.append(f"informed from {number(min(informed))} to {number(max(informed))} m deep")
     return Overview(
         paco=paco,
         summary=" · ".join(said),
-        # A run made by hand: measured, never rejected.
-        legend={
-            "pass": "passed the model checks" if paco else "within the agent's limits",
-            "warn": "flagged" if paco else "a measure beyond the agent's limits",
-            **({"fail": "rejected"} if paco else {}),
-            "none": "not inverted",
-        },
+        legend=states.legend(),
         cells=tuple(cells),
         track=Track(
             label="Depth informed, of the depth modelled (m)", short="Depth informed", kind="depth"
@@ -397,7 +376,7 @@ def window_inversion_settings(
     """What window `unit`'s inversion ran with (`parameters`), each with why: the workflow's
     rule, and the checks' retries that changed it on this window; none when set by hand or
     chosen by the agent (the run's card says why)."""
-    assistant = by_assistant(log, unit, run_folder)
+    assistant = inversion_by_agent(log, unit, run_folder)
     # Each setting a later attempt changed, with what asked it, each once: the window's first
     # attempt changed nothing, whatever ran it.
     changed: dict[str, list[str]] = {}
@@ -408,7 +387,7 @@ def window_inversion_settings(
                 continue
             for key in _CHANGED_IN.get(name, ()):
                 asked = changed.setdefault(key, [])
-                if (text := trigger_text(attempt)) not in asked:
+                if (text := trigger_text(attempt, log)) not in asked:
                     asked.append(text)
     rules = assistant and log is not None and log.chooser == "workflow"
 
@@ -542,15 +521,15 @@ def inversion_card(folder: str, xmid: float, model: ModelName = DEFAULT_MODEL) -
     parameters = ran.parameters
     # An inversion PAC made again leaves the assistant's checks and attempts behind: none of them
     # is of the model now in the window.
-    ours = by_assistant(log, unit, run_folder)
+    ours = inversion_by_agent(log, unit, run_folder)
     g5, g6 = _results(log, unit, run_folder)
     metrics = model_metrics(parameters, measures, thresholds)
-    said: list[Sentence] = []
+    said = [Sentence(mark="info", text=f"Inverted {by_whom(log, ours)}.")]
     verdict = verdict_sentence(g5, g6)
     said += _depth_sentences(parameters, measures, thresholds)
     said += _fit_sentences(measures, thresholds, model)
     said.append(_convergence_sentence(measures, thresholds))
-    said += _run_sentences(parameters, ran.tuning, ours)
+    said += _run_sentences(parameters, ran.tuning)
     said += warnings(g5, g6)
     return InversionCard(
         key=unit,
@@ -618,26 +597,12 @@ def figure_path(folder: str, xmid: float, name: FigureName) -> Path:
     return path
 
 
-def by_assistant(log: QCLog | None, unit: str, run_folder: Path) -> bool:
-    """Whether the inversion in window `unit` is the agent's: it logged one, and PAC did not
-    invert the window again after it. PAC writes its configuration into the run when it inverts:
-    without it, the inversion is the agent's, however a copy of the run dated its files."""
-    latest = log.latest(unit, STAGE) if log is not None else None
-    if latest is None:
-        return False
-    if not (run_folder / PAC_CONFIG_FILE).exists():
-        return True
-    samples = run_folder / unit / SAMPLES_FILE
-    done = latest.finished_at or latest.started_at
-    return not (samples.exists() and samples.stat().st_mtime > (done + LATER).timestamp())
-
-
 def _results(
     log: QCLog | None, unit: str, run_folder: Path
 ) -> tuple[GateResult | None, GateResult | None]:
     """G5's and G6's latest results on the window; none once PAC inverted it again after
     them."""
-    if log is None or not by_assistant(log, unit, run_folder):
+    if log is None or not inversion_by_agent(log, unit, run_folder):
         return None, None
     return log.result(unit, STAGE, GATE), log.result(unit, STAGE, "G6")
 
@@ -764,13 +729,11 @@ def _convergence_sentence(measures: InversionMeasures, thresholds: ModelLimits) 
 
 
 def _run_sentences(
-    parameters: InversionParameters, tuning: tuple[tuple[float, float], ...], ours: bool
+    parameters: InversionParameters, tuning: tuple[tuple[float, float], ...]
 ) -> list[Sentence]:
-    """Who ran the inversion, the agent (`ours`) or PAC; its steps' tuning; the values fixed,
-    layer by layer. What it ran with is in its settings."""
-    said = [
-        Sentence(mark="info", text="Inverted by the agent." if ours else "Inverted by hand in PAC.")
-    ]
+    """The inversion's steps' tuning; the values fixed, layer by layer. What it ran with is in
+    its settings."""
+    said: list[Sentence] = []
     if tuning:
         said.append(
             Sentence(mark="info", text=f"Its steps tuned in {plural(len(tuning), 'trial run')}.")
@@ -928,7 +891,9 @@ def _judged(measures: InversionMeasures) -> set[str]:
 
 
 def _layers(n_layers: int) -> str:
-    """A model's layers in words: "3 layers over a half-space"."""
+    """A model's layers in words: "3 layers over a half-space", "a half-space alone"."""
+    if n_layers <= 1:
+        return "a half-space alone"
     return f"{plural(n_layers - 1, 'layer')} over a half-space"
 
 

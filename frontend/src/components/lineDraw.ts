@@ -49,6 +49,7 @@ export type CellStrength = "rest" | "hover" | "active";
 const TOKENS: Record<Theme, Record<string, string>> = {
   light: {
     ok: "#1a9e4b",
+    note: "#a38600",
     warn: "#d4660a",
     bad: "#d63c3c",
     accent: "#4f5bd5",
@@ -60,6 +61,7 @@ const TOKENS: Record<Theme, Record<string, string>> = {
   },
   dark: {
     ok: "#34c46a",
+    note: "#e3c94b",
     warn: "#f5964a",
     bad: "#f06a6a",
     accent: "#6671ec",
@@ -73,6 +75,7 @@ const TOKENS: Record<Theme, Record<string, string>> = {
 // kit.css's mixes of each tone into the page, in %: at rest, under the pointer, selected.
 const MIXES: Record<Exclude<CellTone, "none">, readonly [number, number, number]> = {
   pass: [34, 58, 72],
+  note: [42, 66, 80],
   warn: [42, 66, 80],
   fail: [40, 64, 78],
   hand: [45, 70, 80],
@@ -91,6 +94,7 @@ export function cellColour(theme: Theme, tone: CellTone, strength: CellStrength,
   }
   const base = {
     pass: tokens.ok,
+    note: tokens.note,
     warn: tokens.warn,
     fail: tokens.bad,
     hand: tokens.accent,

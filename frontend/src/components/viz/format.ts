@@ -130,7 +130,7 @@ const METRICS: Record<string, [string, string]> = {
   misfit: ["Difference from the neighbours", "Against the neighbours on each side, the median relative difference\nThe worse side"],
   sides_compared: ["Sides compared", "The sides whose neighbours agree with each other, and so could be compared"],
   // The line's curves
-  curves: ["Curves passed", "The windows whose curve passed the curve check"],
+  curves: ["Curves compared", "The windows whose curve the curve check did not reject, each compared with its neighbours"],
   without_curve: ["Windows without a curve", "The windows whose curve was rejected or never picked"],
   depth_spread: [
     "Spread of λmax",
@@ -170,7 +170,7 @@ const METRICS: Record<string, [string, string]> = {
     "The smallest Vs difference between adjacent layers of the layered median, over their mean",
   ],
   // The line's models
-  models: ["Models passed", "The windows whose model passed the model check"],
+  models: ["Models compared", "The windows whose model the model check did not reject, each compared with its neighbours"],
   without_model: ["Windows without a model", "The windows not inverted, or whose model was rejected"],
   shallow_models: [
     "Models informed too shallow",
@@ -185,7 +185,7 @@ const METRICS: Record<string, [string, string]> = {
 // ...where a measure's name says something else at another check.
 const GATE_METRICS: Record<string, Record<string, [string, string]>> = {
   G8: {
-    models: ["Soil columns passed", "The windows whose soil column passed its check"],
+    models: ["Soil columns compared", "The windows whose soil column its check did not reject, each compared with its neighbours"],
     without_model: ["Windows without a soil column", "The windows with no soil column, or whose soil column was rejected"],
   },
 };
@@ -358,10 +358,10 @@ export function parameterLabel(name: string, unit = true): string {
 /** Where a setting comes from, in two words. */
 // Who set a setting, as the card tags it: the assistant whichever its way.
 export const ORIGIN_LABELS: Record<Origin, string> = {
-  you: "You",
-  workflow: "Agent",
-  agent: "Agent",
-  checks: "Agent",
+  you: "User",
+  workflow: "Workflow",
+  agent: "Autonomous",
+  checks: "Checks",
   default: "Default",
 };
 
@@ -377,24 +377,28 @@ export const MAKER_LABELS: Record<Maker, string> = {
 export const STATE_MEANINGS: Record<StageKey, Record<Status, { full: string; short: string }>> = {
   records: {
     pass: { full: "Used by its windows", short: "used by its windows" },
+    note: { full: "Used by its windows", short: "used by its windows" },
     warn: { full: "Used by its windows", short: "used by its windows" },
     fail: { full: "Left out of every window", short: "left out of every window" },
     none: { full: "", short: "" },
   },
   dispersion: {
     pass: { full: "Its curve went on to the inversion", short: "its curve went on to the inversion" },
+    note: { full: "Its curve went on to the inversion", short: "its curve went on to the inversion" },
     warn: { full: "Its curve went on to the inversion", short: "its curve went on to the inversion" },
     fail: { full: "Its curve was not inverted", short: "its curve was not inverted" },
     none: { full: "", short: "" },
   },
   inversion: {
     pass: { full: "", short: "" },
+    note: { full: "", short: "" },
     warn: { full: "", short: "" },
     fail: { full: "", short: "" },
     none: { full: "", short: "" },
   },
   petro: {
     pass: { full: "", short: "" },
+    note: { full: "", short: "" },
     warn: { full: "", short: "" },
     fail: { full: "", short: "" },
     none: { full: "", short: "" },
@@ -403,9 +407,15 @@ export const STATE_MEANINGS: Record<StageKey, Record<Status, { full: string; sho
 
 export const STATUS_LABELS: Record<Status, string> = {
   pass: "passed",
+  note: "beyond limits",
   warn: "flagged",
   fail: "rejected",
   none: "—",
+};
+// ...a unit made by the user, which no check judged.
+export const MEASURED_LABELS: Partial<Record<Status, string>> = {
+  pass: "within limits",
+  fail: "not used",
 };
 
 /** A run's start, as its selector and header show it: "26 Sep 2026, 15:13". */

@@ -1371,6 +1371,10 @@ button.rail-cell.pass {
   background: color-mix(in srgb, var(--ok) 34%, transparent);
 }
 
+button.rail-cell.note {
+  background: color-mix(in srgb, var(--note) 42%, transparent);
+}
+
 button.rail-cell.warn {
   background: color-mix(in srgb, var(--warn) 42%, transparent);
 }
@@ -1389,6 +1393,10 @@ button.rail-cell.auto {
 
 button.rail-cell.pass:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ok) 58%, transparent);
+}
+
+button.rail-cell.note:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--note) 66%, transparent);
 }
 
 button.rail-cell.warn:hover:not(:disabled) {
@@ -1432,6 +1440,10 @@ button.rail-cell.hand.active {
 
 button.rail-cell.pass.active {
   background: color-mix(in srgb, var(--ok) 72%, transparent);
+}
+
+button.rail-cell.note.active {
+  background: color-mix(in srgb, var(--note) 80%, transparent);
 }
 
 button.rail-cell.warn.active {
@@ -1481,6 +1493,10 @@ button.rail-cell.split > i {
 
 button.rail-cell.split > i.pass {
   --part: var(--ok);
+}
+
+button.rail-cell.split > i.note {
+  --part: var(--note);
 }
 
 button.rail-cell.split > i.warn {
@@ -1575,6 +1591,10 @@ button.rail-cell:active {
 
 .rail-legend i.pass {
   background: color-mix(in srgb, var(--ok) 50%, transparent);
+}
+
+.rail-legend i.note {
+  background: color-mix(in srgb, var(--note) 58%, transparent);
 }
 
 .rail-legend i.warn {

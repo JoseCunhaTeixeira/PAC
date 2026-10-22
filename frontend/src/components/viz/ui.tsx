@@ -8,6 +8,7 @@ import {
   metricLimit,
   metricTip,
   metricValue,
+  MEASURED_LABELS,
   objectTitle,
   ORIGIN_LABELS,
   runDate,
@@ -50,22 +51,26 @@ export function StatusBadge({ status, label, meaning }: { status: Status; label?
 // A part's state in words, and what each part checks (its badge's hover).
 const PART_WORDS: Record<PartState, string> = {
   pass: "passed",
+  note: "beyond limits",
   warn: "flagged",
   fail: "rejected",
-  hand: "by hand",
+  hand: "picked by the user",
   none: "not checked",
 };
+const NONE_WORDS: Record<string, string> = { image: "not made", curve: "not picked" };
 const PART_GATES: Record<string, string> = {
   image: "The dispersion image check",
   curve: "The curve check, and the check against the neighbouring curves",
 };
 
 /** One of a unit's checks said apart (a window's image, its curve): what it checks, its state,
- * in its colour (indigo by hand). */
-export function PartBadge({ part }: { part: { label: string; state: PartState } }) {
-  const said =
-    part.state === "none" && part.label === "curve" ? "no curve" : `${part.label} ${PART_WORDS[part.state]}`;
-  const why = part.state === "hand" ? "The user's curve, passed as it is" : (PART_GATES[part.label] ?? "");
+ * in its colour (indigo by hand); made by the user and judged by no check, against the agent's
+ * limits. */
+export function PartBadge({ part }: { part: { label: string; state: PartState; judged?: boolean } }) {
+  const word =
+    (part.judged === false && part.state !== "hand" && MEASURED_LABELS[part.state]) || PART_WORDS[part.state];
+  const said = part.state === "none" ? `${part.label} ${NONE_WORDS[part.label] ?? "not made"}` : `${part.label} ${word}`;
+  const why = part.state === "hand" ? "" : (PART_GATES[part.label] ?? "");
   return (
     <span className={`viz-badge ${part.state}`} data-tip={why || undefined}>
       {said}
@@ -78,17 +83,12 @@ export function GateBadge({ gate }: { gate: GateView }) {
   if (gate.by_hand) {
     const passed = gate.verdict === "pass";
     return (
-      <span
-        className={`viz-badge ${passed ? "hand" : "none"}`}
-        data-tip={passed ? "Picked by hand: passed as it is" : "Its curve was picked by hand"}
-      >
-        {passed ? "by hand" : "not checked"}
-      </span>
+      <span className={`viz-badge ${passed ? "hand" : "none"}`}>{passed ? "picked by the user" : "not checked"}</span>
     );
   }
   if (gate.verdict === null) {
     return (
-      <span className="viz-badge none" data-tip="Against the agent's limits, not judged: the run was made by hand">
+      <span className="viz-badge none" data-tip="Against the agent's limits, not judged: made by the user">
         measured
       </span>
     );
@@ -143,19 +143,18 @@ export function SettingsList({ settings }: { settings: Setting[] }) {
 }
 
 /** What was done: a step after another along a timeline, each its number on the line in the
- * colour of who did it, its title, then its facts, a line each. */
+ * colour of who did it (its date on hover), its title and who did it, then its facts, a line
+ * each. */
 export function Timeline({ steps }: { steps: Step[] }) {
   return (
     <ol className="viz-timeline">
       {steps.map((step, index) => (
         <li key={index} className="viz-step" data-tip={step.detail || undefined}>
-          <span
-            className={`viz-step-node ${step.by}`}
-            data-tip={`${ORIGIN_LABELS[step.by]}${step.at ? `\n${runDate(step.at)}` : ""}`}
-          >
+          <span className={`viz-step-node ${step.by}`} data-tip={step.at ? runDate(step.at) : undefined}>
             {index + 1}
           </span>
           <div className="viz-step-title">{step.title}</div>
+          <OriginTag origin={step.by} />
           {step.lines.length > 0 && (
             <ul className="viz-step-lines">
               {step.lines.map((line) => (

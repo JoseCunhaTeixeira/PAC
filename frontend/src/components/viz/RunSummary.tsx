@@ -14,10 +14,13 @@ import { Fold, OriginTag, Timeline } from "./ui";
 
 // Who made a run, on hover.
 const MAKER_MEANINGS: Record<Maker, string> = {
-  manual: "Made in PAC's pages, by hand",
-  workflow: "Made by the agent, step by step with fixed rules",
-  autonomous: "Made by the agent on its own, comparing the dispersion images with its vision",
+  manual: "Made by the user in PAC",
+  workflow: "Made by the workflow agent, step by step with fixed rules",
+  autonomous: "Made by the autonomous agent, comparing the dispersion images with its vision",
 };
+
+// The agent, by the run's mode.
+const AGENTS = { agent: "autonomous agent", workflow: "workflow agent" };
 
 // A setting's parameters, apart: a line each.
 const SEP = " · ";
@@ -111,7 +114,7 @@ function Comparison({ folder, table }: { folder: string; table: TriedTable }) {
                   )}
                   {row.kept && (
                     <span className="viz-chosen">
-                      Chosen by the {table.by}
+                      Chosen by the {AGENTS[table.by]}
                     </span>
                   )}
                 </th>
@@ -216,8 +219,13 @@ function Why({ card, tables, reasons }: { card: RunCard; tables: TriedTable[]; r
           <DispersionThumbs folder={card.folder} receivers={card.receivers} windows={card.windows} />
         </div>
       )}
-      {own.length > 0 && <Reasons title="In the agent's own words" reasons={own} />}
-      {yours.length > 0 && <Reasons title="Set by you" reasons={yours} />}
+      {own.length > 0 && (
+        <Reasons
+          title={`In the ${card.made_by === "workflow" ? AGENTS.workflow : AGENTS.agent}'s own words`}
+          reasons={own}
+        />
+      )}
+      {yours.length > 0 && <Reasons title="Set by the user" reasons={yours} />}
     </>
   );
 }
