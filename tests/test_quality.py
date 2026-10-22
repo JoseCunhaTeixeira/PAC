@@ -28,7 +28,7 @@ from masw.io.quality.log import LINE, Attempt, GateResult, QCLog
 from masw.io.quality.records import before_muting, signal_metrics, thresholds_of
 from masw.io.quality.runs import USER_REASON, processing_settings
 from masw.io.quality.tried import tried_tables
-from masw.io.quality.view import DASH, Setting, rejected_by
+from masw.io.quality.view import DASH, Setting, acted_on
 from sigpipe.base import (
     Coordinate,
     DispersionCurve,
@@ -744,7 +744,7 @@ def test_a_pac_petrophysical_inversion_shows_its_soil_column_and_fit(run: str) -
     assert any(text.startswith("Soil column, top down: ") for text in _texts(card))
 
 
-def test_a_measure_is_a_rejections_cause_only_when_the_check_acted_on_it() -> None:
+def test_a_measure_rejects_or_flags_only_when_the_check_acted_on_it() -> None:
     # Left out for its SNR; its trigger off too, kept as information: the SNR rejected the
     # record, the trigger only flags it.
     record = GateResult.model_validate(
@@ -759,7 +759,7 @@ def test_a_measure_is_a_rejections_cause_only_when_the_check_acted_on_it() -> No
             ],
         )
     )
-    assert rejected_by(record) == ("snr_db",)
+    assert acted_on(record, "reject") == ("snr_db",)
     # A retry refused once the budget was spent: the measure of the flag that asked it.
     curve = GateResult.model_validate(
         _result(
@@ -774,10 +774,13 @@ def test_a_measure_is_a_rejections_cause_only_when_the_check_acted_on_it() -> No
             ],
         )
     )
-    assert rejected_by(curve) == ("on_data",)
-    # Passed or flagged, no measure rejected it.
+    assert acted_on(curve, "reject") == ("on_data",)
+    # Flagged: a retry asked and not made, the measure it judged; nothing rejected it.
+    flagged = curve.model_copy(update={"verdict": "retry"})
+    assert acted_on(flagged, "retry") == ("on_data",) and acted_on(flagged, "reject") == ()
+    # Passed, only warned: no measure rejected or flagged it.
     passed = record.model_copy(update={"verdict": "pass"})
-    assert rejected_by(passed) == () and rejected_by(None) == ()
+    assert acted_on(passed, "reject") == acted_on(passed, "retry") == acted_on(None, "reject") == ()
 
 
 def test_an_unknown_folder_is_not_found() -> None:

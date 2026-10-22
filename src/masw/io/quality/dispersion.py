@@ -553,9 +553,11 @@ def _picks(
     status = verdict_status(g3) if g3 is not None else measured_status(measures)
     low, high = first.band_hz
     shortest, longest = first.wavelength_m
+    # The curve check's flag, orange; beyond the agent's limits in a run made by hand, a warning.
+    mark = "info" if status == "none" else "flag" if status == "warn" and g3 is not None else status
     said = [
         Sentence(
-            mark="info" if status == "none" else status,
+            mark=mark,
             text=f"{first.label} picked {by}: {first.n_points} points from {number(low)} to "
             f"{number(high)} Hz.",
         ),

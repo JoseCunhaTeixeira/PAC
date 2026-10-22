@@ -15,8 +15,9 @@ from masw.io.quality.log import LINE, Flag, GateResult, Metric, QCLog, Verdict
 
 # A unit's state on the strip: passed, warned or retried, failed or rejected, not there.
 type Status = Literal["pass", "warn", "fail", "none"]
-# A sentence's badge; "info" says what was done, without judging it.
-type Mark = Literal["pass", "warn", "fail", "info"]
+# A sentence's badge: a check passed it, warned of it (kept, information), flagged it (asked what
+# was not done) or rejected it; "info" says what was done, without judging it.
+type Mark = Literal["pass", "warn", "flag", "fail", "info"]
 # Where a setting comes from: the user (their request, or PAC's form), PACo's workflow (its rules
 # on the data), its autonomous agent (its choices), PACo's checks (what they left out or made
 # again), or the preset's default.
@@ -124,8 +125,8 @@ class GateView(BaseModel):
     """What one gate said of the unit, or for a run PAC made, the same measures against the
     gate's limits (verdict None). `by_hand`: the unit's curve was picked by hand, which the
     curve's check passes as it is (verdict pass) and the checks after it leave out (verdict
-    None). `rejected_by`: the measures that made it reject the unit; the others beyond their
-    limits only flag it."""
+    None). `rejected_by`: the measures that made it reject the unit; `flagged_by`, those that made
+    it flag the unit; the others beyond their limits only warn."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -134,6 +135,7 @@ class GateView(BaseModel):
     metrics: tuple[Metric, ...]
     by_hand: bool = False
     rejected_by: tuple[str, ...] = ()
+    flagged_by: tuple[str, ...] = ()
 
 
 class Overview(BaseModel):
@@ -202,7 +204,8 @@ def gate_view(gate: str, result: GateResult | None, measured: Iterable[Metric] =
         gate=gate,
         verdict=result.verdict if result is not None else None,
         metrics=tuple(covered(gate, metric) for metric in metrics),
-        rejected_by=rejected_by(result),
+        rejected_by=acted_on(result, "reject"),
+        flagged_by=acted_on(result, "retry"),
     )
 
 
@@ -227,7 +230,6 @@ FLAG_METRICS: dict[str, tuple[str, ...]] = {
     "aliasing_zone": ("aliased_points",),
     "beyond_reach": ("beyond_reach_points",),
     "inverse_dispersion": ("trend",),
-    "near_field": ("near_offset",),
     "outlier": ("neighbour_misfit", "misfit"),
     "shared_change": ("neighbour_misfit", "misfit"),
     "model_change": ("neighbour_misfit", "misfit"),
@@ -247,12 +249,13 @@ FLAG_METRICS: dict[str, tuple[str, ...]] = {
 }
 
 
-def rejected_by(result: GateResult | None) -> tuple[str, ...]:
-    """The measures beyond their limits that made `result`'s check reject its unit: those the
-    flags it acted on judge (a flag kept is information, traces left out leave the unit, a
-    refused retry is said with the flags that asked it); every one beyond its limit for a flag
-    that judges none of them. None unless it rejected the unit."""
-    if result is None or result.verdict != "reject":
+def acted_on(result: GateResult | None, verdict: Verdict) -> tuple[str, ...]:
+    """The measures beyond their limits that gave `result`'s check its `verdict` (rejected, or
+    flagged: a retry asked and not made): those the flags it acted on judge (a flag kept is
+    information, traces left out leave the unit, a refused retry is said with the flags that
+    asked it); every one beyond its limit for a flag that judges none of them. None unless the
+    check gave that verdict."""
+    if result is None or result.verdict != verdict:
         return ()
     beyond = [
         metric.name
@@ -371,7 +374,6 @@ FLAG_WORDS = {
     "narrow_span": "narrow range of wavelengths",
     "air_wave": "points at the air wave's speed",
     "inverse_dispersion": "inverse dispersion",
-    "near_field": "near field",
     "mode_jump": "jump to another mode",
     "too_few_points": "too few points",
     "no_ridge": "no ridge",
@@ -525,7 +527,7 @@ def verdict_sentence(*results: GateResult | None) -> Sentence | None:
         return Sentence(mark="fail", text=f"Rejected by {checks_named(rejected)}{why}")
     flagged = [result for result in judged if result.verdict == "retry"]
     raised = [flag.name for result in flagged for flag in result.flags]
-    return Sentence(mark="warn", text=f"Flagged by {checks_named(flagged)}: {counted(raised)}.")
+    return Sentence(mark="flag", text=f"Flagged by {checks_named(flagged)}: {counted(raised)}.")
 
 
 # The thousands apart as SI writes them: a narrow space from five digits on, none in four.

@@ -32,7 +32,7 @@ import "./viz.css";
 // sentences, the settings a stage ran with, and folded under a card, each check's measures and
 // what was done, a step each.
 
-const MARK_ICONS: Record<Mark, string> = { pass: "✓", warn: "!", fail: "✕", info: "i" };
+const MARK_ICONS: Record<Mark, string> = { pass: "✓", warn: "!", flag: "!", fail: "✕", info: "i" };
 const VERDICT_STATUS: Record<Verdict, Status> = { pass: "pass", retry: "warn", reject: "fail" };
 // A check's verdict, as its badge says it.
 const VERDICT_WORDS: Record<Verdict, string> = { pass: "passed", retry: "flagged", reject: "rejected" };
@@ -214,20 +214,31 @@ interface MetricRow {
   tip: string;
   value: string;
   limit: string;
-  /** Against its limit: within it, beyond it and flagging the unit, or the cause of its
-   * rejection; null when reported only, or not measured. */
-  state: "pass" | "warn" | "fail" | null;
+  /** Against its limit: within it; beyond it and a warning alone, the reason the check flagged
+   * the unit, or the reason it rejected it; null when reported only, or not measured. */
+  state: "pass" | "warn" | "flag" | "fail" | null;
 }
 
-// A measure against its limit, its mark; one that only flags its unit, its colour alone.
-const STATE_MARKS = { pass: "✓", warn: "", fail: "✕" };
+// A measure against its limit, its mark; one beyond it that did not reject its unit, its colour
+// alone.
+const STATE_MARKS = { pass: "✓", warn: "", flag: "", fail: "✕" };
+const STATE_ROWS = { pass: undefined, warn: "warned", flag: "flagged", fail: "failed" };
 
 /** A check's measures as rows, a measure held between a floor and a ceiling (the acceptance
- * between 20 and 30 %) in one row, its band as its limit; one beyond its limit the cause of the
- * check's rejection when `rejected` names it, else a flag. */
-function metricRows(gate: string, metrics: Metric[], rejected: string[]): MetricRow[] {
+ * between 20 and 30 %) in one row, its band as its limit; one beyond its limit the reason the
+ * check rejected the unit when `rejected` names it, flagged it when `flagged` does, else a
+ * warning. */
+function metricRows(gate: string, metrics: Metric[], rejected: string[], flagged: string[]): MetricRow[] {
   const state = (judged: boolean, passed: boolean, name: string): MetricRow["state"] =>
-    !judged ? null : passed ? "pass" : rejected.includes(name) ? "fail" : "warn";
+    !judged
+      ? null
+      : passed
+        ? "pass"
+        : rejected.includes(name)
+          ? "fail"
+          : flagged.includes(name)
+            ? "flag"
+            : "warn";
   const rows: MetricRow[] = [];
   const merged = new Set<number>();
   metrics.forEach((metric, i) => {
@@ -293,14 +304,16 @@ function MetricTable({
   gate,
   metrics,
   rejected,
+  flagged,
   title,
 }: {
   gate: string;
   metrics: Metric[];
   rejected: string[];
+  flagged: string[];
   title?: string;
 }) {
-  const rows = metricRows(gate, metrics, rejected);
+  const rows = metricRows(gate, metrics, rejected, flagged);
   // The same columns in every table, their values aligned from one to the next.
   return (
     <div className="viz-table-wrap">
@@ -319,7 +332,7 @@ function MetricTable({
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className={row.state === "fail" ? "failed" : row.state === "warn" ? "flagged" : undefined}>
+            <tr key={i} className={row.state ? STATE_ROWS[row.state] : undefined}>
               <td>
                 <span className={row.tip ? "viz-term" : undefined} data-tip={row.tip || undefined}>
                   {row.label}
@@ -370,6 +383,7 @@ export function GateTables({ gates }: { gates: GateView[] }) {
                     gate={gate.gate}
                     metrics={metrics}
                     rejected={gate.rejected_by ?? []}
+                    flagged={gate.flagged_by ?? []}
                     title={objects.length > 1 ? objectTitle(gate.gate, of) : undefined}
                   />
                 ))

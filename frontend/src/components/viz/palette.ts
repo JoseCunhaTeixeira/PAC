@@ -3,14 +3,14 @@ import { afmhotR, purples } from "../colormaps";
 import type { PartState, Status, Use } from "./types";
 
 // Visualization's canvas colours, which cannot take CSS variables: the states (pass green,
-// warn amber, fail red, none grey, as the page's badges), one series (blue) for values and the
+// warn orange, fail red, none grey, as the page's badges), one series (blue) for values and the
 // shots a window stacks, and the categorical colours of the chains in a fixed order. Both modes
 // are chosen for their own surface.
 export function vizPalette(theme: Theme) {
   const dark = theme === "dark";
   const status: Record<Status, string> = {
     pass: dark ? "#34c46a" : "#1a9e4b",
-    warn: dark ? "#f0b429" : "#d98a04",
+    warn: dark ? "#f5964a" : "#e07012",
     fail: dark ? "#f06a6a" : "#d63c3c",
     none: dark ? "#4a4d55" : "#d5d6da",
   };

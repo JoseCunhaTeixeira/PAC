@@ -2,7 +2,9 @@
 // stage's units along the line, and the selected unit's card.
 
 export type Status = "pass" | "warn" | "fail" | "none";
-export type Mark = "pass" | "warn" | "fail" | "info";
+// A sentence's badge: passed, a warning (kept, information), flagged (asked and not done),
+// rejected; or what was done.
+export type Mark = "pass" | "warn" | "flag" | "fail" | "info";
 // Where a setting comes from: you (your request, or PAC's form), PACo's workflow, its autonomous
 // agent, PACo's checks (what they left out or made again), or the preset's default.
 export type Origin = "you" | "workflow" | "agent" | "checks" | "default";
@@ -220,6 +222,8 @@ export interface GateView {
   by_hand?: boolean;
   /** The measures that made the check reject the unit; the others beyond their limits flag it. */
   rejected_by?: string[];
+  /** The measures that made the check flag the unit. */
+  flagged_by?: string[];
 }
 
 export interface Card {

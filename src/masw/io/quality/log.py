@@ -223,14 +223,36 @@ def read_log(run_folder: Path) -> QCLog | None:
     return QCLog(list(current.values()), history, chooser, _runs(run_folder))
 
 
+# What PACo's checks no longer judge or raise, read so from a log made before: the nearest shot,
+# reported, its near-field note gone.
+_REPORTED = frozenset({"near_offset"})
+_RETIRED = frozenset({"near_field"})
+
+
 def _attempt(entry: dict[str, Any]) -> Attempt | None:
-    """A log line of an attempt's, read; None for another event, or a line that does not read."""
+    """A log line of an attempt's, read as PACo's checks say it now; None for another event, or
+    a line that does not read."""
     if "attempt" not in entry:
         return None
     try:
-        return Attempt.model_validate(entry)
+        attempt = Attempt.model_validate(entry)
     except ValidationError:
         return None
+    results = {gate: _as_now(result) for gate, result in attempt.results.items()}
+    return attempt.model_copy(update={"results": results})
+
+
+def _as_now(result: GateResult) -> GateResult:
+    """A check's result as it reads now: a measure no longer judged reported, a flag no longer
+    raised left out."""
+    metrics = tuple(
+        metric.model_copy(update={"threshold": None, "bound": None, "passed": True})
+        if metric.name in _REPORTED
+        else metric
+        for metric in result.metrics
+    )
+    flags = tuple(flag for flag in result.flags if flag.name not in _RETIRED)
+    return result.model_copy(update={"metrics": metrics, "flags": flags})
 
 
 def _runs(run_folder: Path) -> list[Attempt]:

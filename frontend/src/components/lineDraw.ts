@@ -49,7 +49,7 @@ export type CellStrength = "rest" | "hover" | "active";
 const TOKENS: Record<Theme, Record<string, string>> = {
   light: {
     ok: "#1a9e4b",
-    warn: "#b87404",
+    warn: "#d4660a",
     bad: "#d63c3c",
     accent: "#4f5bd5",
     muted: "#525d70",
@@ -60,7 +60,7 @@ const TOKENS: Record<Theme, Record<string, string>> = {
   },
   dark: {
     ok: "#34c46a",
-    warn: "#f0b429",
+    warn: "#f5964a",
     bad: "#f06a6a",
     accent: "#6671ec",
     muted: "#a1abbc",

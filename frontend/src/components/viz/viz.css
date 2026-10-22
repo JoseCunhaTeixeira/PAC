@@ -834,6 +834,11 @@ button.viz-option:active {
 }
 
 .viz-mark.warn {
+  background: var(--note-soft);
+  color: var(--note);
+}
+
+.viz-mark.flag {
   background: var(--warn-soft);
   color: var(--warn);
 }
@@ -1004,9 +1009,14 @@ button.viz-option:active {
   color: var(--bad);
 }
 
-/* A measure beyond its limit that flags its unit without rejecting it. */
+/* A measure beyond its limit: the reason its check flagged the unit (orange), or a warning
+   alone (yellow). */
 .viz table.viz-table tr.flagged td {
   color: var(--warn);
+}
+
+.viz table.viz-table tr.warned td {
+  color: var(--note);
 }
 
 /* Every table of measures with the same columns: its values under the others'. */

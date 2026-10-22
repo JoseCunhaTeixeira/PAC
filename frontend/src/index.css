@@ -46,11 +46,13 @@
   --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
 
   /* The states' colours, on every page: passed, flagged, rejected, not judged, and the
-     assistant's (the canvases' too, palette.ts). */
+     assistant's (the canvases' too, palette.ts); a warning alone, kept as information. */
   --ok: #1a9e4b;
   --ok-soft: rgba(26, 158, 75, 0.12);
-  --warn: #b87404;
-  --warn-soft: rgba(217, 138, 4, 0.14);
+  --warn: #d4660a;
+  --warn-soft: rgba(212, 102, 10, 0.13);
+  --note: #a38600;
+  --note-soft: rgba(196, 162, 0, 0.16);
   --bad: #d63c3c;
   --bad-soft: rgba(214, 60, 60, 0.12);
   --none: #8a8a90;
@@ -108,8 +110,10 @@
 
   --ok: #34c46a;
   --ok-soft: rgba(52, 196, 106, 0.16);
-  --warn: #f0b429;
-  --warn-soft: rgba(240, 180, 41, 0.16);
+  --warn: #f5964a;
+  --warn-soft: rgba(245, 150, 74, 0.16);
+  --note: #e3c94b;
+  --note-soft: rgba(227, 201, 75, 0.16);
   --bad: #f06a6a;
   --bad-soft: rgba(240, 106, 106, 0.16);
   --none: #8d9099;
