@@ -24,15 +24,7 @@ from masw.io.quality.journal import (
     SearchDone,
     experiment_of,
 )
-from masw.io.quality.log import (
-    COHERENCE_FILE,
-    LENGTH_TRIALS,
-    LINE_LOOP_FILE,
-    MUTE_FILE,
-    MUTE_TRIALS,
-    SEGMENTS_FILE,
-    Chooser,
-)
+from masw.io.quality.log import COHERENCE_FILE, LINE_LOOP_FILE, MUTE_FILE, SEGMENTS_FILE, Chooser
 from masw.io.quality.view import number, plural, receivers, span
 from sigpipe.masw.presets.stages import ACTIVE_STAGES, PASSIVE_ACTIVE_STAGES, PASSIVE_STAGES
 
@@ -45,9 +37,6 @@ MUTE_NAMES = {
 }
 # A setting's parameters apart: a tile's lines, a comparison's cell's.
 SEP = " · "
-# A workflow trial's option, as its dispersion images are asked for: what it tried.
-LENGTH_OPTION = "length-"
-MUTE_OPTION = "mute-"
 # The segments' options shown beside the one kept: the next by the picks' span.
 SEGMENTS_NEXT = 2
 
@@ -184,8 +173,8 @@ def tried_tables(
     tables = [
         table
         for table in (
-            _lengths(length_choice(run_folder), spacing, run_folder),
-            _mutes(mutes_tried(run_folder), spacing, run_folder),
+            _lengths(length_choice(run_folder), spacing),
+            _mutes(mutes_tried(run_folder), spacing),
             _segments(segments_tried(run_folder), segment_windows(run_folder)),
             _line(line_tried(run_folder), spacing),
         )
@@ -544,7 +533,7 @@ def _compared(
     return columns, [tuple(one.get(column, "-") for column in columns) for one in said]
 
 
-def _lengths(choice: LengthChoice | None, spacing: float, run_folder: Path) -> TriedTable | None:
+def _lengths(choice: LengthChoice | None, spacing: float) -> TriedTable | None:
     if choice is None or not choice.trials:
         return None
     count = max(len(trial.xmids) for trial in choice.trials)
@@ -558,8 +547,6 @@ def _lengths(choice: LengthChoice | None, spacing: float, run_folder: Path) -> T
             clear=f"{trial.passed} of {len(trial.xmids)}",
             depth=_depth(trial.wavelengths_m),
             kept=trial.length == choice.length,
-            trial=f"{LENGTH_OPTION}{trial.length}",
-            images=(run_folder / LENGTH_TRIALS / str(trial.length)).is_dir(),
         )
         for trial, said in zip(choice.trials, values, strict=True)
     ]
@@ -572,7 +559,7 @@ def _lengths(choice: LengthChoice | None, spacing: float, run_folder: Path) -> T
     )
 
 
-def _mutes(mutes: Sequence[MuteTried], spacing: float, run_folder: Path) -> TriedTable | None:
+def _mutes(mutes: Sequence[MuteTried], spacing: float) -> TriedTable | None:
     if not mutes:
         return None
     count = max(len(mute.verdicts) for mute in mutes)
@@ -588,8 +575,6 @@ def _mutes(mutes: Sequence[MuteTried], spacing: float, run_folder: Path) -> Trie
             clear=f"{mute.passed} of {len(mute.verdicts)}",
             depth=_depth(mute.wavelengths_m),
             kept=mute.kept,
-            trial=f"{MUTE_OPTION}{mute.candidate}",
-            images=(run_folder / MUTE_TRIALS / mute.candidate).is_dir(),
         )
         for mute, said in zip(mutes, values, strict=True)
     ]

@@ -7,8 +7,8 @@ import type { LineWindow } from "./types";
 import { useJson } from "./useJson";
 
 // A run's dispersion images, small, at places along its line: each window nearest the middle of a
-// twelfth of the line, where the autonomous search shows its combinations and the run's trials
-// their options; each image scaled by frequency as PAC draws it, its picked curve over it.
+// twelfth of the line, where the autonomous search shows its combinations; each image scaled by
+// frequency as PAC draws it, its picked curve over it.
 
 const PLACES = 12;
 const W = 220;

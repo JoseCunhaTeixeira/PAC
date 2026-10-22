@@ -1145,7 +1145,8 @@ def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
         ("Option 1", ["none"], "2 of 2", True),
         ("Option 2", [f"80{DASH}1500 m/s · standard mute · signal width 0.05 s"], "1 of 2", False),
     ]
-    assert [one["trial"] for one in mutes["rows"]] == ["mute-none", "mute-standard"]
+    # No dispersion images of the workflow's options: its comparisons are their tables.
+    assert [(one["trial"], one["images"]) for one in mutes["rows"]] == [("", False), ("", False)]
     changes = tables["Changes tried where curves failed"]
     assert changes["columns"] == ["Mute", "Change", "Asked by"]
     line, older = changes["rows"]
@@ -1171,22 +1172,6 @@ def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
         ["2 mutes tried", "Kept: no mute"],
     )
     assert steps["line"]["lines"] == ["2 changes tried", f"Kept: mute 80{DASH}1500 m/s"]
-
-
-def test_a_workflow_options_dispersion_images_are_its_trial_windows(judged: str) -> None:
-    target = OUTPUT_DIR / judged
-    shutil.copytree(target / "xmid_2.50", target / "coherence" / "6" / "xmid_2.50")
-    try:
-        found = client.get(f"/quality/option_images/{judged}/length-6?line=false").json()
-        refused = client.get(f"/quality/option_images/{judged}/length-..?line=false").json()
-    finally:
-        shutil.rmtree(target / "coherence")
-
-    # The length trial's window, as the agent's options show theirs: small, no pick on it.
-    assert [one["xmid"] for one in found] == [2.5]
-    assert len(found[0]["image"]) > 0
-    # A name no trial has: none.
-    assert refused == []
 
 
 def test_the_searchs_one_value_is_no_word_of_the_agents() -> None:

@@ -208,9 +208,11 @@ function Why({ card, tables, reasons }: { card: RunCard; tables: TriedTable[]; r
   const own = reasons.filter((one) => one.by !== "you");
   const yours = reasons.filter((one) => one.by === "you");
   // The run's own dispersion images along its line, unless the option it was made with shows
-  // them (the autonomous search's: its settings are the run's; a workflow trial's are one step).
+  // them (the autonomous search's: its settings are the run's); none for the workflow's, whose
+  // comparisons are their tables.
   const shown = tables.some((table) => table.by === "agent" && table.rows.some((row) => row.kept && row.images));
-  const imaged = !shown && card.stages.some((stage) => stage.key === "dispersion" && stage.done > 0);
+  const imaged =
+    card.made_by !== "workflow" && !shown && card.stages.some((stage) => stage.key === "dispersion" && stage.done > 0);
   return (
     <>
       {tables.map((table, index) => (
