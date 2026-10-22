@@ -219,8 +219,8 @@ interface MetricRow {
   state: "pass" | "warn" | "fail" | null;
 }
 
-// A measure against its limit, its mark.
-const STATE_MARKS = { pass: "✓", warn: "!", fail: "✕" };
+// A measure against its limit, its mark; one that only flags its unit, its colour alone.
+const STATE_MARKS = { pass: "✓", warn: "", fail: "✕" };
 
 /** A check's measures as rows, a measure held between a floor and a ceiling (the acceptance
  * between 20 and 30 %) in one row, its band as its limit; one beyond its limit the cause of the
