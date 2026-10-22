@@ -13,7 +13,7 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any, cast
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from masw.io.quality.files import merged
 from masw.io.quality.journal import (
@@ -24,7 +24,15 @@ from masw.io.quality.journal import (
     SearchDone,
     experiment_of,
 )
-from masw.io.quality.log import COHERENCE_FILE, LINE_LOOP_FILE, MUTE_FILE, SEGMENTS_FILE, Chooser
+from masw.io.quality.log import (
+    COHERENCE_FILE,
+    LENGTH_TRIALS,
+    LINE_LOOP_FILE,
+    MUTE_FILE,
+    MUTE_TRIALS,
+    SEGMENTS_FILE,
+    Chooser,
+)
 from masw.io.quality.view import number, plural, receivers, span
 from sigpipe.masw.presets.stages import ACTIVE_STAGES, PASSIVE_ACTIVE_STAGES, PASSIVE_STAGES
 
@@ -37,6 +45,11 @@ MUTE_NAMES = {
 }
 # A setting's parameters apart: a tile's lines, a comparison's cell's.
 SEP = " · "
+# A workflow trial's option, as its dispersion images are asked for: what it tried.
+LENGTH_OPTION = "length-"
+MUTE_OPTION = "mute-"
+# The segments' options shown beside the one kept: the next by the picks' span.
+SEGMENTS_NEXT = 2
 
 
 def _pipeline_order() -> tuple[str, ...]:
@@ -99,6 +112,8 @@ class SegmentsTried(BaseModel):
 
     segment_s: float
     threshold: float | None = None  # the FK selection's; None: no selection
+    vmin: float | None = None  # the FK selection's band
+    vmax: float | None = None
     wavelength_span: float | None = None  # the picks' longest wavelength over their shortest
     coherence: float | None = None  # the images' along the picks
     kept: bool = False
@@ -113,6 +128,7 @@ class LineTried(BaseModel):
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     change: str = ""  # an older line_loop.json says it in the note alone
+    overrides: dict[str, Any] = Field(default_factory=dict[str, Any])  # the change, as set
     flag: str
     asked_by: int
     xmids: tuple[float, ...] = ()
@@ -168,10 +184,10 @@ def tried_tables(
     tables = [
         table
         for table in (
-            _lengths(length_choice(run_folder), spacing),
-            _mutes(mutes_tried(run_folder)),
-            _segments(segments_tried(run_folder)),
-            _line(line_tried(run_folder)),
+            _lengths(length_choice(run_folder), spacing, run_folder),
+            _mutes(mutes_tried(run_folder), spacing, run_folder),
+            _segments(segments_tried(run_folder), segment_windows(run_folder)),
+            _line(line_tried(run_folder), spacing),
         )
         if table is not None
     ]
@@ -240,7 +256,11 @@ def step_words(
     (the trigger, with the mute it goes with) or without a value."""
     if stage == "trigger" and "muting" in settings:
         return None
-    if stage in ("muting", "trigger"):
+    if stage == "trigger":
+        # Changed alone (the line loop's): a delay of its own, no mute with it.
+        delay = [one.removeprefix("trigger ") for one in _trigger(_stage(settings, "trigger"))]
+        return ("Trigger", tuple(delay)) if delay else None
+    if stage == "muting":
         muting = _stage(settings, "muting")
         if muting.get("method") == "none":
             return "Mute", ("none",)
@@ -431,6 +451,7 @@ class _MuteFile(BaseModel):
 class _SegmentsFile(BaseModel):
     model_config = ConfigDict(frozen=True, extra="ignore")
 
+    windows: tuple[float, ...] = ()
     baseline: SegmentsTried | None = None
     candidates: tuple[SegmentsTried, ...] = ()
     chosen: SegmentsTried | None = None
@@ -469,6 +490,12 @@ def segments_tried(run_folder: Path) -> tuple[SegmentsTried, ...]:
     )
 
 
+def segment_windows(run_folder: Path) -> int:
+    """How many sample windows a passive run's segments trial tried each option on."""
+    path = run_folder / SEGMENTS_FILE
+    return len(_SegmentsFile.model_validate_json(path.read_text()).windows) if path.exists() else 0
+
+
 def line_tried(run_folder: Path) -> tuple[LineTried, ...]:
     """The changes of the line's settings the run's line loop tried, in order."""
     path = run_folder / LINE_LOOP_FILE
@@ -497,44 +524,90 @@ def _depth(wavelengths_m: tuple[float, float] | None) -> str:
     return f"{number(wavelengths_m[1] / 2)} m" if wavelengths_m is not None else ""
 
 
-def _lengths(choice: LengthChoice | None, spacing: float) -> TriedTable | None:
+def _options(rows: Sequence[Tried]) -> tuple[Tried, ...]:
+    """A comparison's options as every one shows them, the autonomous search's too: those kept
+    first, each named by its place ("Option 1") unless it has a name of its own (the line's
+    starting settings)."""
+    named: list[Tried] = []
+    for row in sorted(rows, key=lambda row: not row.kept):
+        place = sum(1 for one in named if one.name.startswith("Option ")) + 1
+        named.append(row if row.name else row.model_copy(update={"name": f"Option {place}"}))
+    return tuple(named)
+
+
+def _compared(
+    options: Sequence[Mapping[str, Any]], spacing: float
+) -> tuple[tuple[str, ...], list[tuple[str, ...]]]:
+    """The options' settings in the card's words: their columns, and each option's values in them."""
+    said = [settings_said(one, spacing) for one in options]
+    columns = _columns(said)
+    return columns, [tuple(one.get(column, "-") for column in columns) for one in said]
+
+
+def _lengths(choice: LengthChoice | None, spacing: float, run_folder: Path) -> TriedTable | None:
     if choice is None or not choice.trials:
         return None
     count = max(len(trial.xmids) for trial in choice.trials)
+    columns, values = _compared(
+        [{"masw": {"length": trial.length}} for trial in choice.trials], spacing
+    )
+    rows = [
+        Tried(
+            name="",
+            values=said,
+            clear=f"{trial.passed} of {len(trial.xmids)}",
+            depth=_depth(trial.wavelengths_m),
+            kept=trial.length == choice.length,
+            trial=f"{LENGTH_OPTION}{trial.length}",
+            images=(run_folder / LENGTH_TRIALS / str(trial.length)).is_dir(),
+        )
+        for trial, said in zip(choice.trials, values, strict=True)
+    ]
     return TriedTable(
         title="Window lengths tried",
         intro=(f"Each on the same {plural(count, 'sample window')}",),
-        rows=tuple(
-            Tried(
-                name=receivers(trial.length, spacing),
-                clear=f"{trial.passed} of {len(trial.xmids)}",
-                depth=_depth(trial.wavelengths_m),
-                kept=trial.length == choice.length,
-            )
-            for trial in choice.trials
-        ),
+        columns=columns,
+        rows=_options(rows),
         by="workflow",
     )
 
 
-def _mutes(mutes: Sequence[MuteTried]) -> TriedTable | None:
+def _mutes(mutes: Sequence[MuteTried], spacing: float, run_folder: Path) -> TriedTable | None:
     if not mutes:
         return None
     count = max(len(mute.verdicts) for mute in mutes)
+    columns, values = _compared(
+        [{"muting": mute.muting or {"method": "none"}} for mute in mutes], spacing
+    )
+    rows = [
+        Tried(
+            name="",
+            values=tuple(
+                _kind(mute, column, value) for column, value in zip(columns, said, strict=True)
+            ),
+            clear=f"{mute.passed} of {len(mute.verdicts)}",
+            depth=_depth(mute.wavelengths_m),
+            kept=mute.kept,
+            trial=f"{MUTE_OPTION}{mute.candidate}",
+            images=(run_folder / MUTE_TRIALS / mute.candidate).is_dir(),
+        )
+        for mute, said in zip(mutes, values, strict=True)
+    ]
     return TriedTable(
         title="Mutes tried",
         intro=(f"Each on the same {plural(count, 'sample window')}",),
-        rows=tuple(
-            Tried(
-                name=mute_name(mute),
-                clear=f"{mute.passed} of {len(mute.verdicts)}",
-                depth=_depth(mute.wavelengths_m),
-                kept=mute.kept,
-            )
-            for mute in mutes
-        ),
+        columns=columns,
+        rows=_options(rows),
         by="workflow",
     )
+
+
+def _kind(mute: MuteTried, column: str, value: str) -> str:
+    """A mute's cell, its kind under its velocities: "80-1500 m/s · standard mute · ..."."""
+    if column != "Mute" or mute.muting is None:
+        return value
+    first, *more = value.split(SEP)
+    return SEP.join((first, f"{MUTE_NAMES.get(mute.candidate, mute.candidate)} mute", *more))
 
 
 def mute_name(mute: MuteTried) -> str:
@@ -548,48 +621,97 @@ def mute_name(mute: MuteTried) -> str:
     return f"{kind} mute"
 
 
-def _segments(segments: Sequence[SegmentsTried]) -> TriedTable | None:
+def _segments(segments: Sequence[SegmentsTried], windows: int) -> TriedTable | None:
+    """The segments a passive run's trial tried: the one kept, the next by the picks' span (the
+    trial's measure), the line's starting settings last."""
     if not segments:
         return None
+    others = sorted(
+        (one for one in segments if not one.kept and not one.own),
+        key=lambda one: (one.wavelength_span or 0.0, one.coherence or 0.0),
+        reverse=True,
+    )
+    shown = [
+        *(one for one in segments if one.kept),
+        *others[:SEGMENTS_NEXT],
+        *(one for one in segments if one.own and not one.kept),
+    ]
+    columns, values = _compared(
+        [
+            {
+                "slicing": {"segment_duration": one.segment_s, "segment_step": one.segment_s},
+                "selection": {"method": "none"}
+                if one.threshold is None
+                else {
+                    "method": "fk",
+                    "threshold": one.threshold,
+                    "vmin": one.vmin,
+                    "vmax": one.vmax,
+                },
+            }
+            for one in shown
+        ],
+        0.0,
+    )
+    tried = plural(len(segments), "combination") + " of segments and selection tried"
+    on = f", each on the same {plural(windows, 'sample window')}" if windows else ""
+    rows = [
+        Tried(
+            name="Starting settings" if one.own else "",
+            values=(
+                *said,
+                number(one.wavelength_span) if one.wavelength_span is not None else "-",
+                number(one.coherence) if one.coherence is not None else "-",
+            ),
+            kept=one.kept,
+        )
+        for one, said in zip(shown, values, strict=True)
+    ]
     return TriedTable(
-        title="Segment lengths tried",
-        intro=("Each on the same sample windows",),
-        columns=("Segments", "Segment selection", "Picks' span", "Coherence"),
-        rows=tuple(
-            Tried(
-                name="Starting settings" if one.own else f"Option {index}",
-                values=(
-                    f"{number(one.segment_s)} s",
-                    "none" if one.threshold is None else f"threshold {number(one.threshold)}",
-                    number(one.wavelength_span) if one.wavelength_span is not None else "-",
-                    number(one.coherence) if one.coherence is not None else "-",
-                ),
-                kept=one.kept,
-            )
-            for index, one in enumerate(segments, start=0 if segments[0].own else 1)
+        title="Segments tried",
+        intro=(
+            tried + on,
+            *(
+                ["Shown: the one kept, the next by the picks' span, the starting settings"]
+                if len(shown) < len(segments)
+                else []
+            ),
         ),
+        columns=(*columns, "Picks' span", "Coherence"),
+        rows=_options(rows),
         by="workflow",
     )
 
 
-def _line(tries: Sequence[LineTried]) -> TriedTable | None:
+def _line(tries: Sequence[LineTried], spacing: float) -> TriedTable | None:
     if not tries:
         return None
+    columns, values = _compared([one.overrides or {"change": one.change} for one in tries], spacing)
+    rows = [
+        Tried(
+            name="",
+            values=(*said, plural(one.asked_by, "window")),
+            clear=f"{one.before} → {one.after} of {len(one.xmids)}",
+            kept=one.kept,
+        )
+        for one, said in zip(tries, values, strict=True)
+    ]
     return TriedTable(
         title="Changes tried where curves failed",
         intro=("Each tried on the whole line, asked by the windows whose curve failed",),
-        columns=("Asked by",),
-        rows=tuple(
-            Tried(
-                name=one.change,
-                values=(plural(one.asked_by, "window"),),
-                clear=f"{one.before} → {one.after} of {len(one.xmids)}",
-                kept=one.kept,
-            )
-            for one in tries
-        ),
+        columns=(*columns, "Asked by"),
+        rows=_options(rows),
         by="workflow",
     )
+
+
+def line_change(one: LineTried, spacing: float) -> str:
+    """A change the line loop tried, in the card's words: "mute 80-1500 m/s"; an older
+    line_loop.json's, as its note says it."""
+    if not one.overrides:
+        return one.change
+    said = settings_said(one.overrides, spacing, every=False)
+    return "; ".join(f"{column.lower()} {value}" for column, value in said.items())
 
 
 def _base(

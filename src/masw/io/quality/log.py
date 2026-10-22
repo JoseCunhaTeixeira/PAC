@@ -23,6 +23,8 @@ COHERENCE_FILE = "coherence.json"
 MUTE_FILE = "mute.json"  # the mute trial's candidates and the one kept
 SEGMENTS_FILE = "segments.json"  # a passive line's segments trial
 LINE_LOOP_FILE = "line_loop.json"  # the changes of the line's settings tried, and kept
+LENGTH_TRIALS = "coherence"  # the length trial's windows, a folder a length
+MUTE_TRIALS = "mute_trials"  # the mute trial's, a folder a mute, its windows in windows/
 # The triggers of a record or window made again for a change of the line's settings (the mute
 # trial's, the line loop's, a redo of the line's): the line's change, not the unit's own.
 LINE_RULES = ("mute trial", "line change")

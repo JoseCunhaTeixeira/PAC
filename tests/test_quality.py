@@ -1077,7 +1077,11 @@ def test_an_assistant_run_card_says_why_its_windows_are_what_they_are(judged: st
     (lengths,) = card["tried"]
     assert (lengths["title"], lengths["by"]) == ("Window lengths tried", "workflow")
     rows = [(row["name"], row["clear"], row["depth"], row["kept"]) for row in lengths["rows"]]
-    assert rows == [("6 receivers (5 m)", "2 of 2", "6 m", True)]
+    assert rows == [("Option 1", "2 of 2", "6 m", True)]
+    assert (lengths["columns"], lengths["rows"][0]["values"]) == (
+        ["Windows"],
+        ["6 receivers (5 m)"],
+    )
     assert settings["band"]["origin"] == "default"
     # A record the checks preprocessed again, said with the records, theirs.
     records = settings["records"]
@@ -1115,7 +1119,7 @@ def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
     }
     # A try an older line_loop.json keeps without its change: the note says it.
     older = {
-        **{key: value for key, value in tried.items() if key != "change"},
+        **{key: value for key, value in tried.items() if key not in ("change", "overrides")},
         "kept": False,
         "note": "Tried for the line, not kept: trigger t0 0.003 s, asked by 90 windows "
         "(G1:shifted_trigger): 2 of 2 trial windows passing G3 against 2, under 2 more.",
@@ -1134,21 +1138,28 @@ def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
         "Mutes tried",
         "Changes tried where curves failed",
     ]
-    mutes = tables["Mutes tried"]["rows"]
-    assert [(one["name"], one["clear"], one["kept"]) for one in mutes] == [
-        ("No mute", "2 of 2", True),
-        (f"Standard mute (80{DASH}1500 m/s)", "1 of 2", False),
+    # As every comparison: the options side by side, the one kept first, each setting a row.
+    mutes = tables["Mutes tried"]
+    assert mutes["columns"] == ["Mute"]
+    assert [(one["name"], one["values"], one["clear"], one["kept"]) for one in mutes["rows"]] == [
+        ("Option 1", ["none"], "2 of 2", True),
+        ("Option 2", [f"80{DASH}1500 m/s · standard mute · signal width 0.05 s"], "1 of 2", False),
     ]
+    assert [one["trial"] for one in mutes["rows"]] == ["mute-none", "mute-standard"]
     changes = tables["Changes tried where curves failed"]
-    assert changes["columns"] == ["Asked by"]
+    assert changes["columns"] == ["Mute", "Change", "Asked by"]
     line, older = changes["rows"]
     assert (line["name"], line["values"], line["clear"], line["kept"]) == (
-        "muting mute 80 to 1500 m/s, width 0.05 s",
-        ["3 windows"],
+        "Option 1",
+        [f"80{DASH}1500 m/s · signal width 0.05 s", "-", "3 windows"],
         "0 → 2 of 2",
         True,
     )
-    assert (older["name"], older["kept"]) == ("trigger t0 0.003 s", False)
+    assert (older["name"], older["values"][1], older["kept"]) == (
+        "Option 2",
+        "trigger t0 0.003 s",
+        False,
+    )
     # And in what was done, with the length trial: each a step, its facts a line each.
     steps = {step["kind"]: step for step in card["history"]}
     assert (steps["length"]["title"], steps["length"]["lines"]) == (
@@ -1159,10 +1170,55 @@ def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
         "Chose the mute",
         ["2 mutes tried", "Kept: no mute"],
     )
-    assert steps["line"]["lines"] == [
-        "2 changes tried",
-        "Kept: muting mute 80 to 1500 m/s, width 0.05 s",
+    assert steps["line"]["lines"] == ["2 changes tried", f"Kept: mute 80{DASH}1500 m/s"]
+
+
+def test_a_workflow_options_dispersion_images_are_its_trial_windows(judged: str) -> None:
+    target = OUTPUT_DIR / judged
+    shutil.copytree(target / "xmid_2.50", target / "coherence" / "6" / "xmid_2.50")
+    try:
+        found = client.get(f"/quality/option_images/{judged}/length-6?line=false").json()
+        refused = client.get(f"/quality/option_images/{judged}/length-..?line=false").json()
+    finally:
+        shutil.rmtree(target / "coherence")
+
+    # The length trial's window, as the agent's options show theirs: small, no pick on it.
+    assert [one["xmid"] for one in found] == [2.5]
+    assert len(found[0]["image"]) > 0
+    # A name no trial has: none.
+    assert refused == []
+
+
+def test_the_searchs_one_value_is_no_word_of_the_agents() -> None:
+    from masw.io.quality.runs import SEARCH_SAME, _reasons  # pyright: ignore[reportPrivateUsage]
+
+    commit = JournalEntry(
+        id="L1",
+        kind="commit",
+        at=datetime.now(UTC),
+        text="",
+        data={
+            "changes": {"masw": {"length": 15}, "whitening": {"method": "onebit_apod"}},
+            "reasons": {"masw length": "the cleanest ridges", "whitening method": SEARCH_SAME},
+        },
+    )
+
+    said = _reasons([commit], [], [], 1.5, 15)
+
+    # Its why on the setting, as code says it; the agent's own words for what it chose alone.
+    assert [(one.setting, one.text, one.by) for one in said] == [
+        ("Windows", "The cleanest ridges", "agent")
     ]
+
+
+def test_a_stage_with_nothing_made_says_no_one() -> None:
+    from masw.io.quality.runs import StageCount, _profiles  # pyright: ignore[reportPrivateUsage]
+
+    stages = [StageCount(key="inversion", done=0, total=4)]
+
+    profiles = _profiles(stages, (), None, "autonomous")
+
+    assert (profiles.value, profiles.origin) == ("none yet", None)
 
 
 def test_a_line_loop_that_kept_no_change_says_so(tmp_path: Path) -> None:
@@ -1178,7 +1234,7 @@ def test_a_line_loop_that_kept_no_change_says_so(tmp_path: Path) -> None:
     }
     (tmp_path / "line_loop.json").write_text(json.dumps({"trials": [tried]}))
 
-    (step,) = _line_tries(tmp_path)
+    (step,) = _line_tries(tmp_path, 1.5)
     assert step.lines == ("1 change tried", "None kept")
 
 
@@ -1941,9 +1997,11 @@ def test_a_search_shows_its_finalists_the_one_it_chose_first(tmp_path: Path) -> 
     )
     defaults = make_preset("active").model_dump(mode="json")
 
-    (table,) = tried_tables(
-        tmp_path / "run", [commit], search_of(study), study, 1.0, defaults, None
-    )
+    searched = search_of(study)
+    (table,) = tried_tables(tmp_path / "run", [commit], searched, study, 1.0, defaults, None)
+
+    # What its combinations did not all share: the window length alone.
+    assert searched is not None and searched.varied == {"masw", "masw length"}
 
     # What the search did, then its finalists side by side, the one it chose first and the line
     # made with, each with how many of its windows a curve passed, how deep, and its images where
@@ -2016,6 +2074,14 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
         "the most windows passing in E1; one every 3 receivers (3 m): given in the user's request",
     )
     assert (settings["band"]["origin"], settings["band"]["why"]) == ("you", USER_REASON)
+    # No default in an autonomous run: its search set what its commit did not change, here the
+    # same in every combination it compared.
+    assert (settings["image_stacking"]["origin"], settings["image_stacking"]["why"]) == (
+        "agent",
+        "the same in every combination the search compared",
+    )
+    assert "default" not in {one["origin"] for one in card["settings"]}
+    assert "default" not in {one["origin"] for one in dispersion["settings"]}
     picking = next(one for one in dispersion["settings"] if one["key"] == "picking")
     assert picking["origin"] == "agent"
     # Its comparison as a table, an option a column with every setting, the one the run applied

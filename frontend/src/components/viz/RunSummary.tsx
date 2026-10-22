@@ -28,6 +28,9 @@ const SEP = " · ";
 // What a comparison's settings mean, on their name's hover, where their name alone does not say.
 const ROW_TIPS: Record<string, string> = {
   "Shots used": "Their distance from each window's middle",
+  "Picks' span": "The picked curve's longest wavelength over its shortest\nMedian over the sample windows",
+  Coherence: "The dispersion image's coherence along the picked curve\nMedian over the sample windows",
+  "Asked by": "The windows whose curve failed and asked for this change",
 };
 
 /** A setting's parameters, a line each, the first as its value. */
@@ -58,7 +61,7 @@ function Tile({ setting }: { setting: Setting }) {
             {line}
           </div>
         ))}
-      <OriginTag origin={setting.origin} />
+      {setting.origin && <OriginTag origin={setting.origin} />}
     </div>
   );
 }
@@ -204,10 +207,10 @@ function Reasons({ title, reasons }: { title: string; reasons: Reason[] }) {
 function Why({ card, tables, reasons }: { card: RunCard; tables: TriedTable[]; reasons: Reason[] }) {
   const own = reasons.filter((one) => one.by !== "you");
   const yours = reasons.filter((one) => one.by === "you");
-  const rows = tables.flatMap((table) => table.rows);
-  // The run's own dispersion images along its line, where no comparison shows its options'.
-  const imaged =
-    !rows.some((row) => row.trial) && card.stages.some((stage) => stage.key === "dispersion" && stage.done > 0);
+  // The run's own dispersion images along its line, unless the option it was made with shows
+  // them (the autonomous search's: its settings are the run's; a workflow trial's are one step).
+  const shown = tables.some((table) => table.by === "agent" && table.rows.some((row) => row.kept && row.images));
+  const imaged = !shown && card.stages.some((stage) => stage.key === "dispersion" && stage.done > 0);
   return (
     <>
       {tables.map((table, index) => (

@@ -135,7 +135,8 @@
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--bg);
-  overflow: hidden;
+  /* More settings than the card is wide: a scroll, never one cut off. */
+  overflow-x: auto;
 }
 
 .viz-tile {
@@ -145,7 +146,7 @@
   align-items: flex-start;
   flex: 1 1 auto;
   min-width: min-content;
-  padding: 8px 10px 9px;
+  padding: 8px 8px 9px;
 }
 
 .viz-tile > :nth-last-child(2) {
@@ -201,7 +202,7 @@
 .viz-tile .viz-origin,
 .viz-step .viz-origin {
   margin-top: auto;
-  padding: 0 7px;
+  padding: 0 5px;
   font-size: 0.66rem;
 }
 
@@ -366,12 +367,12 @@
   text-transform: none;
 }
 
-.viz table.viz-options thead th {
-  white-space: nowrap;
-}
-
+/* An option's name, its badge under it when the column is narrow; a value wraps, never runs
+   into its neighbour. */
+.viz table.viz-options thead th,
 .viz table.viz-options td {
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .viz table.viz-options .kept {
@@ -424,6 +425,7 @@ button.viz-option:active {
 /* The chosen option's badge, beside its name. */
 .viz-chosen {
   display: inline-block;
+  white-space: nowrap;
   margin-left: 6px;
   padding: 0 7px;
   border-radius: 999px;
@@ -445,8 +447,9 @@ button.viz-option:active {
   font-weight: 650;
 }
 
-/* An option's dispersion images: six a row, its twelve windows in two rows; three a row on a
-   narrow screen. */
+/* Dispersion images along the line, a run's own as an option's: six a row, twelve places in two
+   rows; three a row on a narrow screen. */
+.viz-thumbs,
 .viz-option-thumbs {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -455,14 +458,10 @@ button.viz-option:active {
 }
 
 @media (max-width: 700px) {
+  .viz-thumbs,
   .viz-option-thumbs {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-}
-
-.viz-option-thumbs .viz-thumb {
-  max-width: none;
-  min-width: 0;
 }
 
 .viz-thumbs-loading {
@@ -482,19 +481,8 @@ button.viz-option:active {
   font-size: var(--fs-caption);
 }
 
-/* Dispersion images side by side, sharing the row, wrapping when narrow, each with where it is
-   along the line. */
-.viz-thumbs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 8px;
-}
-
+/* A dispersion image, small, with where it is along the line. */
 .viz-thumb {
-  flex: 1 1 0;
-  min-width: 150px;
-  max-width: 260px;
   margin: 0;
 }
 

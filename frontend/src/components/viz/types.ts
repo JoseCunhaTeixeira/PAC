@@ -40,7 +40,7 @@ export interface Setting {
   value: string; // what to read first: "6 m"
   detail: string; // what goes with it: "5 receivers"
   why: string;
-  origin: Origin;
+  origin: Origin | null; // null: nothing made yet, by no one
   /** How the other units differ in it, their scope said ("along the line: …"); "" when alike. */
   spread?: string;
 }

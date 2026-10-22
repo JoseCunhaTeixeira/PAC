@@ -40,7 +40,7 @@ class Setting(BaseModel):
     value: str  # what to read first: "6 m"
     detail: str = ""  # what goes with it: "5 receivers"
     why: str
-    origin: Origin
+    origin: Origin | None  # None: nothing made yet, by no one
     # A unit's, how the line's other units differ in it: their values and on which, or its range
     # over them all; "" when they all ran with the same (quality.done's with_spreads).
     spread: str = ""

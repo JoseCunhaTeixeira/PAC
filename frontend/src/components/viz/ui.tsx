@@ -124,7 +124,7 @@ export function SettingsList({ settings }: { settings: Setting[] }) {
           <dt>{setting.label}</dt>
           <dd>
             <b>{setting.value}</b>
-            <OriginTag origin={setting.origin} />
+            {setting.origin && <OriginTag origin={setting.origin} />}
             {setting.detail
               .split(SEP)
               .filter(Boolean)

@@ -152,9 +152,9 @@ def _capitalized(text: str) -> str:
 
 class _Origins:
     """Where a unit's settings of one log stage come from: its own retries, the line's (a
-    window's; a record's, the line's mute trial; the agent's commits), else the run's (the
-    preset's default, the request, PAC's form). Why, only for its own retries: the line's are
-    the run card's to say."""
+    window's; a record's, the line's mute trial; the agent's commits), else the run's (an
+    autonomous run's search, which sets every one; the preset's default, the request, PAC's
+    form). Why, only for its own retries: the line's are the run card's to say."""
 
     def __init__(
         self, manifest: RunManifest, log: QCLog | None, unit: str, log_stage: str, noun: str
@@ -193,8 +193,16 @@ class _Origins:
         if line is not None:
             return noted(line.notes, stage, self.chooser)[0], ""
         if is_default(self.preset.get(stage), self.defaults.get(stage)):
-            return "default", ""
+            return ("agent" if self.chooser == "agent" else "default"), ""
         return "you", ""
+
+    def untouched(self, stage: str) -> bool:
+        """Whether `stage` ran as the preset has it: neither the unit's retries nor the line
+        changed it, nor the request."""
+        changed = any(stage in stages for _, stages in self.own)
+        line = any(one is not None and stage in one.parameters for one in (self.line, self.trial))
+        same = is_default(self.preset.get(stage), self.defaults.get(stage))
+        return not changed and not line and same
 
     def causes(self, stage: str) -> list[str]:
         """What asked the unit's own retries that changed `stage`, in words, in order."""
@@ -244,7 +252,7 @@ def record_settings(manifest: RunManifest, log: QCLog | None, name: str) -> tupl
         origin, why = origins.of("trigger")
         shifted = muted or before
         # Not muted, the record is left as recorded: its trigger said only when not the preset's.
-        if shifted or origin != "default":
+        if shifted or not origins.untouched("trigger"):
             settings.append(
                 Setting(
                     key="trigger",
@@ -256,8 +264,12 @@ def record_settings(manifest: RunManifest, log: QCLog | None, name: str) -> tupl
                 )
             )
     # A step off by default and left off is not said, as the run card says none.
-    steps = [_said(name, stages, origins) for name in ("muting", "filtering") if name in fields]
-    settings += [one for one in steps if not (one.value == "none" and one.origin == "default")]
+    for name in ("muting", "filtering"):
+        if name not in fields:
+            continue
+        said = _said(name, stages, origins)
+        if not (said.value == "none" and origins.untouched(name)):
+            settings.append(said)
     return tuple(settings)
 
 
@@ -284,7 +296,7 @@ def window_settings(manifest: RunManifest, log: QCLog | None, unit: str) -> tupl
     ]
     for name in names:
         said = _said(name, stages, origins)
-        if not (said.value == "none" and said.origin == "default"):
+        if not (said.value == "none" and origins.untouched(name)):
             settings.append(said)
     return tuple(settings)
 

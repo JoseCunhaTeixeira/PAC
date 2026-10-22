@@ -52,6 +52,7 @@ from masw.io.quality.tried import (
     LengthChoice,
     TriedTable,
     length_choice,
+    line_change,
     line_tried,
     mute_name,
     mutes_tried,
@@ -90,9 +91,15 @@ GIVEN = "given in the user's request"
 REQUESTED = "given in the request: by the user, or chosen by the workflow agent"
 DEFAULT = "the preset's default"
 PAC = "set by the user"
+# An autonomous run's settings its commit did not change: its search's, which sets every one.
+SEARCHED = "chosen in the search"
+SEARCH_SAME = "the same in every combination the search compared"
 # How the autonomous agent's commits give a setting the user gave, in the line's notes.
 USER_REASON = "given by the user"
+# How the workflow's segments trial begins its note on the segments and the selection it kept.
+SEGMENTS_NOTE = "Segments of "
 ALL_RECORDS = "every record, none left out"
+CHECKED_RECORDS = "the signal check kept every record"
 MOST_LISTED = 6  # the windows a step names; more, counted only
 # The keys of the card's settings, by their stage, where not the stage's name.
 _KEYS = {"dispersion": "band", "muting": "mute"}
@@ -235,7 +242,7 @@ def run_card(folder: str) -> RunCard:
     spacing = manifest.profile.receiver_spacing_m
     defaults = make_preset(manifest.preset.mode).model_dump(mode="json")
     settings = (
-        *processing_settings(manifest, log, length_choice(run_folder), run_folder),
+        *processing_settings(manifest, log, length_choice(run_folder), run_folder, search),
         _curves(stages, journal, maker),
         _profiles(stages, journal, log, maker),
     )
@@ -283,11 +290,12 @@ def processing_settings(
     log: QCLog | None,
     choice: LengthChoice | None,
     run_folder: Path | None = None,
+    search: SearchDone | None = None,
 ) -> tuple[Setting, ...]:
     """The run's settings in plain words, in the order its records went through them, each with
     where it comes from and why: its windows, the records used, the shots the windows stack, then
     each step of its method in its order (PAC's pages'); a step off by default and left off is not
-    said."""
+    said. An autonomous run's `search` set every setting its commit did not change."""
     preset: dict[str, Any] = manifest.preset.model_dump(mode="json")
     defaults: dict[str, Any] = make_preset(manifest.preset.mode).model_dump(mode="json")
     line = log.latest(LINE, "phase_shift") if log is not None else None
@@ -295,15 +303,24 @@ def processing_settings(
     notes = line.notes if line is not None else ()
     chooser: Origin = log.chooser if log is not None else "you"
 
-    def origin(stages: Iterable[str], keys: Iterable[str] | None = None) -> tuple[Origin, str]:
+    def varied(stages: Sequence[str], keys: Sequence[str] | None = None) -> bool:
+        """Whether the autonomous run's search compared other values of `stages` (their
+        `keys`, or any)."""
+        paths = stages if keys is None else [f"{stage} {key}" for stage in stages for key in keys]
+        return search is not None and any(path in search.varied for path in paths)
+
+    def origin(stages: Sequence[str], keys: Sequence[str] | None = None) -> tuple[Origin, str]:
         """Where the values of `stages` (their `keys`, or all) come from, when the line's
-        settings did not change them: the preset's default as the units' cards say it, else the
-        request or PAC's form."""
+        settings did not change them: as the preset has them, an autonomous run's search, which
+        sets every one, else the preset's default as the units' cards say it; else the request or
+        PAC's form."""
         same = all(
             _same(preset[stage].get(key), defaults.get(stage, {}).get(key))
             for stage in stages
             for key in (keys if keys is not None else preset[stage])
         )
+        if same and chooser == "agent":
+            return "agent", SEARCHED if varied(stages, keys) else SEARCH_SAME
         if same:
             return "default", DEFAULT
         return "you", given_why(log)
@@ -327,7 +344,7 @@ def processing_settings(
     stepped = rule("masw", "step") or origin(["masw"], ["step"])
     missing = manifest.n_positions - len(manifest.windows)
     reasons = [sized[1]]
-    if stepped[0] != "default":
+    if stepped[1] not in (DEFAULT, SEARCH_SAME):
         reasons.append(f"one every {receivers(step, spacing, length=False)}: {stepped[1]}")
     if missing > 0:
         reasons.append(f"{plural(missing, 'position')} without a shot to stack")
@@ -387,7 +404,8 @@ def processing_settings(
                 why += f"; imaged again: {again}"
         else:
             where, why = rule(name) or origin([name])
-        if value == "none" and where == "default":
+        # A step off and left so: the preset's, or every combination of the search's.
+        if value == "none" and why in (DEFAULT, SEARCH_SAME):
             continue
         settings.append(
             Setting(
@@ -418,6 +436,10 @@ def noted(notes: Iterable[str], name: str, chooser: Origin) -> tuple[Origin, str
         (note for note in notes if note.startswith((f"{name}:", f"{name} "))),
         None,
     )
+    trial = next((note for note in notes if note.startswith(SEGMENTS_NOTE)), None)
+    if note is None and trial is not None and name.split()[0] in ("slicing", "selection"):
+        # The segments trial's, which sets both in one note.
+        return chooser, f"the segments trial kept it: {plain_reason(trial.split(': ', 1)[1])}"
     if note is None:
         return chooser, None
     reason = plain_reason(note.split(": ", 1)[1])
@@ -475,13 +497,17 @@ def _records(manifest: RunManifest, log: QCLog | None) -> Setting:
         said.append(f"preprocessed again: {redone}")
     used = total - len(set(failed) | set(excluded))
     left = total - used
+    # The records the signal check judged: those it used, as those it left out, its own.
+    checked = log is not None and any(
+        log.result(record.name, "preprocessing", "G1") is not None for record in manifest.records
+    )
     return Setting(
         key="records",
         label="Records",
         value=f"{used} of {total}",
         detail=f"{left} left out" if left else "all used",
-        why="; ".join(said) or ALL_RECORDS,
-        origin="checks" if excluded or traces or receivers or redone else "default",
+        why="; ".join(said) or (CHECKED_RECORDS if checked else ALL_RECORDS),
+        origin="checks" if checked or excluded or traces or receivers or redone else "default",
     )
 
 
@@ -747,7 +773,7 @@ def _curves(stages: Iterable[StageCount], journal: Sequence[JournalEntry], maker
         value=f"{picked.done} of {picked.total}",
         detail="windows picked",
         why=f"picked {_BY[maker]}",
-        origin=by if picked.done else "default",
+        origin=by if picked.done else None,
     )
 
 
@@ -782,7 +808,7 @@ def _profiles(
         label="Vs profiles",
         value="none yet",
         why="no window inverted yet",
-        origin="default",
+        origin=None,
     )
 
 
@@ -845,6 +871,9 @@ def _reasons(
                 continue
             name = _SETTING_NAMES.get(key) or _SETTING_NAMES.get(key.split(" ")[0]) or key
             said = plain_reason(str(reason))
+            # The search's one value, said by code as the setting's why: not the agent's words.
+            if said == SEARCH_SAME:
+                continue
             if said.startswith(USER_REASON):
                 stage, _, field = key.partition(" ")
                 value = changes.get(stage)
@@ -1166,7 +1195,7 @@ def _run_history(
             ],
         )
     )
-    steps += _line_tries(run_folder)
+    steps += _line_tries(run_folder, spacing)
     steps += gave("picking")
     picked = done["dispersion"]
     steps.append(
@@ -1231,7 +1260,7 @@ def _trials(run_folder: Path, spacing: float) -> list[Step]:
                 by="workflow",
                 title="Chose the segments",
                 lines=(
-                    f"{plural(len(segments), 'segment length')} tried",
+                    f"{plural(len(segments), 'combination')} of segments and selection tried",
                     f"Kept {number(kept_segments.segment_s)} s"
                     if kept_segments is not None
                     else "None kept",
@@ -1241,12 +1270,12 @@ def _trials(run_folder: Path, spacing: float) -> list[Step]:
     return steps
 
 
-def _line_tries(run_folder: Path) -> list[Step]:
+def _line_tries(run_folder: Path, spacing: float) -> list[Step]:
     """The workflow's changes of the line's settings, asked by the windows whose curve failed."""
     tries = line_tried(run_folder)
     if not tries:
         return []
-    kept = [f"Kept: {one.change}" for one in tries if one.kept] or ["None kept"]
+    kept = [f"Kept: {line_change(one, spacing)}" for one in tries if one.kept] or ["None kept"]
     return [
         Step(
             kind="line",

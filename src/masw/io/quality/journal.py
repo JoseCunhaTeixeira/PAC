@@ -69,6 +69,9 @@ class SearchDone(BaseModel):
     finalists: tuple[SearchRow, ...] = ()
     best: str | None = None
     experiment: str | None = None
+    # The line's settings its combinations did not all share, a stage ("selection") and each of
+    # its keys ("selection threshold"): the others were the same in every one.
+    varied: frozenset[str] = frozenset()
 
 
 class SurveyDone(BaseModel):
@@ -168,9 +171,31 @@ def search_of(study: Path) -> SearchDone | None:
             ),
             best=best,
             experiment=knockout.get("experiment"),
+            varied=_varied([dict(row.get("changes") or {}) for row in rows.values()]),
         )
     except OSError, ValueError, KeyError, TypeError:
         return None
+
+
+def _varied(changes: list[dict[str, Any]]) -> frozenset[str]:
+    """The stages, and their keys ("<stage> <key>"), whose values not every one of `changes`
+    shares (a value left out, as one)."""
+
+    def shown(value: object) -> str:
+        return json.dumps(value, sort_keys=True)
+
+    varied: set[str] = set()
+    for stage in {name for one in changes for name in one}:
+        values = [one.get(stage) for one in changes]
+        if len({shown(value) for value in values}) > 1:
+            varied.add(stage)
+        stages = [
+            cast(dict[str, Any], value) if isinstance(value, dict) else {} for value in values
+        ]
+        for key in {key for one in stages for key in one}:
+            if len({shown(one.get(key)) for one in stages}) > 1:
+                varied.add(f"{stage} {key}")
+    return frozenset(varied)
 
 
 def survey_of(study: Path) -> SurveyDone | None:
