@@ -12,14 +12,16 @@ from functools import partial
 from typing import Any, cast
 
 from masw.io.quality.files import merged, preset_stage
-from masw.io.quality.log import LINE, LINE_RULES, Attempt, QCLog
+from masw.io.quality.log import LINE, LINE_RULES, Attempt, GateResult, QCLog
 from masw.io.quality.runs import is_default, noted
 from masw.io.quality.tried import SEP, settings_said, step_words
 from masw.io.quality.view import (
     CHECK_NAMES,
+    REFUSALS,
     Origin,
     Setting,
     Step,
+    counted,
     flag_text,
     number,
     plural,
@@ -95,7 +97,7 @@ _TRIGGER_WITH_MUTING = datetime(2026, 9, 28, 14, 46, tzinfo=UTC)
 # What asked a stage to run again, other than a check's flag, in words.
 _CAUSES = {
     "initial": "",
-    "backtrack": "after an earlier step ran again",
+    "backtrack": "by the agent",
     "mute trial": "with the mute trial's mute",
     "line change": "with a change of the line's settings",
     "asked": "at the agent's request",
@@ -488,16 +490,19 @@ def attempt_steps(
     spacing: float,
     changes: Changes | None = None,
 ) -> tuple[Step, ...]:
-    """What was done to `unit` at the log's `stages`, an attempt a step in the order they ran:
-    what ran, why it ran again, what it changed (`changes`; by default its processing's steps in
-    the run card's words), what the checks said of it. None when each stage ran once: the card's
-    badges and settings say it all then."""
+    """What was done to `unit` at the log's `stages`, a run a step in the order they ran, those a
+    redo set aside too (the agent's picks and inversions again): what ran, why it ran again,
+    what it changed (`changes`; by default its processing's steps in the run card's words), what
+    the checks said of it. None when each stage ran once: the card's badges and settings say it
+    all then."""
     if log is None:
         return ()
     attempts = sorted(
-        (one for stage in stages for one in log.of(unit, stage)), key=lambda one: one.started_at
+        (one for stage in stages for one in log.runs_of(unit, stage)),
+        key=lambda one: one.started_at,
     )
-    if not any(one.attempt > 1 or one.status == "failed" for one in attempts):
+    again = any(len(log.runs_of(unit, stage)) > 1 for stage in stages)
+    if not again and not any(one.status == "failed" for one in attempts):
         return ()
     steps: list[Step] = []
     last: dict[str, Attempt] = {}
@@ -512,11 +517,7 @@ def attempt_steps(
             )
         if one.status == "failed":
             lines.append(f"Failed: {one.error}" if one.error else "Failed")
-        lines += [
-            f"{_capitalized(CHECK_NAMES.get(gate, gate).removeprefix('the '))}: "
-            f"{_VERDICTS[result.verdict]}"
-            for gate, result in one.results.items()
-        ]
+        lines += [_verdict_line(gate, result) for gate, result in one.results.items()]
         steps.append(
             Step(
                 kind=one.stage,
@@ -529,6 +530,15 @@ def attempt_steps(
         )
         last[one.stage] = one
     return tuple(steps)
+
+
+def _verdict_line(gate: str, result: GateResult) -> str:
+    """A check's verdict on a run, in a line, with what it flagged when it did not pass:
+    "Curve check: flagged (near field)"."""
+    said = f"{_capitalized(CHECK_NAMES.get(gate, gate).removeprefix('the '))}: "
+    said += _VERDICTS[result.verdict]
+    flags = [flag.name for flag in result.flags if flag.name not in REFUSALS]
+    return said + (f" ({counted(flags)})" if result.verdict != "pass" and flags else "")
 
 
 def steps_changed(before: Mapping[str, Any], after: Mapping[str, Any], spacing: float) -> list[str]:

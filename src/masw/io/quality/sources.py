@@ -248,11 +248,9 @@ def _sentences(
         )
     near, far = shot_distances(preset_stage(manifest, "masw"))
     reasons = {
-        "far": f"beyond the farthest shot used, {number(far, 4)} m"
-        if far is not None
-        else "too far",
+        "far": f"farther than {number(far, 4)} m" if far is not None else "too far",
         "near": (
-            f"in the near field, nearer than {number(field, 4)} m to the window"
+            f"nearer than {number(field, 4)} m to the window, in its near field"
             if (field := near_field(log)) is not None
             else f"within {number(near, 4)} m"
         ),
@@ -261,31 +259,13 @@ def _sentences(
         "failed": "failed to preprocess",
         "traces": "left with too few receivers",
     }
-    # In short: how many for each reason; the reasons in full, and the shots named, on hover.
-    short = {
-        "far": "too far",
-        "near": "too near",
-        "inside": "within the window",
-        "excluded": "left out by the signal check",
-        "failed": "failed to preprocess",
-        "traces": "too few receivers",
-    }
-    left_out: list[str] = []
-    detail: list[str] = []
-    for use, reason in reasons.items():
-        names = [shot.name for shot in shots if shot.use == use]
-        if names:
-            listed = f" ({', '.join(names)})" if use in ("excluded", "failed") else ""
-            left_out.append(f"{len(names)} {short[use]}")
-            detail.append(f"{len(names)} {reason}{listed}")
+    left_out = [
+        f"{count} {reason}"
+        for use, reason in reasons.items()
+        if (count := sum(shot.use == use for shot in shots))
+    ]
     if left_out:
-        said.append(
-            Sentence(
-                mark="info",
-                text=f"Shots not used: {', '.join(left_out)}.",
-                detail=f"Shots not used: {', '.join(detail)}.",
-            )
-        )
+        said.append(Sentence(mark="info", text=f"Shots not used: {', '.join(left_out)}."))
     elif not used:
         said.append(Sentence(mark="fail", text="No shot used."))
     return tuple(said)

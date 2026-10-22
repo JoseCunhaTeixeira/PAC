@@ -1004,6 +1004,11 @@ button.viz-option:active {
   color: var(--bad);
 }
 
+/* A measure beyond its limit that flags its unit without rejecting it. */
+.viz table.viz-table tr.flagged td {
+  color: var(--warn);
+}
+
 /* Every table of measures with the same columns: its values under the others'. */
 .viz table.viz-table.viz-measures {
   table-layout: fixed;

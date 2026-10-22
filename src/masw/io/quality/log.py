@@ -141,20 +141,28 @@ class AttemptSummary(BaseModel):
 class QCLog:
     """A run's attempts, each at its current state, in the order they were first logged; every
     state each went through (`history`), where a flag acted on (traces left out) is no longer
-    raised by the attempt's last state; and who chose what they changed (`chooser`)."""
+    raised by the attempt's last state; every run of a unit's stage at its last state (`runs`),
+    those a stage done afresh set aside too (a redo of the agent's starts again at attempt 1);
+    and who chose what they changed (`chooser`)."""
 
     def __init__(
         self,
         attempts: Sequence[Attempt],
         history: Sequence[Attempt] = (),
         chooser: Chooser = "workflow",
+        runs: Sequence[Attempt] | None = None,
     ) -> None:
         self.attempts = tuple(attempts)
         self.history = tuple(history)
         self.chooser: Chooser = chooser
+        self.runs = tuple(self.attempts if runs is None else runs)
 
     def of(self, unit: str, stage: str) -> tuple[Attempt, ...]:
         return tuple(a for a in self.attempts if a.unit == unit and a.stage == stage)
+
+    def runs_of(self, unit: str, stage: str) -> tuple[Attempt, ...]:
+        """Every run of `unit`'s `stage`, in the order they ran, each at its last state."""
+        return tuple(a for a in self.runs if a.unit == unit and a.stage == stage)
 
     def latest(self, unit: str, stage: str) -> Attempt | None:
         own = self.of(unit, stage)
@@ -201,22 +209,43 @@ def summarize(attempt: Attempt) -> AttemptSummary:
 def read_log(run_folder: Path) -> QCLog | None:
     """The run's QC log; None for a run PACo never judged. The attempts as the run stands:
     those of a window's stage done afresh since (sigpipe's `log_entries`: a reset in the log)
-    left out, as are the log's other events."""
+    left out, as are the log's other events; every run, those too."""
     if not (run_folder / LOG_FILE).exists():
         return None
     current: dict[tuple[str, str, int], Attempt] = {}
     history: list[Attempt] = []
     for entry in log_entries(run_folder):
-        if "attempt" not in entry:
-            continue
-        try:
-            attempt = Attempt.model_validate(entry)
-        except ValidationError:
+        if (attempt := _attempt(entry)) is None:
             continue
         current[attempt.unit, attempt.stage, attempt.attempt] = attempt
         history.append(attempt)
     chooser: Chooser = "agent" if is_autonomous(run_folder) else "workflow"
-    return QCLog(list(current.values()), history, chooser)
+    return QCLog(list(current.values()), history, chooser, _runs(run_folder))
+
+
+def _attempt(entry: dict[str, Any]) -> Attempt | None:
+    """A log line of an attempt's, read; None for another event, or a line that does not read."""
+    if "attempt" not in entry:
+        return None
+    try:
+        return Attempt.model_validate(entry)
+    except ValidationError:
+        return None
+
+
+def _runs(run_folder: Path) -> list[Attempt]:
+    """Every run of a unit's stage the log holds, each at its last state, in the order first
+    logged: a run is its stage's start (its unit, stage, attempt and start), its gates' verdicts
+    and notes the lines after it; the runs a reset set aside kept."""
+    runs: dict[tuple[str, str, int, datetime], Attempt] = {}
+    for line in (run_folder / LOG_FILE).read_text().splitlines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(entry, dict) and (attempt := _attempt(cast(dict[str, Any], entry))):
+            runs[attempt.unit, attempt.stage, attempt.attempt, attempt.started_at] = attempt
+    return list(runs.values())
 
 
 def is_autonomous(run_folder: Path) -> bool:

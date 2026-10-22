@@ -111,7 +111,7 @@ function ModelTable({ card }: { card: InversionCard }) {
                 </td>
                 <td className="num">
                   {row.fixed != null ? (
-                    <span className="faint" data-tip={"Fixed\nNot sampled"}>
+                    <span className="faint" data-tip="Not sampled">
                       fixed
                     </span>
                   ) : row.prior ? (

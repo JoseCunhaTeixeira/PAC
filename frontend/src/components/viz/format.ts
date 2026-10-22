@@ -191,12 +191,11 @@ const GATE_METRICS: Record<string, Record<string, [string, string]>> = {
 };
 
 // The inversion's models, as the figures name them.
-/** How the depth informed is defined, as its hovers say it (sigpipe's useful_depth). */
+/** What the depth informed is, as its hovers say it (sigpipe's useful_depth). */
 export const DEPTH_INFORMED_TIP =
-  "Depth informed\nFrom the surface down, to where the kept models' Vs uncertainty " +
-  "U = (P90 − P10) / (2 P50) goes over 25 %\nNot at an interface they only place at depths a " +
-  "little apart: each model's Vs there is its own just above or below it\nBelow it, veiled: " +
-  "the data no longer pin Vs";
+  "From the surface down to where the models' Vs uncertainty goes over 25 %\n" +
+  "The jumps at the layers' interfaces aside\n" +
+  "Deeper, veiled: the data no longer constrain Vs";
 
 export const MODEL_LABELS: Record<string, string> = {
   ensemble: "median of the ensemble",
@@ -259,11 +258,10 @@ export function metricLabel(name: string, gate?: string): string {
   return metricWords(name, gate)[0];
 }
 
-/** What a measure is, on its name's hover: its name, then a line a fact. */
+/** What a measure is, on its name's hover, a line a fact: its name is said beside it. */
 export function metricTip(name: string, gate?: string): string {
   if (name === "depth_informed" || name === "useful_depth") return DEPTH_INFORMED_TIP;
-  const [label, meaning] = metricWords(name, gate);
-  return meaning ? `${label}\n${meaning}` : "";
+  return metricWords(name, gate)[1];
 }
 
 // Shares shown as percentages; a boolean metric (1 or 0) as yes or no.
@@ -335,12 +333,11 @@ export function metricValue(metric: Metric, value: number | null = metric.value)
 // The measures judged by their size whichever their sign: a trigger early or late.
 const SIGNED = new Set(["trigger_error_s", "trigger_shift_s"]);
 
-/** The metric's limit in words: "at most 1.1", "at least 400 m/s", "none" (none allowed),
- * "within ±10 ms"; "no limit" when it is reported only. */
+/** The metric's limit in words: "at most 1.1", "at least 400 m/s", "at most 0", "within
+ * ±10 ms"; "no limit" when it is reported only. */
 export function metricLimit(metric: Metric): string {
   if (metric.threshold == null || metric.bound == null) return "no limit";
   if (BOOLEANS.has(metric.name)) return "not allowed";
-  if (metric.bound === "max" && metric.threshold === 0) return "none";
   const limit = metricValue(metric, metric.threshold);
   if (SIGNED.has(metric.name)) return `within ±${limit}`;
   return `${metric.bound === "max" ? "at most" : "at least"} ${limit}`;
@@ -375,32 +372,32 @@ export const MAKER_LABELS: Record<Maker, string> = {
   autonomous: "Autonomous",
 };
 
-/** What a unit's state means for what comes after it, stage by stage: `full` on its card's
- * badge, `short` on the line's hover and legend. */
+/** What a unit's state led to, stage by stage: `full` on its card's badge, `short` on the
+ * line's hover; none where it led to nothing more than its badge says. */
 export const STATE_MEANINGS: Record<StageKey, Record<Status, { full: string; short: string }>> = {
   records: {
-    pass: { full: "Passed the signal check.\nUsed by its windows.", short: "used by its windows" },
-    warn: { full: "Flagged by the signal check.\nUsed by its windows.", short: "used by its windows, flagged" },
-    fail: { full: "Left out of every window.", short: "left out of every window" },
-    none: { full: "Not checked.", short: "" },
+    pass: { full: "Used by its windows", short: "used by its windows" },
+    warn: { full: "Used by its windows", short: "used by its windows" },
+    fail: { full: "Left out of every window", short: "left out of every window" },
+    none: { full: "", short: "" },
   },
   dispersion: {
-    pass: { full: "Its curve went on to the inversion.", short: "its curve went on to the inversion" },
-    warn: { full: "Flagged.\nIts curve went on to the inversion.", short: "its curve went on to the inversion, flagged" },
-    fail: { full: "Its curve was not inverted.", short: "its curve was not inverted" },
-    none: { full: "No curve.", short: "" },
+    pass: { full: "Its curve went on to the inversion", short: "its curve went on to the inversion" },
+    warn: { full: "Its curve went on to the inversion", short: "its curve went on to the inversion" },
+    fail: { full: "Its curve was not inverted", short: "its curve was not inverted" },
+    none: { full: "", short: "" },
   },
   inversion: {
-    pass: { full: "Passed the model checks.", short: "passed the model checks" },
-    warn: { full: "Flagged by the model checks.", short: "flagged by the model checks" },
-    fail: { full: "Rejected by the model checks.", short: "rejected by the model checks" },
-    none: { full: "Not inverted.", short: "" },
+    pass: { full: "", short: "" },
+    warn: { full: "", short: "" },
+    fail: { full: "", short: "" },
+    none: { full: "", short: "" },
   },
   petro: {
-    pass: { full: "Passed the soil column checks.", short: "passed the soil column checks" },
-    warn: { full: "Flagged by the soil column checks.", short: "flagged by the soil column checks" },
-    fail: { full: "Rejected by the soil column checks.", short: "rejected by the soil column checks" },
-    none: { full: "Not inverted.", short: "" },
+    pass: { full: "", short: "" },
+    warn: { full: "", short: "" },
+    fail: { full: "", short: "" },
+    none: { full: "", short: "" },
   },
 };
 

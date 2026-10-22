@@ -55,7 +55,7 @@ function Tile({ setting }: { setting: Setting }) {
             {line}
           </div>
         ))}
-      <OriginTag origin={setting.origin} tip={false} />
+      <OriginTag origin={setting.origin} />
     </div>
   );
 }
@@ -101,7 +101,7 @@ function Comparison({ folder, table }: { folder: string; table: TriedTable }) {
             <tr>
               <th />
               {table.rows.map((row, index) => (
-                <th key={index} {...cell(index)} data-tip={row.note || undefined}>
+                <th key={index} {...cell(index)}>
                   {imaged ? (
                     <button type="button" className="viz-option">
                       {row.name}
@@ -110,7 +110,7 @@ function Comparison({ folder, table }: { folder: string; table: TriedTable }) {
                     row.name
                   )}
                   {row.kept && (
-                    <span className="viz-chosen" data-tip="The option the line was processed with">
+                    <span className="viz-chosen">
                       Chosen by the {table.by}
                     </span>
                   )}

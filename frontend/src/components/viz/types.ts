@@ -218,6 +218,8 @@ export interface GateView {
   metrics: Metric[];
   /** The curve was picked by hand: the curve's check passes it, the later ones leave it out. */
   by_hand?: boolean;
+  /** The measures that made the check reject the unit; the others beyond their limits flag it. */
+  rejected_by?: string[];
 }
 
 export interface Card {

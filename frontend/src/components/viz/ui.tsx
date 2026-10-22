@@ -25,7 +25,6 @@ import type {
   Step,
   Verdict,
 } from "./types";
-import { useRunMaker } from "./maker";
 import type { SavedFigure } from "./runFigures";
 import "./viz.css";
 
@@ -35,21 +34,14 @@ import "./viz.css";
 
 const MARK_ICONS: Record<Mark, string> = { pass: "✓", warn: "!", fail: "✕", info: "i" };
 const VERDICT_STATUS: Record<Verdict, Status> = { pass: "pass", retry: "warn", reject: "fail" };
-
-// What a badge means, on hover.
-const STATUS_MEANINGS: Record<Status, string> = {
-  pass: "Passed every check.",
-  warn: "Kept, but flagged: worth a look.",
-  fail: "Rejected by a check.",
-  none: "No check judged it.",
-};
-const STATUS_TITLES: Record<Status, string> = { pass: "Passed", warn: "Flagged", fail: "Rejected", none: "Not judged" };
 // A check's verdict, as its badge says it.
 const VERDICT_WORDS: Record<Verdict, string> = { pass: "passed", retry: "flagged", reject: "rejected" };
+// A setting's parameters apart, as the run card's tiles say them: a line each.
+const SEP = " · ";
 
 export function StatusBadge({ status, label, meaning }: { status: Status; label?: string; meaning?: string }) {
   return (
-    <span className={`viz-badge ${status}`} data-tip={`${STATUS_TITLES[status]}\n${meaning ?? STATUS_MEANINGS[status]}`}>
+    <span className={`viz-badge ${status}`} data-tip={meaning || undefined}>
       {label ?? STATUS_LABELS[status]}
     </span>
   );
@@ -75,7 +67,7 @@ export function PartBadge({ part }: { part: { label: string; state: PartState } 
     part.state === "none" && part.label === "curve" ? "no curve" : `${part.label} ${PART_WORDS[part.state]}`;
   const why = part.state === "hand" ? "The user's curve, passed as it is" : (PART_GATES[part.label] ?? "");
   return (
-    <span className={`viz-badge ${part.state}`} data-tip={`${capitalized(said)}\n${why}`}>
+    <span className={`viz-badge ${part.state}`} data-tip={why || undefined}>
       {said}
     </span>
   );
@@ -88,7 +80,7 @@ export function GateBadge({ gate }: { gate: GateView }) {
     return (
       <span
         className={`viz-badge ${passed ? "hand" : "none"}`}
-        data-tip={passed ? "Picked by hand\nPassed as it is" : "Not checked\nIts curve was picked by hand"}
+        data-tip={passed ? "Picked by hand: passed as it is" : "Its curve was picked by hand"}
       >
         {passed ? "by hand" : "not checked"}
       </span>
@@ -96,7 +88,7 @@ export function GateBadge({ gate }: { gate: GateView }) {
   }
   if (gate.verdict === null) {
     return (
-      <span className="viz-badge none" data-tip={"Measured\nAgainst the agent's limits, not judged: made by hand"}>
+      <span className="viz-badge none" data-tip="Against the agent's limits, not judged: the run was made by hand">
         measured
       </span>
     );
@@ -104,20 +96,11 @@ export function GateBadge({ gate }: { gate: GateView }) {
   return <span className={`viz-badge ${VERDICT_STATUS[gate.verdict]}`}>{VERDICT_WORDS[gate.verdict]}</span>;
 }
 
-/** A sentence's whole, as a tooltip: what it found in bold, then why it matters and what to do,
- * a bullet each ("finding: consequence. Advice." -> finding / consequence / advice). */
-function detailTip(detail: string): string {
-  const [found, ...rest] = detail.split(": ");
-  const after = rest.join(": ");
-  if (!after) return detail;
-  return [found, ...after.split(/(?<=\.) (?=[A-Z])|; /).map((part) => capitalized(part.trim()))].join("\n");
-}
-
 export function Sentences({ sentences }: { sentences: Sentence[] }) {
   return (
     <ul className="viz-sentences">
       {sentences.map((sentence, i) => (
-        <li key={i} data-tip={sentence.detail ? detailTip(sentence.detail) : undefined}>
+        <li key={i} data-tip={sentence.detail || undefined}>
           <span className={`viz-mark ${sentence.mark}`}>{MARK_ICONS[sentence.mark]}</span>
           <span>{sentence.text}</span>
         </li>
@@ -126,33 +109,10 @@ export function Sentences({ sentences }: { sentences: Sentence[] }) {
   );
 }
 
-// Where a setting came from, on hover; on a workflow run, a value of the request the assistant
-// writes, yours or its own.
-const ORIGIN_MEANINGS: Record<Origin, string> = {
-  you: "Yours: given in your request, or set by hand in PAC.",
-  workflow: "Chosen by the agent, by its rules on your data.",
-  agent: "Chosen by the agent, comparing the dispersion images with its vision.",
-  checks: "Decided by the agent's quality checks.",
-  default: "PAC's default.",
-};
-const REQUESTED = "Given in the request: by you, or chosen by the agent; or set by hand in PAC.";
-
-/** Who set a setting, a badge; what that means on its hover, unless `tip` is off. */
-export function OriginTag({ origin, tip = true }: { origin: Origin; tip?: boolean }) {
-  const maker = useRunMaker();
-  const meaning = origin === "you" && maker === "workflow" ? REQUESTED : ORIGIN_MEANINGS[origin];
-  return (
-    <span
-      className={`viz-origin ${origin}`}
-      data-tip={tip ? `${ORIGIN_LABELS[origin]}\n${meaning}` : undefined}
-    >
-      {ORIGIN_LABELS[origin]}
-    </span>
-  );
+/** Who set a setting, a tag. */
+export function OriginTag({ origin }: { origin: Origin }) {
+  return <span className={`viz-origin ${origin}`}>{ORIGIN_LABELS[origin]}</span>;
 }
-
-// A setting's parameters apart, as the run card's tiles say them: a line each.
-const SEP = " · ";
 
 /** Settings as a definition list: each its value and who set it, its other parameters a line
  * each, why when its unit's own, then how the line's other units differ in it. */
@@ -254,13 +214,20 @@ interface MetricRow {
   tip: string;
   value: string;
   limit: string;
-  judged: boolean;
-  passed: boolean;
+  /** Against its limit: within it, beyond it and flagging the unit, or the cause of its
+   * rejection; null when reported only, or not measured. */
+  state: "pass" | "warn" | "fail" | null;
 }
 
+// A measure against its limit, its mark.
+const STATE_MARKS = { pass: "✓", warn: "!", fail: "✕" };
+
 /** A check's measures as rows, a measure held between a floor and a ceiling (the acceptance
- * between 20 and 30 %) in one row, its band as its limit. */
-function metricRows(gate: string, metrics: Metric[]): MetricRow[] {
+ * between 20 and 30 %) in one row, its band as its limit; one beyond its limit the cause of the
+ * check's rejection when `rejected` names it, else a flag. */
+function metricRows(gate: string, metrics: Metric[], rejected: string[]): MetricRow[] {
+  const state = (judged: boolean, passed: boolean, name: string): MetricRow["state"] =>
+    !judged ? null : passed ? "pass" : rejected.includes(name) ? "fail" : "warn";
   const rows: MetricRow[] = [];
   const merged = new Set<number>();
   metrics.forEach((metric, i) => {
@@ -286,8 +253,7 @@ function metricRows(gate: string, metrics: Metric[]): MetricRow[] {
         tip,
         value: metricValue(metric),
         limit: band(low, high),
-        judged: measured(metric),
-        passed: low.passed && high.passed,
+        state: state(measured(metric), low.passed && high.passed, metric.name),
       });
       return;
     }
@@ -296,8 +262,7 @@ function metricRows(gate: string, metrics: Metric[]): MetricRow[] {
       tip,
       value: metricValue(metric),
       limit: metricLimit(metric),
-      judged: metric.threshold != null && metric.bound != null && measured(metric),
-      passed: metric.passed,
+      state: state(metric.threshold != null && metric.bound != null && measured(metric), metric.passed, metric.name),
     });
   });
   return rows;
@@ -324,8 +289,18 @@ function byObject(metrics: Metric[]): [string, Metric[]][] {
 
 /** Measures against their limits: each its name, what it is on the name's hover, its value
  * and its limit. */
-function MetricTable({ gate, metrics, title }: { gate: string; metrics: Metric[]; title?: string }) {
-  const rows = metricRows(gate, metrics);
+function MetricTable({
+  gate,
+  metrics,
+  rejected,
+  title,
+}: {
+  gate: string;
+  metrics: Metric[];
+  rejected: string[];
+  title?: string;
+}) {
+  const rows = metricRows(gate, metrics, rejected);
   // The same columns in every table, their values aligned from one to the next.
   return (
     <div className="viz-table-wrap">
@@ -344,14 +319,14 @@ function MetricTable({ gate, metrics, title }: { gate: string; metrics: Metric[]
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className={row.judged && !row.passed ? "failed" : undefined}>
+            <tr key={i} className={row.state === "fail" ? "failed" : row.state === "warn" ? "flagged" : undefined}>
               <td>
                 <span className={row.tip ? "viz-term" : undefined} data-tip={row.tip || undefined}>
                   {row.label}
                 </span>
               </td>
               <td className="num">
-                {row.value} {row.judged ? (row.passed ? "✓" : "✕") : ""}
+                {row.value} {row.state ? STATE_MARKS[row.state] : ""}
               </td>
               <td className="num">{row.limit}</td>
             </tr>
@@ -394,6 +369,7 @@ export function GateTables({ gates }: { gates: GateView[] }) {
                     key={of}
                     gate={gate.gate}
                     metrics={metrics}
+                    rejected={gate.rejected_by ?? []}
                     title={objects.length > 1 ? objectTitle(gate.gate, of) : undefined}
                   />
                 ))

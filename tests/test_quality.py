@@ -9,7 +9,7 @@ import os
 import shutil
 import time
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -24,11 +24,11 @@ from masw.io.quality.dispersion import curve_metrics
 from masw.io.quality.done import in_common, record_settings, records_in_common
 from masw.io.quality.files import read_manifest
 from masw.io.quality.journal import JournalEntry, journal_of, search_of, study_of
-from masw.io.quality.log import LINE, Attempt, QCLog
+from masw.io.quality.log import LINE, Attempt, GateResult, QCLog
 from masw.io.quality.records import before_muting, signal_metrics, thresholds_of
 from masw.io.quality.runs import USER_REASON, processing_settings
 from masw.io.quality.tried import tried_tables
-from masw.io.quality.view import DASH, Setting
+from masw.io.quality.view import DASH, Setting, rejected_by
 from sigpipe.base import (
     Coordinate,
     DispersionCurve,
@@ -236,12 +236,11 @@ def test_a_window_says_why_it_leaves_shots_out(run: str) -> None:
     assert shots["1.mseed"]["why"] == "left out of every window by the signal check"
     assert shots["2.mseed"]["use"] == "far"
     assert shots["2.mseed"]["why"] == "10.5 m from its middle: beyond the farthest shot used, 10 m"
-    # In short, the reasons in full and the shots named on hover.
-    assert _texts(sources) == ["Shots not used: 1 too far, 1 left out by the signal check."]
-    assert sources["sentences"][0]["detail"] == (
-        "Shots not used: 1 beyond the farthest shot used, 10 m, 1 left out by the signal check "
-        "(1.mseed)."
-    )
+    # Each reason in full, in its sentence: no hover to say it again.
+    assert _texts(sources) == [
+        "Shots not used: 1 farther than 10 m, 1 left out by the signal check."
+    ]
+    assert sources["sentences"][0]["detail"] == ""
     card = client.get(f"/quality/run/{folder}").json()
     reach = next(one for one in card["settings"] if one["key"] == "reach")
     assert reach["value"] == "up to 10 m"
@@ -440,8 +439,9 @@ def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:
     assert cells[8.5]["status"] == "none" and cells[8.5]["value"] is None
     # A curve picked by hand is the user's: passed as it is, said so, nothing more.
     assert cells[2.5]["status"] == "pass" and cells[2.5]["value"] > 0
-    assert cells[2.5]["hover"][:3] == ["xmid 2.5 m", "Curve: by hand", "1 mode picked: M0"]
-    assert cells[2.5]["hover"][3].startswith("M0: ") and cells[8.5]["hover"][1] == "No curve"
+    assert cells[2.5]["hover"][:2] == ["xmid 2.5 m", "Curve: by hand"]
+    assert cells[2.5]["hover"][2].startswith("M0: ") and cells[8.5]["hover"][1] == "No curve"
+    assert cells[2.5]["hover"][3].startswith("λmax / 2 = ")
     # Its modes, a dot each under its cell; none without a curve.
     assert cells[2.5]["modes"] == ["M0"] and cells[8.5]["modes"] == []
     # No image checked: each cell its curve alone, by hand or none, as its legend says.
@@ -742,6 +742,42 @@ def test_a_pac_petrophysical_inversion_shows_its_soil_column_and_fit(run: str) -
     assert card["curve"]["label"] == "M0" and len(card["curve"]["predicted_fs"]) > 0
     assert card["gates"][0]["gate"] == "G7" and card["gates"][0]["verdict"] is None
     assert any(text.startswith("Soil column, top down: ") for text in _texts(card))
+
+
+def test_a_measure_is_a_rejections_cause_only_when_the_check_acted_on_it() -> None:
+    # Left out for its SNR; its trigger off too, kept as information: the SNR rejected the
+    # record, the trigger only flags it.
+    record = GateResult.model_validate(
+        _result(
+            "G1",
+            "1.mseed",
+            "reject",
+            [_metric("snr_db", 2.6, 6.0, "min"), _metric("trigger_error_s", -0.017, 0.01, "max")],
+            [
+                _flag("low_snr", "Median SNR 2.6 dB", "preprocessing", {"kind": "exclude_record"}),
+                _flag("shifted_trigger", "Trigger off", "preprocessing", {"kind": "keep"}),
+            ],
+        )
+    )
+    assert rejected_by(record) == ("snr_db",)
+    # A retry refused once the budget was spent: the measure of the flag that asked it.
+    curve = GateResult.model_validate(
+        _result(
+            "G3",
+            "xmid_2.50",
+            "reject",
+            [_metric("on_data", 0.5, 0.6, "min"), _metric("near_offset", 0.75, 28.5, "min")],
+            [
+                _flag("on_data", "Only 50 %", "picking", {"kind": "override"}),
+                _flag("near_field", "The nearest shot", "phase_shift", {"kind": "keep"}),
+                _flag("budget_spent", "No retry left", "picking", {"kind": "reject"}),
+            ],
+        )
+    )
+    assert rejected_by(curve) == ("on_data",)
+    # Passed or flagged, no measure rejected it.
+    passed = record.model_copy(update={"verdict": "pass"})
+    assert rejected_by(passed) == () and rejected_by(None) == ()
 
 
 def test_an_unknown_folder_is_not_found() -> None:
@@ -1075,7 +1111,10 @@ def test_an_assistant_run_shows_g1_and_what_it_redid(judged: str) -> None:
     assert card["verdict"]["text"] == "Passed the signal check."
     # What was done, a step each: its first run flagged, its second asked by the check.
     first_step, again = card["steps"]
-    assert (first_step["title"], first_step["lines"]) == ("Preprocessed", ["Signal check: flagged"])
+    assert (first_step["title"], first_step["lines"]) == (
+        "Preprocessed",
+        ["Signal check: flagged (trigger off)"],
+    )
     assert (again["title"], again["by"]) == ("Preprocessed again", "checks")
     assert again["lines"] == [
         "Asked by the signal check: trigger off",
@@ -1117,6 +1156,40 @@ def test_an_assistant_run_shows_g2_g3_g4(judged: str) -> None:
         {"label": "curve", "state": "pass"},
     ]
     assert card["steps"] == []  # each stage ran once
+
+
+def test_a_window_the_agent_picked_again_says_each_pick(judged: str) -> None:
+    folder = f"{judged}-repicked"
+    shutil.copytree(OUTPUT_DIR / judged, OUTPUT_DIR / folder)
+    # The agent's pick again: its stage done afresh (a reset), the new pick attempt 1 again.
+    later = (datetime.now(UTC) + timedelta(seconds=5)).isoformat()
+    g3 = _result("G3", "xmid_2.50", "pass", [_metric("sharpness", 1.2, 0.8, "min")], [])
+    reset = {"event": "reset", "unit": "xmid_2.50", "stages": ["picking"], "at": later}
+    again = _attempt(
+        "xmid_2.50",
+        "picking",
+        1,
+        "backtrack",
+        {"G3": g3},
+        {"threshold": 0.35, "wavelength_step": 0.6},
+        at=later,
+    )
+    with (OUTPUT_DIR / folder / "qc_log.jsonl").open("a") as log:
+        log.write(f"{json.dumps(reset)}\n{again}\n")
+
+    card = client.get(f"/quality/dispersion/card/{folder}/2.5").json()
+
+    # Every pick, the one set aside too: what each changed and what the check said.
+    assert [step["title"] for step in card["steps"]] == [
+        "Dispersion image made",
+        "Curve picked",
+        "Curve picked again",
+    ]
+    assert card["steps"][2]["lines"] == [
+        "By the agent",
+        "Resampling: every 0.6 m of wavelength",
+        "Curve check: passed",
+    ]
 
 
 def test_each_stage_shows_the_check_over_its_line(judged: str) -> None:
@@ -1216,7 +1289,10 @@ def test_an_assistant_run_shows_g5_and_what_each_attempt_changed(judged: str) ->
     )
     # What was done, a step each: the retry's change and what asked it.
     retried, passed = card["steps"]
-    assert (retried["title"], retried["lines"]) == ("Inverted", ["Model check: flagged"])
+    assert (retried["title"], retried["lines"]) == (
+        "Inverted",
+        ["Model check: flagged (chains not converged)"],
+    )
     assert passed["title"] == "Inverted again" and passed["lines"][:2] == [
         "Asked by the model check: chains not converged",
         "Sampling: 2000 iterations, was 1000",
@@ -1359,7 +1435,7 @@ def test_a_receiver_the_line_left_out_is_the_windows_and_near_shots_the_near_fie
         "Its receiver at 3 m is left out, as from every window: too weak or too loud in most of "
         "the line's records." in texts
     )
-    assert "Shots not used: 1 too near." in texts
+    assert "Shots not used: 1 nearer than 3 m to the window, in its near field." in texts
     card = client.get(f"/quality/run/{folder}").json()
     settings = {one["key"]: one for one in card["settings"]}
     assert (

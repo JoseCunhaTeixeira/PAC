@@ -49,16 +49,7 @@ export function StageHead({ overview, error }: { overview: Overview | null; erro
   if (!overview) return <Skeleton height={54} />;
   return (
     <div className="viz-stage-head">
-      <p
-        className="viz-summary"
-        data-tip={
-          !overview.paco && overview.cells.length > 0
-            ? "By hand\nMeasured against the agent's limits, not judged"
-            : undefined
-        }
-      >
-        {overview.summary}
-      </p>
+      <p className="viz-summary">{overview.summary}</p>
       <GateTables gates={overview.gates ?? []} />
     </div>
   );

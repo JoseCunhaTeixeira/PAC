@@ -182,18 +182,11 @@ def dispersion_overview(folder: str) -> Overview:
             hover.append(_part_line("Image", image, IMAGE_STATES, g2))
         curve_states = CURVE_STATES if log is not None else MEASURED_CURVE_STATES
         hover.append(_part_line("Curve", picks, curve_states, g3, g4))
-        if modes:
-            hover.append(f"{plural(len(modes), 'mode')} picked: {', '.join(modes)}")
         if stats is not None:
-            hover.append(
-                f"{stats.label}: {stats.n_points} points, {span(*stats.band_hz, 'Hz')}, "
-                f"λ {span(*stats.wavelength_m, 'm')}"
-                + (
-                    f", uncertainty {stats.uncertainty:.0%}"
-                    if stats.uncertainty is not None
-                    else ""
-                )
-            )
+            hover.append(f"{stats.label}: {stats.n_points} points, {span(*stats.band_hz, 'Hz')}")
+            hover.append(f"λmax / 2 = {number(stats.wavelength_m[1] / 2)} m")
+        if len(modes) > 1:
+            hover.append(f"Also picked: {', '.join(modes[1:])}")
         cells.append(
             Cell(
                 key=unit,
@@ -479,7 +472,7 @@ _PICKING: dict[str, tuple[str, Callable[[Any], str]]] = {
         "Longest wavelength searched",
         lambda value: "any" if value is None else f"{number(value)} window lengths",
     ),
-    "guide": ("Guided", lambda value: "by the neighbours' median curve" if value else "no"),
+    "guide": ("Guided", lambda value: f"along a curve of {len(value)} points" if value else "no"),
 }
 
 
@@ -593,12 +586,9 @@ def _picks(
     return said
 
 
-def _picking_setting(
-    log: QCLog | None, unit: str, picked_by: Origin | None, assistant: bool
-) -> Setting:
-    """Who picked window `unit`'s curves: by hand or PAC's automatic picking (the Dispersion
-    picking page), or the agent's picker along M0's ridge (`assistant`), picked again when the
-    curve check asked it."""
+def _picking_setting(log: QCLog | None, picked_by: Origin | None, assistant: bool) -> Setting:
+    """Who picked a window's curves: by hand or PAC's automatic picking (the Dispersion picking
+    page), or the agent's picker along M0's ridge (`assistant`)."""
     if picked_by is None:
         return Setting(key="picking", label="Picking", value="none", why="", origin="default")
     if picked_by == "hand" or log is None or not assistant:
@@ -610,17 +600,13 @@ def _picking_setting(
             why="",
             origin="you",
         )
-    again = [one for one in log.of(unit, "picking") if one.attempt > 1]
-    asked = Counter(flag_text(one.triggered_by.partition(":")[2]) for one in again)
+    # Each time it was picked again, in its card's steps.
     return Setting(
         key="picking",
         label="Picking",
         value="automatic",
         detail="M0 tracked along its ridge",
-        why=f"picked {plural(len(again) + 1, 'time')}, asked again by the curve check: "
-        + ", ".join(f"{count} {name}" if count > 1 else name for name, count in asked.most_common())
-        if again
-        else "",
+        why="",
         origin=log.chooser,
     )
 
@@ -666,7 +652,6 @@ def _line_settings(
             *window_settings(manifest, log, unit),
             _picking_setting(
                 log,
-                unit,
                 pick_origin(run_folder / unit, log, _modes(run_folder / unit)),
                 assistant_picked(run_folder / unit, log),
             ),

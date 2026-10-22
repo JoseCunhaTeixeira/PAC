@@ -172,7 +172,7 @@ export function PetroPanel({
               icon={<LayersIcon size={17} />}
               title="Shear modulus and Vs sections"
               plots
-              hint={"From the soil columns (Hertz-Mindlin)\nBefore the fit to the picked curves"}
+              hint="Computed from the soil columns (Hertz-Mindlin)"
               aside={<SmoothingSwitch on={rockSmoothing} onChange={setRockSmoothing} />}
             >
               {failed(modulus) && <ErrorBox message={`Shear modulus not loaded: ${modulus.error}`} />}

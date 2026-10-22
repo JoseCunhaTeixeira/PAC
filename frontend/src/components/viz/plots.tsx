@@ -162,7 +162,7 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
             {uncertain.length > 0 && (
               <span
                 style={{ color: uncertaintyColour }}
-                data-tip={"Vs uncertainty\nU = (P90 − P10) / (2 P50) of the kept models"}
+                data-tip="U = (P90 − P10) / (2 P50) of the kept models"
               >
                 <i />
                 uncertainty
@@ -172,7 +172,7 @@ export function VsProfilePlot({ profile }: { profile: VsProfile }) {
               <span
                 style={{ color: interfaceColour }}
                 data-tip={
-                  "Interfaces\nThe share of the kept models placing a layer boundary in each " +
+                  "The share of the kept models placing a layer boundary in each " +
                   `${profile.interface_dz} m\nA peak: where they agree one lies; low and flat: anywhere`
                 }
               >

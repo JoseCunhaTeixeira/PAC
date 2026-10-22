@@ -124,7 +124,8 @@ class GateView(BaseModel):
     """What one gate said of the unit, or for a run PAC made, the same measures against the
     gate's limits (verdict None). `by_hand`: the unit's curve was picked by hand, which the
     curve's check passes as it is (verdict pass) and the checks after it leave out (verdict
-    None)."""
+    None). `rejected_by`: the measures that made it reject the unit; the others beyond their
+    limits only flag it."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -132,6 +133,7 @@ class GateView(BaseModel):
     verdict: Verdict | None
     metrics: tuple[Metric, ...]
     by_hand: bool = False
+    rejected_by: tuple[str, ...] = ()
 
 
 class Overview(BaseModel):
@@ -192,14 +194,78 @@ def measured_status(metrics: Iterable[Metric]) -> Status:
 
 
 def gate_view(gate: str, result: GateResult | None, measured: Iterable[Metric] = ()) -> GateView:
-    """The gate's verdict and metrics; without a result, the unit's own measures; each saying
-    what it describes and what it covers (said generally for a log from before they did)."""
+    """The gate's verdict and metrics, and those that made it reject the unit; without a result,
+    the unit's own measures; each saying what it describes (said for a log from before they
+    did)."""
     metrics = result.metrics if result is not None else tuple(measured)
     return GateView(
         gate=gate,
         verdict=result.verdict if result is not None else None,
         metrics=tuple(covered(gate, metric) for metric in metrics),
+        rejected_by=rejected_by(result),
     )
+
+
+# The measures a flag judges, where they are named apart: a flag named as its measure judges it.
+FLAG_METRICS: dict[str, tuple[str, ...]] = {
+    "low_snr": ("snr_db",),
+    "low_coherence": ("lateral_coherence",),
+    "no_usable_band": ("usable_band_hz",),
+    "inconsistent_trigger": ("trigger_scatter_s",),
+    "shifted_trigger": ("trigger_error_s", "trigger_shift_s"),
+    "no_coherent_energy": ("coherent_columns",),
+    "weak_coherence": ("coherent_columns",),
+    "noisy_correlations": ("snr_db", "usable_band_hz", "lateral_coherence"),
+    "few_segments_kept": ("fk_kept",),
+    "aliasing": ("competing_ridges", "aliased_ridges"),
+    "narrower_than_usable": ("band_share_of_usable",),
+    "air_wave": ("air_wave_share",),
+    "too_few_points": ("curve_points", "n_points"),
+    "no_ridge": ("n_points",),
+    "mode_jump": ("max_jump",),
+    "narrow_span": ("wavelength_ratio",),
+    "aliasing_zone": ("aliased_points",),
+    "beyond_reach": ("beyond_reach_points",),
+    "inverse_dispersion": ("trend",),
+    "near_field": ("near_offset",),
+    "outlier": ("neighbour_misfit", "misfit"),
+    "shared_change": ("neighbour_misfit", "misfit"),
+    "model_change": ("neighbour_misfit", "misfit"),
+    "non_unique": ("neighbour_misfit", "misfit"),
+    "no_neighbours": ("sides_compared",),
+    "petro_change": ("neighbour_misfit", "misfit", "water_table_jump"),
+    "petro_outlier": ("neighbour_misfit", "misfit", "water_table_jump"),
+    "not_converged": ("rhat", "ess", "samples_per_chain"),
+    "few_samples": ("ess", "samples_per_chain"),
+    "multimodal": ("rhat",),
+    "uninformed": ("depth_informed", "useful_depth"),
+    "too_deep": ("depth_informed", "useful_depth"),
+    "underfit": ("misfit_short", "misfit_middle", "misfit_long", "misfit_layered"),
+    "smoothing_misfit": ("misfit_short", "misfit_middle", "misfit_long"),
+    "no_mode": ("misfit_layered",),
+    "misfit": ("misfit_short", "misfit_middle", "misfit_long"),
+}
+
+
+def rejected_by(result: GateResult | None) -> tuple[str, ...]:
+    """The measures beyond their limits that made `result`'s check reject its unit: those the
+    flags it acted on judge (a flag kept is information, traces left out leave the unit, a
+    refused retry is said with the flags that asked it); every one beyond its limit for a flag
+    that judges none of them. None unless it rejected the unit."""
+    if result is None or result.verdict != "reject":
+        return ()
+    beyond = [
+        metric.name
+        for metric in result.metrics
+        if metric.threshold is not None and not metric.passed
+    ]
+    names: list[str] = []
+    for flag in result.flags:
+        if flag.action.kind in ("keep", "exclude_traces") or flag.name in REFUSALS:
+            continue
+        judged = FLAG_METRICS.get(flag.name, (flag.name,))
+        names += [name for name in beyond if name in judged] or beyond
+    return tuple(dict.fromkeys(names))
 
 
 def line_gate(log: QCLog | None, stage: str, gate: str) -> tuple[GateView, ...]:
@@ -397,20 +463,16 @@ def counted(names: Iterable[str], most: int = 4) -> str:
     return ", ".join(said) + (", …" if len(counts) > most else "")
 
 
-def rejecting(flag: Flag) -> bool:
-    """A flag that rejects its unit: nothing fixes it, or it says so."""
-    return flag.action.kind == "reject" or not flag.fixable
-
-
 def kept(flag: Flag) -> bool:
     """A flag that is information, kept with the result: a warning."""
     return flag.action.kind == "keep"
 
 
 def warnings(*results: GateResult | None) -> tuple[Sentence, ...]:
-    """The flags the gates kept with the result (reported, not acted on), as warnings."""
+    """The flags the gates kept with the result (reported, not acted on), as warnings: what each
+    found."""
     return tuple(
-        Sentence(mark="warn", text=finding(flag.message), detail=flag.message)
+        Sentence(mark="warn", text=finding(flag.message))
         for result in results
         if result is not None
         for flag in result.flags
@@ -460,11 +522,7 @@ def verdict_sentence(*results: GateResult | None) -> Sentence | None:
         flags = [flag for result in rejected for flag in result.flags]
         reason = next((flag for flag in flags if flag.name not in REFUSALS), None)
         why = f": {after_colon(finding(reason.message))}" if reason is not None else "."
-        return Sentence(
-            mark="fail",
-            text=f"Rejected by {checks_named(rejected)}{why}",
-            detail=reason.message if reason is not None else "",
-        )
+        return Sentence(mark="fail", text=f"Rejected by {checks_named(rejected)}{why}")
     flagged = [result for result in judged if result.verdict == "retry"]
     raised = [flag.name for result in flagged for flag in result.flags]
     return Sentence(mark="warn", text=f"Flagged by {checks_named(flagged)}: {counted(raised)}.")

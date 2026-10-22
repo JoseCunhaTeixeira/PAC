@@ -330,21 +330,9 @@ def inversion_overview(folder: str) -> Overview:
                 f"informed to {number(useful)} m"
                 + (" (its bottom)" if measures.useful_depth_m is None else "")
             )
-        rhat, ess, acceptance = _convergence(measures)
         misfits = [band.misfit for band in measures.fits[0].bands if band.misfit is not None]
         if misfits:
             hover.append(f"misfit {number(max(misfits), 2)} at worst")
-        hover.append(
-            " · ".join(
-                part
-                for part in (
-                    f"R-hat {number(rhat, 3)}" if rhat is not None else "",
-                    f"ESS {number(ess)}" if ess is not None else "",
-                    f"acceptance {number(acceptance)} %" if acceptance is not None else "",
-                )
-                if part
-            )
-        )
         if said := verdicts_said(g5, g6):
             hover.append(said)
         flags = [flag.name for one in (g5, g6) if one is not None for flag in one.flags]
@@ -413,7 +401,7 @@ def window_inversion_settings(
     # Each setting a later attempt changed, with what asked it, each once: the window's first
     # attempt changed nothing, whatever ran it.
     changed: dict[str, list[str]] = {}
-    attempts = log.of(unit, STAGE) if log is not None and assistant else ()
+    attempts = log.runs_of(unit, STAGE) if log is not None and assistant else ()
     for before, attempt in pairwise(attempts):
         for name, value in attempt.parameters.items():
             if value == before.parameters.get(name):

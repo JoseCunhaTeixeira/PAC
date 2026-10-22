@@ -976,7 +976,6 @@ def _inverted_step(journal: Sequence[JournalEntry]) -> Step | None:
             f"{plural(len(latest), 'curve')} inverted",
             *_counted((passed, "passed"), (flagged, "flagged"), (rejected, "rejected")),
         ),
-        detail=MODEL_CHECK[:1].upper() + MODEL_CHECK[1:],
     )
 
 

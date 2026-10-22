@@ -28,7 +28,7 @@ import { useJson } from "./components/viz/useJson";
 import { readStored, writeStored } from "./components/stored";
 import { EyeIcon, PulseIcon } from "./components/icons";
 import { Page, SelectField, Stat } from "./components/kit";
-import { capitalized, STATE_MEANINGS, xmidOf } from "./components/viz/format";
+import { STATE_MEANINGS, xmidOf } from "./components/viz/format";
 import { lineExtent } from "./components/viz/line";
 import { vizPalette } from "./components/viz/palette";
 import { useTheme } from "./theme";
@@ -137,14 +137,12 @@ function LineLegend({
   overview,
   windows,
   uses,
-  meanings,
 }: {
   overview: Overview | null;
   windows: boolean;
   /** How the selected window uses its shots; null: no window selected, or no shot. */
   uses: Set<Use> | null;
   /** What each state means, as the cards' badges say it. */
-  meanings: Partial<Record<Status, string>>;
 }) {
   // The states' colours, then the marks of the selected window: its shots and its receivers.
   const palette = vizPalette(useTheme());
@@ -165,16 +163,13 @@ function LineLegend({
               </span>
             ))
           : STATUSES.filter((status) => overview.legend[status]).map((status) => (
-              <span
-                key={status}
-                data-tip={`${capitalized(overview.legend[status] ?? "")}\n${meanings[status] ?? ""}`}
-              >
+              <span key={status}>
                 <i className={`viz-swatch ${status}`} />
                 {overview.legend[status]}
               </span>
             )))}
       {windows && overview?.cells.some((cell) => (cell.modes?.length ?? 0) > 1) && (
-        <span data-tip="How many modes were picked in a window, when > 1">
+        <span>
           <i className="viz-swatch count">2</i>
           {"> 1 mode picked"}
         </span>
@@ -431,7 +426,7 @@ export default function VisualizationPage() {
                       {one.label}
                       {stage && (
                         <small
-                          data-tip={`${one.label}\n${stage.done} of ${stage.total} ${one.key === "records" ? "records used" : "windows with a result"}`}
+                          data-tip={`${stage.done} of ${stage.total} ${one.key === "records" ? "records used" : "windows with a result"}`}
                         >
                           {stage.done}/{stage.total}
                         </small>
@@ -468,12 +463,6 @@ export default function VisualizationPage() {
                         ? new Set(sources.shots.map((shot) => shot.use))
                         : null
                     }
-                    meanings={Object.fromEntries(
-                      Object.entries(STATE_MEANINGS[tab]).map(([status, one]) => [
-                        status,
-                        one.full,
-                      ]),
-                    )}
                   />
                 </>
               )}
