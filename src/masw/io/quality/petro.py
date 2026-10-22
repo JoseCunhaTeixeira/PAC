@@ -36,6 +36,7 @@ from masw.io.quality.view import (
     gate_view,
     line_gate,
     measured_status,
+    measured_warnings,
     number,
     plural,
     span,
@@ -155,13 +156,12 @@ def petro_overview(folder: str) -> Overview:
             continue
         makers[by_whom(log, soil_by_agent(log, window))] += 1
         g7, g8 = _results(log, window)
+        measured = fit_metrics(measures, thresholds)
         status = states.add(
-            verdict_status(g7, g8)
-            if g7 is not None
-            else measured_status(fit_metrics(measures, thresholds)),
+            verdict_status(g7, g8) if g7 is not None else measured_status(measured),
             g7 is not None,
         )
-        hover += state_lines(status, g7, g8)
+        hover += state_lines(status, g7, g8, metrics=measured)
         if gaps and card is not None:
             hover.append("Outside the model's range: " + _gaps_text(card, gaps))
         hover.append(" / ".join(measures.soils) + ", top down")
@@ -233,7 +233,7 @@ def petro_card(folder: str, xmid: float) -> PetroCard:
         metrics = fit_metrics(measures, thresholds)
         said += _column_sentences(measures)
         said += _fit_sentences(measures.fit, thresholds)
-        said += warnings(g7, g8)
+        said += warnings(g7, g8) if g7 is not None else measured_warnings(metrics)
     gates = (gate_view("G7", g7, metrics),) + ((gate_view("G8", g8),) if g8 is not None else ())
     return PetroCard(
         key=unit,

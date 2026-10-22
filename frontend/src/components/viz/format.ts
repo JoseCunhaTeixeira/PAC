@@ -418,6 +418,20 @@ export const MEASURED_LABELS: Partial<Record<Status, string>> = {
   fail: "not used",
 };
 
+// The measures whose limit the agent's checks only warn about (view.py's WARNED): beyond it, a
+// unit made by hand stays within the agent's limits, a warning said apart.
+export const WARNING_ONLY = new Set([
+  "band_at_fmin",
+  "band_at_fmax",
+  "band_share_of_usable",
+  "competing_ridges",
+  "aliased_points",
+  "beyond_reach_points",
+  "trend",
+  "trigger_error_s",
+  "acceptance",
+]);
+
 /** A run's start, as its selector and header show it: "26 Sep 2026, 15:13". */
 export function runDate(iso: string | null): string {
   if (!iso) return "";

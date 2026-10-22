@@ -24,7 +24,7 @@ from masw.io.quality.dispersion import curve_metrics
 from masw.io.quality.done import in_common, record_settings, records_in_common
 from masw.io.quality.files import read_manifest
 from masw.io.quality.journal import JournalEntry, journal_of, search_of, study_of
-from masw.io.quality.log import LINE, Attempt, GateResult, QCLog
+from masw.io.quality.log import LINE, Attempt, GateResult, Metric, QCLog
 from masw.io.quality.records import before_muting, signal_metrics, thresholds_of
 from masw.io.quality.runs import USER_REASON, processing_settings
 from masw.io.quality.tried import tried_tables
@@ -33,6 +33,7 @@ from masw.io.quality.view import (
     Sentence,
     Setting,
     acted_on,
+    measured_status,
     state_lines,
     verdict_sentence,
     warnings,
@@ -448,28 +449,28 @@ def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:
 
     assert overview["paco"] is False
     assert overview["summary"] == (
-        "3 windows · 2 picked by the user · 2 beyond the agent's limits · 1 not picked"
+        "3 windows · 2 picked by the user · 2 within the agent's limits · 1 not picked"
     )
     cells = {one["x"]: one for one in overview["cells"]}
     assert cells[8.5]["status"] == "none" and cells[8.5]["value"] is None
     # A curve picked by hand is the user's, as it is; its image against the agent's limits, as
-    # every image no check judged.
-    assert cells[2.5]["status"] == "note" and cells[2.5]["value"] > 0
-    assert cells[2.5]["hover"][:3] == [
-        "xmid 2.5 m",
-        "Image: beyond the agent's limits",
-        "Curve: picked by the user",
-    ]
-    assert cells[2.5]["hover"][3].startswith("M0: ") and cells[8.5]["hover"][2] == (
-        "Curve: not picked"
+    # every image no check judged: beyond those the agent's check only warns about, still
+    # within them, the warning a line of its own, as the agent's own images say it.
+    assert cells[2.5]["status"] == "pass" and cells[2.5]["value"] > 0
+    image_lines = cells[2.5]["hover"][1:3]
+    assert image_lines[0] == "Image: within the agent's limits"
+    assert image_lines[1].startswith("Warning: ")
+    assert cells[2.5]["hover"][3] == "Curve: picked by the user"
+    assert (
+        cells[2.5]["hover"][4].startswith("M0: ") and "Curve: not picked" in (cells[8.5]["hover"])
     )
-    assert cells[2.5]["hover"][4].startswith("λmax / 2 = ")
+    assert cells[2.5]["hover"][5].startswith("λmax / 2 = ")
     # Its modes, a dot each under its cell; none without a curve.
     assert cells[2.5]["modes"] == ["M0"] and cells[8.5]["modes"] == []
     # Its image and its curve apart, as on every run, as their legends say.
-    assert [cells[x]["parts"] for x in (2.5, 8.5)] == [["note", "hand"], ["note", "none"]]
+    assert [cells[x]["parts"] for x in (2.5, 8.5)] == [["pass", "hand"], ["pass", "none"]]
     image, curve = overview["parts"]
-    assert image["title"] == "Image" and image["legend"] == {"note": "beyond the agent's limits"}
+    assert image["title"] == "Image" and image["legend"] == {"pass": "within the agent's limits"}
     assert curve["title"] == "Curve" and curve["legend"]["hand"] == "picked by the user"
     assert curve["legend"]["none"] == "not picked" and "fail" not in curve["legend"]
     card = client.get(f"/quality/dispersion/card/{run}/2.5").json()
@@ -498,12 +499,15 @@ def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:
         "coherent_columns",
         "competing_ridges",
     }
-    assert card["status"] == "note" and card["verdict"] is None
+    assert card["status"] == "pass" and card["verdict"] is None
     assert card["parts"] == [
-        {"label": "image", "state": "note", "judged": False},
+        {"label": "image", "state": "pass", "judged": False},
         {"label": "curve", "state": "hand", "judged": False},
     ]
     assert any(text.startswith("M0 picked by the user: ") for text in _texts(card))
+    # Its image's warnings, as the agent's check keeps them: a sentence each.
+    warned = [one["text"] for one in card["sentences"] if one["mark"] == "warn"]
+    assert warned and all(text.endswith(".") for text in warned)
     assert card["steps"] == []
 
     unpicked = client.get(f"/quality/dispersion/card/{run}/8.5").json()
@@ -808,6 +812,22 @@ def test_a_measure_rejects_or_flags_only_when_the_check_acted_on_it() -> None:
     # Passed, only warned: no measure rejected or flagged it.
     passed = record.model_copy(update={"verdict": "pass"})
     assert acted_on(passed, "reject") == acted_on(passed, "retry") == acted_on(None, "reject") == ()
+
+
+def test_a_unit_made_by_hand_is_beyond_the_agents_limits_where_its_check_would_act() -> None:
+    # The coherent band at the image's top, a second ridge: the agent's check only warns.
+    warned = [
+        Metric.model_validate(_metric("band_at_fmax", 1.0, 0.0, "max")),
+        Metric.model_validate(_metric("competing_ridges", 0.75, 0.7, "max")),
+    ]
+    assert measured_status(warned) == "pass"
+    assert state_lines("pass", metrics=warned) == [
+        "Within the agent's limits",
+        "Warning: coherent band at the highest frequency, second ridge",
+    ]
+    # A ridge at the velocity range's top: the check would flag it.
+    asked = Metric.model_validate(_metric("ridge_at_vmax", 0.5, 0.2, "max"))
+    assert measured_status([*warned, asked]) == "note"
 
 
 def test_a_unit_refused_its_retry_stays_flagged_its_reason_a_warning() -> None:

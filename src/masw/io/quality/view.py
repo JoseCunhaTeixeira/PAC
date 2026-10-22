@@ -189,13 +189,53 @@ def verdict_status(*results: GateResult | None) -> Status:
     return worst(*statuses)
 
 
+# The measures whose limit the agent's checks only warn about, by the flag they raise, kept as
+# information: the coherent band at the image's edges or narrower than the records', a second
+# ridge; points in the aliasing zone or beyond the window's reach, an inverse dispersion; the
+# trigger, the line's to correct; the moves the chains accept.
+WARNED: dict[str, str] = {
+    "band_at_fmin": "band_at_fmin",
+    "band_at_fmax": "band_at_fmax",
+    "band_share_of_usable": "narrower_than_usable",
+    "competing_ridges": "competing_ridges",
+    "aliased_points": "aliasing_zone",
+    "beyond_reach_points": "beyond_reach",
+    "trend": "inverse_dispersion",
+    "trigger_error_s": "shifted_trigger",
+    "acceptance": "acceptance",
+}
+
+
 def measured_status(metrics: Iterable[Metric]) -> Status:
-    """A unit no check judged (made by hand), by its measures against the agent's limits: within
-    them (pass), or one beyond its limit (note, a warning); none without a measure judged."""
+    """A unit no check judged (made by hand), by its measures against the agent's limits, as its
+    checks would judge them: within them (pass), or beyond a limit that would make a check flag
+    or reject it (note, a warning); a limit the checks only warn about leaves it within, its
+    warning said apart (warned_flags); none without a measure judged."""
     judged = [metric for metric in metrics if metric.threshold is not None]
     if not judged:
         return "none"
-    return "pass" if all(metric.passed for metric in judged) else "note"
+    beyond = [metric for metric in judged if not metric.passed and metric.name not in WARNED]
+    return "note" if beyond else "pass"
+
+
+def warned_flags(metrics: Iterable[Metric]) -> list[str]:
+    """The flags a unit's measures beyond a limit the agent's checks only warn about would
+    raise, once each, in the measures' order."""
+    return list(
+        dict.fromkeys(
+            WARNED[metric.name]
+            for metric in metrics
+            if metric.threshold is not None and not metric.passed and metric.name in WARNED
+        )
+    )
+
+
+def measured_warnings(metrics: Iterable[Metric]) -> tuple[Sentence, ...]:
+    """A unit made by hand's warnings, as a check's kept flags are said: what each found."""
+    return tuple(
+        Sentence(mark="warn", text=f"{(said := flag_text(name))[:1].upper()}{said[1:]}.")
+        for name in warned_flags(metrics)
+    )
 
 
 # A unit's state in words, as its badge, its stage's legend and summary say it: as a check said
@@ -221,14 +261,19 @@ def by_whom(log: QCLog | None, made: bool) -> str:
     return BY_AGENT[log.chooser] if made and log is not None else BY_USER
 
 
-def state_lines(status: Status, *results: GateResult | None) -> list[str]:
+def state_lines(
+    status: Status, *results: GateResult | None, metrics: Iterable[Metric] = ()
+) -> list[str]:
     """A unit's state on its cell's hover, as its badge says it: what its checks found when they
     flagged or rejected it; a warning they kept, a line of its own; made by hand, against the
-    agent's limits."""
+    agent's limits, its `metrics`' warnings a line of their own as a check's."""
     judged = [result for result in results if result is not None]
     if not judged:
         said = MEASURED_WORDS.get(status, "")
-        return [said[:1].upper() + said[1:]] if said else []
+        lines = [said[:1].upper() + said[1:]] if said else []
+        if warned := warned_flags(metrics):
+            lines.append(f"Warning: {counted(warned)}")
+        return lines
     acted = [
         flag.name
         for result in judged

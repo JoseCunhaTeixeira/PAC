@@ -8,8 +8,7 @@ the dispersion strip of Visualization, and the selected window's card."""
 
 import logging
 from collections import Counter
-from collections.abc import Callable, Mapping
-from functools import partial
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any, cast
 
@@ -68,6 +67,7 @@ from masw.io.quality.view import (
     gate_view,
     line_gate,
     measured_status,
+    measured_warnings,
     number,
     plural,
     span,
@@ -171,15 +171,16 @@ def dispersion_overview(folder: str) -> Overview:
             pickers[_picker(log, picked_by, assistant_picked(window, log))] += 1
         g2, g3, g4 = _results(log, window, picked_by)
         stats = curve_stats(curve) if curve is not None else None
-        image, picks = _states(
-            g2,
-            g3,
-            g4,
-            curve,
-            picked_by,
-            partial(_saved_curve_measures, window, curve, thresholds),
-            partial(_image_metrics, run_folder, manifest, window, thresholds),
+        # Its measures where no check judged it: against the agent's limits.
+        image_measures = (
+            _image_metrics(run_folder, manifest, window, thresholds) if g2 is None else None
         )
+        curve_measures = (
+            _saved_curve_measures(window, curve, thresholds)
+            if g3 is None and g4 is None and picked_by != "hand"
+            else ()
+        )
+        image, picks = _states(g2, g3, g4, curve, picked_by, curve_measures, image_measures)
         images.add(image, g2 is not None)
         curves.add(picks, g3 is not None or g4 is not None)
         status = windows.add(
@@ -187,8 +188,8 @@ def dispersion_overview(folder: str) -> Overview:
         )
         # Its image and its curve apart, as its cell's parts, then its curve's figures.
         hover = [f"xmid {number(xmid_of(unit), 4)} m"]
-        hover += _part_lines("Image", image, g2)
-        hover += _part_lines("Curve", picks, g3, g4)
+        hover += _part_lines("Image", image, g2, metrics=image_measures or ())
+        hover += _part_lines("Curve", picks, g3, g4, metrics=curve_measures)
         if stats is not None:
             hover.append(f"{stats.label}: {_points(stats)}")
             hover.append(f"λmax / 2 = {number(stats.wavelength_m[1] / 2)} m")
@@ -231,14 +232,17 @@ def _picker(log: QCLog | None, picked_by: Origin, assistant: bool) -> str:
     return f"{BY_USER}, automatically" if picked_by == "auto" else BY_USER
 
 
-def _part_lines(part: str, state: PartState, *results: GateResult | None) -> list[str]:
+def _part_lines(
+    part: str, state: PartState, *results: GateResult | None, metrics: Iterable[Metric] = ()
+) -> list[str]:
     """One of a window's parts on its cell's hover, as its legend says it: its state, what its
-    checks found when they flagged or rejected it; a warning they kept, a line of its own."""
+    checks found when they flagged or rejected it; a warning they kept, or its measures' (made by
+    hand, `metrics`), a line of its own."""
     if state == "none":
         return [f"{part}: {'not picked' if part == 'Curve' else 'not made'}"]
     if state == "hand":
         return [f"{part}: picked by the user"]
-    head, *rest = state_lines(cast(Status, state), *results)
+    head, *rest = state_lines(cast(Status, state), *results, metrics=metrics)
     return [f"{part}: {head[:1].lower()}{head[1:]}", *rest]
 
 
@@ -248,8 +252,8 @@ def _states(
     g4: GateResult | None,
     curve: DispersionCurve | None,
     picked_by: Origin | None,
-    measured: Callable[[], tuple[Metric, ...]],
-    measured_image: Callable[[], tuple[Metric, ...] | None],
+    measured: tuple[Metric, ...],
+    measured_image: tuple[Metric, ...] | None,
 ) -> tuple[PartState, PartState]:
     """A window's image and curve apart, each by its checks' verdicts or, when no check judged
     it, by its measures against their limits (`measured`, `measured_image`): its image none when
@@ -258,8 +262,8 @@ def _states(
         verdict_status(g2)
         if g2 is not None
         else "none"
-        if (image_measures := measured_image()) is None
-        else measured_status(image_measures)
+        if measured_image is None
+        else measured_status(measured_image)
     )
     if curve is None:
         return image, "none"
@@ -267,7 +271,7 @@ def _states(
         return image, "hand"
     if g3 is not None or g4 is not None:
         return image, verdict_status(g3, g4)
-    return image, measured_status(measured())
+    return image, measured_status(measured)
 
 
 def _saved_curve_measures(
@@ -389,6 +393,11 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         _picker(log, picked_by, assistant_picked(window, log)) if picked_by is not None else "",
     )
     said += warnings(g2, g3, g4)
+    # Made by hand, no check judged it: its measures' warnings, as the checks keep theirs.
+    if g2 is None:
+        said += measured_warnings(measured_image or ())
+    if g3 is None and g4 is None and not by_hand:
+        said += measured_warnings(curve_measures)
     # The image's measures; a passive or passive-active window's, its stacked correlations' and
     # its fk selection's too: G2's own when it judged the window, else as PAC's job saved them.
     gates = [gate_view("G2", g2, measured_image or ())]
@@ -408,11 +417,8 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         gates.append(gate_view("G3", g3, curve_measures))
         if g4 is not None:
             gates.append(gate_view("G4", g4))
-    # Its image and its curve apart, as its cell's parts: the image's only when the assistant
-    # checked the images.
-    image_state, curve_state = _states(
-        g2, g3, g4, m0, picked_by, lambda: curve_measures, lambda: measured_image
-    )
+    # Its image and its curve apart, as its cell's parts.
+    image_state, curve_state = _states(g2, g3, g4, m0, picked_by, curve_measures, measured_image)
     parts = (
         Part(label="image", state=image_state, judged=g2 is not None),
         Part(label="curve", state=curve_state, judged=g3 is not None or g4 is not None),

@@ -8,7 +8,7 @@ import {
   PulseIcon,
 } from "../icons";
 import { neighbours } from "./cells";
-import { MEASURED_LABELS, metricLabel, STATE_MEANINGS } from "./format";
+import { MEASURED_LABELS, metricLabel, STATE_MEANINGS, WARNING_ONLY } from "./format";
 import type { Card, Cell, GateView, Overview, Sentence, StageKey } from "./types";
 import {
   Empty,
@@ -33,7 +33,10 @@ function beyondLimits(gates: GateView[]): Sentence | null {
   const beyond = gates
     .filter((gate) => gate.verdict === null && !gate.by_hand)
     .flatMap((gate) => gate.metrics)
-    .filter((metric) => metric.threshold != null && metric.bound != null && !metric.passed);
+    .filter(
+      (metric) =>
+        metric.threshold != null && metric.bound != null && !metric.passed && !WARNING_ONLY.has(metric.name),
+    );
   if (beyond.length === 0) return null;
   // Said within the sentence: lower case, but an acronym (SNR).
   const names = [...new Set(beyond.map((metric) => metricLabel(metric.name)))].map((name) =>

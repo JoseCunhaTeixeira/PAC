@@ -42,6 +42,7 @@ from masw.io.quality.view import (
     grouped,
     line_gate,
     measured_status,
+    measured_warnings,
     number,
     plural,
     span,
@@ -321,7 +322,7 @@ def inversion_overview(folder: str) -> Overview:
         )
         bottom = measures.depth_max_m
         useful = informed_depth(measures)
-        hover = [f"xmid {number(x, 4)} m", *state_lines(status, g5, g6)]
+        hover = [f"xmid {number(x, 4)} m", *state_lines(status, g5, g6, metrics=metrics)]
         layers = _layers(len(measures.vs_layers))
         hover.append(f"{layers[:1].upper()}{layers[1:]}, modelled to {number(bottom)} m")
         if useful is not None:
@@ -530,7 +531,7 @@ def inversion_card(folder: str, xmid: float, model: ModelName = DEFAULT_MODEL) -
     said += _fit_sentences(measures, thresholds, model)
     said.append(_convergence_sentence(measures, thresholds))
     said += _run_sentences(parameters, ran.tuning)
-    said += warnings(g5, g6)
+    said += warnings(g5, g6) if g5 is not None else measured_warnings(metrics)
     return InversionCard(
         key=unit,
         settings=_settings_along(run_folder, log, unit),

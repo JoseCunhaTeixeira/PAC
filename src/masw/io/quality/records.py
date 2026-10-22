@@ -39,6 +39,7 @@ from masw.io.quality.view import (
     gate_view,
     line_gate,
     measured_status,
+    measured_warnings,
     number,
     plural,
     span,
@@ -231,7 +232,7 @@ def records_overview(folder: str) -> Overview:
                 else measured_status(metrics),
                 judged=judged,
             )
-            said = state_lines(status, g1)
+            said = state_lines(status, g1, metrics=metrics)
         hover = [
             record.name
             + (f" · shot at {number(sources[record.name], 4)} m" if record.name in sources else ""),
@@ -416,7 +417,7 @@ def record_card(folder: str, name: str) -> RecordCard:
         said.append(_traces(log, name, own, run_folder, manifest))
     if len(own) < len(excluded_traces):
         said.append(Sentence(mark="info", text=why_out))
-    said += warnings(g1)
+    said += warnings(g1) if g1 is not None else measured_warnings(metrics)
     if windows:
         xmids = [xmid_of(unit) for unit in windows]
         said.append(
