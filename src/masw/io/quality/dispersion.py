@@ -538,8 +538,14 @@ def _picks(
 ) -> list[Sentence]:
     """What was picked and by whom (`by`: the run's agent, or the user), the wavelengths it
     spans, where they may alias."""
+    # The pick's state as its sentence's mark: the curve check's flag, orange; beyond the agent's
+    # limits when the user made it, a warning.
+    marks: dict[str, Mark] = {"none": "info", "info": "info", "note": "warn", "warn": "flag"}
     if not stats:
-        return [Sentence(mark="fail" if paco else "info", text="Not picked.")]
+        # None picked by the agent: as the curve check judged it (flagged, its retries spent).
+        status = verdict_status(g3) if g3 is not None else "fail"
+        mark = marks.get(status, cast(Mark, status)) if paco else "info"
+        return [Sentence(mark=mark, text="Not picked.")]
     first, *others = stats
     status = (
         "info"
@@ -549,9 +555,6 @@ def _picks(
         else measured_status(measures)
     )
     shortest, longest = first.wavelength_m
-    # The pick's state as its sentence's mark: the curve check's flag, orange; beyond the agent's
-    # limits when the user made it, a warning.
-    marks: dict[str, Mark] = {"none": "info", "info": "info", "note": "warn", "warn": "flag"}
     mark = marks.get(status, cast(Mark, status))
     said = [
         Sentence(mark=mark, text=f"{first.label} picked {by}: {_points(first)}."),

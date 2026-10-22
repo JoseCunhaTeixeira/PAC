@@ -22,6 +22,7 @@ from masw.io.quality.files import (
     line_geometry,
     preset_stage,
     read_manifest,
+    read_window,
     shot_distances,
 )
 from masw.io.quality.journal import (
@@ -234,7 +235,7 @@ def run_card(folder: str) -> RunCard:
     spacing = manifest.profile.receiver_spacing_m
     defaults = make_preset(manifest.preset.mode).model_dump(mode="json")
     settings = (
-        *processing_settings(manifest, log, length_choice(run_folder)),
+        *processing_settings(manifest, log, length_choice(run_folder), run_folder),
         _curves(stages, journal, maker),
         _profiles(stages, journal, log, maker),
     )
@@ -259,7 +260,12 @@ def run_card(folder: str) -> RunCard:
             survey.reach_m if survey is not None else None,
         ),
         reasons=_reasons(
-            journal, settings, given_settings(run_folder), spacing, int(masw["length"])
+            journal,
+            settings,
+            given_settings(run_folder),
+            spacing,
+            int(masw["length"]),
+            idle=near_field(log) is not None and near_field_used(run_folder, log) is None,
         ),
         history=_study_history(journal, search, survey, manifest, log, picked, run_folder)
         if study is not None
@@ -273,7 +279,10 @@ def run_card(folder: str) -> RunCard:
 
 
 def processing_settings(
-    manifest: RunManifest, log: QCLog | None, choice: LengthChoice | None
+    manifest: RunManifest,
+    log: QCLog | None,
+    choice: LengthChoice | None,
+    run_folder: Path | None = None,
 ) -> tuple[Setting, ...]:
     """The run's settings in plain words, in the order its records went through them, each with
     where it comes from and why: its windows, the records used, the shots the windows stack, then
@@ -339,13 +348,16 @@ def processing_settings(
     ]
     settings.append(_records(manifest, log))
     if manifest.profile.kind == "active":
-        field = near_field(log)
+        field = near_field(log) if run_folder is None else near_field_used(run_folder, log)
         nearest = (
             f"nearest, {number(field, 4)} m from a window's receivers"
             if field is not None
             else "nearest"
         )
-        ends = {nearest: rule("near_field", "distance_m"), "farthest": rule("masw", "distance_max")}
+        ends = {
+            **({nearest: rule("near_field", "distance_m")} if field is not None else {}),
+            "farthest": rule("masw", "distance_max"),
+        }
         set_by = {end: one for end, one in ends.items() if one is not None}
         if set_by:
             where = _strongest([who for who, _ in set_by.values()])
@@ -505,8 +517,8 @@ def _trace_reasons(log: QCLog | None, traces: Mapping[str, tuple[int, ...]]) -> 
 
 def _again(log: QCLog | None, stage: str, unit: str) -> str:
     """The units the checks ran `stage` again on, and what asked for it: "8 windows (6
-    aliasing, 2 band at fmax)". A redo's fresh first attempt counts, as every attempt after the
-    first run."""
+    aliasing, 2 band at fmax)", each flag's units (one asked twice counted once). A redo's fresh
+    first attempt counts, as every attempt after the first run."""
     again = [
         attempt
         for attempt in (log.attempts if log is not None else ())
@@ -516,15 +528,16 @@ def _again(log: QCLog | None, stage: str, unit: str) -> str:
         return ""
     units = {attempt.unit for attempt in again}
     # A check's flag counted; another cause (a change of the line's settings) said once.
-    flags: Counter[str] = Counter()
+    flags: dict[str, set[str]] = {}
     others: dict[str, None] = {}
     for attempt in again:
         gate, _, flag = attempt.triggered_by.partition(":")
         if flag:
-            flags[flag_text(flag)] += 1
+            flags.setdefault(flag_text(flag), set()).add(attempt.unit)
         else:
             others[_CAUSES.get(gate, gate)] = None
-    said = [f"{count} {flag}" for flag, count in flags.most_common()] + list(others)
+    ranked = sorted(flags.items(), key=lambda item: -len(item[1]))
+    said = [f"{len(asked)} {flag}" for flag, asked in ranked] + list(others)
     return f"{plural(len(units), unit)} ({', '.join(said)})"
 
 
@@ -786,24 +799,25 @@ def _counted(*counts: tuple[int, str]) -> list[str]:
 
 
 def _model_verdicts(journal: Sequence[JournalEntry], log: QCLog | None) -> dict[str, str]:
-    """Each inverted window's latest verdict on its model: the autonomous mode's inversions, from
-    its journal; else the checks' in the run's log; none for a run no check judged."""
+    """Each inverted window's latest verdict on its model, as the checks' log holds it now, as
+    the inversion's page shows it (a job stopped before its end leaves the journal behind); the
+    autonomous mode's journal's for a run whose log holds none; none for a run no check judged."""
     found: dict[str, str] = {}
-    for entry in journal:
-        if entry.kind == "inversion":
-            found |= {
-                str(unit): str(verdict)
-                for unit, verdict in cast(dict[str, Any], entry.data.get("g5") or {}).items()
-            }
-    if found or log is None:
-        return found
-    for attempt in log.attempts:
+    for attempt in log.attempts if log is not None else ():
         if (
             attempt.stage == "inversion"
             and attempt.unit != LINE
             and (g5 := attempt.results.get("G5"))
         ):
             found[attempt.unit] = g5.verdict
+    if found:
+        return found
+    for entry in journal:
+        if entry.kind == "inversion":
+            found |= {
+                str(unit): str(verdict)
+                for unit, verdict in cast(dict[str, Any], entry.data.get("g5") or {}).items()
+            }
     return found
 
 
@@ -813,12 +827,12 @@ def _reasons(
     given: Sequence[Given],
     spacing: float,
     length: int,
+    idle: bool = False,
 ) -> tuple[Reason, ...]:
     """Why the settings are what they are: the assistant's own reasons for those it chose (its
     commits', the latest of each setting; a commit's reasons for one setting `SEP` apart, each
-    once), then
-    the settings the user set, each its value in words (the windows' `length` where the shots
-    used count from)."""
+    once), then the settings the user set, each its value in words (the windows' `length` where
+    the shots used count from); the near field's left out when it dropped no shot (`idle`)."""
     found: dict[tuple[str, str], Reason] = {}
     for entry in journal:
         if entry.kind != "commit":
@@ -827,6 +841,8 @@ def _reasons(
         own: dict[str, list[str]] = {}
         theirs: dict[str, str] = {}
         for key, reason in cast(dict[str, Any], entry.data.get("reasons") or {}).items():
+            if idle and key in ("near_field_m", "near_field"):
+                continue
             name = _SETTING_NAMES.get(key) or _SETTING_NAMES.get(key.split(" ")[0]) or key
             said = plain_reason(str(reason))
             if said.startswith(USER_REASON):
@@ -876,11 +892,22 @@ def _study_history(
     length = int(preset_stage(manifest, "masw")["length"])
     steps: list[Step] = []
     commits = 0
+    # The near field the run's windows show none of (no window kept a farther shot): not said.
+    idle = near_field(log) if near_field_used(run_folder, log) is None else None
     for entry in journal:
         if entry.kind == "objective":
             said = entry.text.removeprefix(entry.id).strip()
-            lines = tuple(part.strip().capitalize() for part in said.split(",") if part.strip())
-            steps.append(Step(kind="objective", by="you", at=entry.at, title="Asked", lines=lines))
+            lines = [part.strip().capitalize() for part in said.split(",") if part.strip()]
+            # The settings the user typed, as the run card says them.
+            typed = cast(dict[str, Any], entry.data.get("given") or {})
+            line = cast(dict[str, Any], typed.get("line") or {})
+            lines += plain(
+                {**({"mode": typed["mode"]} if typed.get("mode") else {}), **line}, spacing
+            )
+            lines += plain(cast(dict[str, Any], typed.get("inversion") or {}), spacing)
+            steps.append(
+                Step(kind="objective", by="you", at=entry.at, title="Asked", lines=tuple(lines))
+            )
         elif entry.kind == "settings":
             changed = tuple(str(one) for one in cast(list[Any], entry.data.get("changed") or []))
             steps.append(
@@ -900,6 +927,8 @@ def _study_history(
         elif entry.kind == "commit":
             commits += 1
             changes = cast(dict[str, Any], entry.data.get("changes") or {})
+            if idle is not None:
+                changes = {k: v for k, v in changes.items() if k != "near_field_m" or v != idle}
             title = "Processed the whole line" if commits == 1 else "Changed the line's settings"
             steps.append(
                 Step(
@@ -931,7 +960,7 @@ def _study_history(
         steps.append(_survey_step(survey, journal, manifest, log))
     if (tried := _tried_step(search)) is not None:
         steps.append(tried)
-    if (inverted := _inverted_step(journal, len(manifest.windows))) is not None:
+    if (inverted := _inverted_step(journal, log, len(manifest.windows))) is not None:
         steps.append(inverted)
     steps += _redone(run_folder, log)
     first = min((step.at for step in steps if step.at is not None), default=None)
@@ -978,13 +1007,13 @@ def _tried_step(search: SearchDone | None) -> Step | None:
     )
 
 
-def _inverted_step(journal: Sequence[JournalEntry], total: int) -> Step | None:
+def _inverted_step(journal: Sequence[JournalEntry], log: QCLog | None, total: int) -> Step | None:
     """The curves inverted into Vs profiles: how many, and how many passed the model's check, were
     flagged and rejected."""
     runs = [entry for entry in journal if entry.kind == "inversion"]
     if not runs:
         return None
-    latest = _model_verdicts(journal, None)
+    latest = _model_verdicts(journal, log)
     passed, flagged, rejected = _verdict_counts(latest)
     return Step(
         kind="inversion",
@@ -996,6 +1025,26 @@ def _inverted_step(journal: Sequence[JournalEntry], total: int) -> Step | None:
             *_counted((passed, "passed"), (flagged, "flagged"), (rejected, "rejected")),
         ),
     )
+
+
+def near_field_used(run_folder: Path, log: QCLog | None) -> float | None:
+    """The near field the line set (near_field) as the run's windows show it: where one of them
+    stacks no shot nearer than it to its receivers; None when every window still stacks one (it
+    dropped no shot: none kept a farther one), or none was set."""
+    field = near_field(log)
+    if field is None:
+        return None
+    for unit in window_folders(run_folder):
+        window = read_window(run_folder / unit)
+        if window is None or not window.acquisitions:
+            continue
+        xs = [receiver.x for receiver in window.acquisitions[0].receivers]
+        first, last = min(xs), max(xs)
+        if all(
+            max(first - one.source.x, one.source.x - last) >= field for one in window.acquisitions
+        ):
+            return field
+    return None
 
 
 def _redone(run_folder: Path, log: QCLog | None) -> list[Step]:
@@ -1197,12 +1246,12 @@ def _line_tries(run_folder: Path) -> list[Step]:
     tries = line_tried(run_folder)
     if not tries:
         return []
-    kept = [one.change for one in tries if one.kept]
+    kept = [f"Kept: {one.change}" for one in tries if one.kept] or ["None kept"]
     return [
         Step(
             kind="line",
             by="workflow",
             title="Changed the line where curves failed",
-            lines=(f"{plural(len(tries), 'change')} tried", *(f"Kept: {one}" for one in kept)),
+            lines=(f"{plural(len(tries), 'change')} tried", *kept),
         )
     ]

@@ -26,7 +26,7 @@ from masw.io.quality.files import read_manifest
 from masw.io.quality.journal import JournalEntry, journal_of, search_of, study_of
 from masw.io.quality.log import LINE, Attempt, GateResult, Metric, QCLog
 from masw.io.quality.records import before_muting, signal_metrics, thresholds_of
-from masw.io.quality.runs import USER_REASON, processing_settings
+from masw.io.quality.runs import USER_REASON, near_field_used, processing_settings
 from masw.io.quality.tried import tried_tables
 from masw.io.quality.view import (
     DASH,
@@ -1165,6 +1165,23 @@ def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
     ]
 
 
+def test_a_line_loop_that_kept_no_change_says_so(tmp_path: Path) -> None:
+    from masw.io.quality.runs import _line_tries  # pyright: ignore[reportPrivateUsage]
+
+    tried = {
+        "change": "selection threshold 0.15",
+        "flag": "G2:few_segments_kept",
+        "asked_by": 24,
+        "before": 12,
+        "after": 9,
+        "kept": False,
+    }
+    (tmp_path / "line_loop.json").write_text(json.dumps({"trials": [tried]}))
+
+    (step,) = _line_tries(tmp_path)
+    assert step.lines == ("1 change tried", "None kept")
+
+
 def test_a_record_made_again_by_a_change_of_the_lines_settings_is_the_lines(run: str) -> None:
     manifest = read_manifest(OUTPUT_DIR / run)
     assert manifest is not None
@@ -1618,6 +1635,40 @@ def _retried(unit: str, stage: str, triggered_by: str, parameters: dict[str, Any
 MUTE = {"method": "mute", "vmin": 80.0, "vmax": 1500.0}
 
 
+def test_the_models_verdicts_are_the_logs_now_not_a_jobs_end() -> None:
+    from masw.io.quality.journal import JournalEntry
+    from masw.io.quality.runs import _model_verdicts  # pyright: ignore[reportPrivateUsage]
+
+    # The job's end said retry; a later job, stopped before its end, made it pass.
+    ended = JournalEntry(
+        id="I1",
+        kind="inversion",
+        at=datetime.now(UTC),
+        text="I1 inverted",
+        data={"g5": {"xmid_2.50": "retry"}},
+    )
+    again = _retried("xmid_2.50", "inversion", "G5:not_converged", {}).model_copy(
+        update={
+            "results": {"G5": GateResult.model_validate(_result("G5", "xmid_2.50", "pass", [], []))}
+        }
+    )
+
+    assert _model_verdicts([ended], QCLog([again])) == {"xmid_2.50": "pass"}
+    # A run whose log holds none: the journal's.
+    assert _model_verdicts([ended], None) == {"xmid_2.50": "retry"}
+
+
+def test_a_near_field_that_dropped_no_shot_is_not_said(run: str) -> None:
+    def logged(distance: float) -> QCLog:
+        near = {"near_field": {"distance_m": distance}}
+        return QCLog([_retried(LINE, "phase_shift", "initial", near)])
+
+    # Farther than any shot a window stacks: every window kept its near shots, none farther.
+    assert near_field_used(OUTPUT_DIR / run, logged(500.0)) is None
+    # Nearer than every shot of a window: it shows there.
+    assert near_field_used(OUTPUT_DIR / run, logged(0.5)) == 0.5
+
+
 def test_a_windows_records_muted_each_with_its_own_pulse_are_said_together(run: str) -> None:
     manifest = read_manifest(OUTPUT_DIR / run)
     assert manifest is not None
@@ -1653,6 +1704,28 @@ def test_a_windows_records_muted_each_with_its_own_pulse_are_said_together(run: 
     # The run's card counts a redo's fresh attempts as done again.
     card = {one.key: one for one in processing_settings(manifest, log, None)}
     assert card["records"].why.endswith("preprocessed again: 2 records (2 weak coherence)")
+
+
+def test_a_window_the_agent_could_not_pick_is_marked_as_its_check_judged_it() -> None:
+    from masw.io.quality.dispersion import _picks  # pyright: ignore[reportPrivateUsage]
+
+    # Its retries spent, the curve check kept it flagged: orange, not rejected.
+    flagged = GateResult.model_validate(_result("G3", "xmid_2.50", "retry", [], []))
+    (said,) = _picks([], None, flagged, (), None, True, "by the workflow agent")
+    assert (said.mark, said.text) == ("flag", "Not picked.")
+    # No verdict of the check: none picked where the agent ran.
+    (said,) = _picks([], None, None, (), None, True, "by the workflow agent")
+    assert said.mark == "fail"
+
+
+def test_a_window_asked_twice_for_one_flag_is_counted_once() -> None:
+    from masw.io.quality.runs import _again  # pyright: ignore[reportPrivateUsage]
+
+    # Picked a second and a third time for the same narrow range: one window, asked by it.
+    first = _retried("xmid_2.50", "picking", "G3:narrow_span", {})
+    log = QCLog([first.model_copy(update={"attempt": n}) for n in (2, 3)])
+
+    assert _again(log, "picking", "window") == "1 window (1 narrow range of wavelengths)"
 
 
 def test_records_made_again_by_a_change_of_the_lines_settings_are_said_so(run: str) -> None:
@@ -1780,7 +1853,13 @@ def _study(profile: Path, run_id: str) -> Path:
     _lines(
         study / "journal.jsonl",
         [
-            {"id": "O1", "kind": "objective", "at": "2026-10-21T14:59:00Z", "text": "O1 to 20 m"},
+            {
+                "id": "O1",
+                "kind": "objective",
+                "at": "2026-10-21T14:59:00Z",
+                "text": "O1 to 20 m",
+                "data": {"given": {"mode": "active", "line": {}, "inversion": {}}},
+            },
             {
                 "id": "H1",
                 "kind": "hypothesis",
@@ -1986,7 +2065,8 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
     # reasoning left to its journal.
     steps = card["history"]
     assert [(one["kind"], one["by"], one["title"], one["lines"]) for one in steps] == [
-        ("objective", "you", "Asked", ["To 20 m"]),
+        # What the user asked, the method they typed with it.
+        ("objective", "you", "Asked", ["To 20 m", "Method: active"]),
         (
             "search",
             "agent",
