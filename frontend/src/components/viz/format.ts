@@ -81,10 +81,6 @@ const METRICS: Record<string, [string, string]> = {
     "Frequencies with a second ridge",
     "The share of the coherent frequencies with a second peak of similar strength\nA higher mode or another wave",
   ],
-  aliased_ridges: [
-    "Second ridges in the aliasing zone",
-    "The share of the second ridges at wavelengths under twice the receiver spacing\nThere a ridge may be an alias",
-  ],
   background: ["Background level", "The image away from its ridge, against the ridge's peak\n0 when clean, 1 as strong as the ridge"],
   stripes: ["Background stripes", "How much that level jumps from a frequency to the next\n0 when even"],
   band_share_of_usable: [
@@ -270,7 +266,6 @@ const SHARES = new Set([
   "ridge_at_vmin",
   "ridge_at_vmax",
   "competing_ridges",
-  "aliased_ridges",
   "band_share_of_usable",
   "fk_kept",
   "on_data",

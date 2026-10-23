@@ -179,7 +179,7 @@ def tried_tables(
         table
         for table in (
             _lengths(length_choice(run_folder), spacing),
-            _mutes(mutes_tried(run_folder), spacing),
+            _mutes(mutes_tried(run_folder), spacing, mute_trigger(run_folder)),
             _segments(segments_tried(run_folder), segment_windows(run_folder)),
             _line(line_tried(run_folder), spacing),
         )
@@ -252,14 +252,14 @@ def step_words(
         return None
     if stage == "trigger":
         # Changed alone (the line loop's): a delay of its own, no mute with it.
-        delay = [one.removeprefix("trigger ") for one in _trigger(_stage(settings, "trigger"))]
+        delay = [one.removeprefix("trigger ") for one in trigger_delay(_stage(settings, "trigger"))]
         return ("Trigger", tuple(delay)) if delay else None
     if stage == "muting":
         muting = _stage(settings, "muting")
         if muting.get("method") == "none":
             return "Mute", ("none",)
         main, more = _mute(muting) if muting else ([], [])
-        parts = [*main, *more, *_trigger(_stage(settings, "trigger"))] if every else main
+        parts = [*main, *more, *trigger_delay(_stage(settings, "trigger"))] if every else main
         return ("Mute", tuple(parts)) if parts else None
     if stage not in _STEPS:
         return None
@@ -346,7 +346,8 @@ def _mute(values: Mapping[str, Any]) -> _Words:
     return (main or _method(values)), more
 
 
-def _trigger(values: Mapping[str, Any]) -> list[str]:
+def trigger_delay(values: Mapping[str, Any]) -> list[str]:
+    """A trigger stage's delay in the card's words, "trigger delay 2.6 ms"; none without one."""
     t0 = values.get("t0")
     if not isinstance(t0, int | float):
         return []
@@ -440,6 +441,9 @@ class _MuteFile(BaseModel):
 
     chosen: str | None = None
     trials: tuple[MuteTried, ...] = ()
+    # The trigger every mute ran with, set before the trial where the shots' first breaks put
+    # them; None: the records' files'.
+    trigger: dict[str, Any] | None = None
 
 
 class _SegmentsFile(BaseModel):
@@ -466,6 +470,16 @@ def mutes_tried(run_folder: Path) -> tuple[MuteTried, ...]:
     return tuple(
         one.model_copy(update={"kept": one.candidate == found.chosen}) for one in found.trials
     )
+
+
+def mute_trigger(run_folder: Path) -> str | None:
+    """The trigger the run's mute trial ran every mute with, in the card's words, when it set
+    one first; None with the records' files' or no trial."""
+    path = run_folder / MUTE_FILE
+    if not path.exists():
+        return None
+    said = trigger_delay(_MuteFile.model_validate_json(path.read_text()).trigger or {})
+    return said[0] if said else None
 
 
 def segments_tried(run_folder: Path) -> tuple[SegmentsTried, ...]:
@@ -574,7 +588,11 @@ def _lengths(choice: LengthChoice | None, spacing: float) -> TriedTable | None:
     )
 
 
-def _mutes(mutes: Sequence[MuteTried], spacing: float) -> TriedTable | None:
+def _mutes(
+    mutes: Sequence[MuteTried], spacing: float, trigger: str | None = None
+) -> TriedTable | None:
+    """The mutes the trial tried, the one kept first; with the `trigger` each ran with, when the
+    trial set one first."""
     if not mutes:
         return None
     count = max(len(mute.verdicts) for mute in mutes)
@@ -595,7 +613,10 @@ def _mutes(mutes: Sequence[MuteTried], spacing: float) -> TriedTable | None:
     ]
     return TriedTable(
         title="Mutes tried",
-        intro=(f"Each on the same {plural(count, 'sample window')}",),
+        intro=(
+            f"Each on the same {plural(count, 'sample window')}"
+            + (f", with the {trigger}, where the shots' first breaks put them" if trigger else ""),
+        ),
         columns=columns,
         rows=_options(rows),
         by="workflow",

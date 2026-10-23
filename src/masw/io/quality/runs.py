@@ -55,6 +55,7 @@ from masw.io.quality.tried import (
     line_change,
     line_tried,
     mute_name,
+    mute_trigger,
     mutes_tried,
     plain,
     segments_tried,
@@ -62,6 +63,7 @@ from masw.io.quality.tried import (
     shots_used,
     step_words,
     tried_tables,
+    trigger_delay,
 )
 from masw.io.quality.view import (
     BY_AGENT,
@@ -404,6 +406,11 @@ def processing_settings(
                 why += f"; imaged again: {again}"
         else:
             where, why = rule(name) or origin([name])
+        if name == "muting" and rule("trigger") is not None:
+            # The trigger, the muting's, which the line set: said with it, its latest reason.
+            detail = [*detail, *trigger_delay(preset.get("trigger") or {})]
+            reason = noted(reversed(notes), "trigger", chooser)[1]
+            why += f"; trigger: {reason or 'chosen by the checks on the line'}"
         # A step off and left so: the preset's, or every combination of the search's.
         if value == "none" and why in (DEFAULT, SEARCH_SAME):
             continue
@@ -542,8 +549,8 @@ def _trace_reasons(log: QCLog | None, traces: Mapping[str, tuple[int, ...]]) -> 
 
 
 def _again(log: QCLog | None, stage: str, unit: str) -> str:
-    """The units the checks ran `stage` again on, and what asked for it: "8 windows (6
-    aliasing, 2 band at fmax)", each flag's units (one asked twice counted once). A redo's fresh
+    """The units the checks ran `stage` again on, and what asked for it: "8 windows (6 too
+    few points, 2 no ridge)", each flag's units (one asked twice counted once). A redo's fresh
     first attempt counts, as every attempt after the first run."""
     again = [
         attempt
@@ -1240,12 +1247,18 @@ def _trials(run_folder: Path, spacing: float) -> list[Step]:
     mutes = mutes_tried(run_folder)
     if mutes:
         kept = next((one for one in mutes if one.kept), None)
+        trigger = mute_trigger(run_folder)
         steps.append(
             Step(
                 kind="mute",
                 by="workflow",
                 title="Chose the mute",
                 lines=(
+                    *(
+                        [f"{trigger.capitalize()}, where the shots' first breaks put them"]
+                        if trigger
+                        else []
+                    ),
                     f"{plural(len(mutes), 'mute')} tried",
                     f"Kept: {mute_name(kept).lower() if kept is not None else 'none'}",
                 ),

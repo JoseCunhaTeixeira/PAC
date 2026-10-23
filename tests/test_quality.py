@@ -1094,6 +1094,7 @@ def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
     standard = {"method": "mute", "vmin": 80.0, "vmax": 1500.0, "width": 0.05}
     mutes = {
         "chosen": "none",
+        "trigger": {"t0": 0.0016},
         "trials": [
             {"candidate": "none", "muting": None, "verdicts": ["pass", "pass"], "passed": 2},
             {
@@ -1140,6 +1141,11 @@ def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
     ]
     # As every comparison: the options side by side, the one kept first, each setting a row.
     mutes = tables["Mutes tried"]
+    # Each mute with the trigger the trial set first.
+    assert mutes["intro"] == [
+        "Each on the same 2 sample windows, with the trigger delay 1.6 ms, where the shots' first "
+        "breaks put them"
+    ]
     assert mutes["columns"] == ["Mute"]
     assert [(one["name"], one["values"], one["clear"], one["kept"]) for one in mutes["rows"]] == [
         ("Option 1", ["none"], "2 of 2", True),
@@ -1169,7 +1175,11 @@ def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
     )
     assert (steps["mute"]["title"], steps["mute"]["lines"]) == (
         "Chose the mute",
-        ["2 mutes tried", "Kept: no mute"],
+        [
+            "Trigger delay 1.6 ms, where the shots' first breaks put them",
+            "2 mutes tried",
+            "Kept: no mute",
+        ],
     )
     assert steps["line"]["lines"] == ["2 changes tried", f"Kept: mute 80{DASH}1500 m/s"]
 
