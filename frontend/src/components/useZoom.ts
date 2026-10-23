@@ -7,7 +7,9 @@ import { usePlotBox } from "./plotBox";
 // it moves the view; with the zoom, it draws a rectangle, as Plotly does, and
 // releasing it zooms both axes to it, or one axis for a drag that is nearly
 // horizontal or vertical. Along an axis's tick labels, a drag zooms that axis,
-// whatever the tool. Shift+drag always moves. The box's "Reset zoom" goes back
+// whatever the tool. Shift+drag always moves. Ctrl and the wheel change the plot's own scale,
+// where it has one (a gather's traces, reset beside its normalization), the view kept. The
+// box's "Reset zoom" goes back
 // to its plots' full views (no double-click, on any plot). The zoom is held in
 // data units, so it survives a resize, and new data keeps it where it still
 // fits.
@@ -215,6 +217,7 @@ export function useZoom({
   onZoom,
   tool: given,
   canvas,
+  onScaleWheel,
 }: {
   /** The full view: the data's x and y ranges, as the plot maps them. */
   extent: View;
@@ -238,6 +241,9 @@ export function useZoom({
   tool?: Tool;
   /** The drawing the wheel zooms over. */
   canvas?: RefObject<HTMLElement | null>;
+  /** Ctrl and the wheel: the plot's own scale (a gather's traces) by this factor, the view
+   * kept; without it, Ctrl and the wheel zoom as the wheel does. */
+  onScaleWheel?: (factor: number) => void;
 }) {
   const [ownZoom, setOwnZoom] = useState<View | null>(null);
   const zoom = link ? link.zoom : ownZoom;
@@ -264,9 +270,9 @@ export function useZoom({
   const zoomed = view !== extent;
 
   // What the wheel and the box's reset read, always the latest: they are handed over once.
-  const latest = useRef({ view, extent, plots, width, height, yDown, setZoom, onZoom });
+  const latest = useRef({ view, extent, plots, width, height, yDown, setZoom, onZoom, onScaleWheel });
   useEffect(() => {
-    latest.current = { view, extent, plots, width, height, yDown, setZoom, onZoom };
+    latest.current = { view, extent, plots, width, height, yDown, setZoom, onZoom, onScaleWheel };
   });
 
   // While zoomed, the box's "Reset zoom" brings this plot back too.
@@ -376,6 +382,11 @@ export function useZoom({
     const { plot, region } = hit;
     const pixels = ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? h : 1);
     const factor = Math.exp(pixels * WHEEL_RATE);
+    const scale = latest.current.onScaleWheel;
+    if (ev.ctrlKey && scale) {
+      scale(factor);
+      return true;
+    }
     const [x0, x1] = current.x;
     const [y0, y1] = current.y;
     const xAt = x0 + ((clamp(px, plot.left, plot.left + plot.width) - plot.left) / plot.width) * (x1 - x0);

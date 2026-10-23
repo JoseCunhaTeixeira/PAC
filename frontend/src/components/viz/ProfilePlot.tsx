@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { canvasPalette, useTheme } from "../../theme";
 import { useContainerWidth } from "../useContainerWidth";
-import { CLICK_PX, type Range } from "../useZoom";
+import { CLICK_PX } from "../useZoom";
 import {
   cellWidth,
   drawCell,
@@ -53,7 +53,6 @@ export function ProfilePlot({
   onSelect,
   onShot,
   onWindow,
-  xZoom = null,
 }: {
   card: RunCard;
   /** The stage's cells: windows at their middle, or records at their shot. */
@@ -70,9 +69,6 @@ export function ProfilePlot({
   onSelect: (key: string) => void;
   onShot?: (name: string) => void;
   onWindow?: (key: string) => void;
-  /** The zoom along the line of the plots under it (the records' gathers), followed to stay
-   * aligned with them; null for the whole line. */
-  xZoom?: Range | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
@@ -94,10 +90,8 @@ export function ProfilePlot({
   // heights `lift` above the canvas's), as the computing pages' geometry.
   const lift = shots.length > 0 ? 0 : LANE.receiverY - SHOT_Y;
   const height = axisTop + AXIS_H - lift;
-  const full = useMemo(() => lineExtent(card), [card]);
-  // The gathers' zoom, within the line; the whole line without one.
-  const x0 = xZoom ? Math.max(xZoom[0], full[0]) : full[0];
-  const x1 = xZoom && Math.min(xZoom[1], full[1]) > x0 ? Math.min(xZoom[1], full[1]) : full[1];
+  // The whole line, whatever the plots under it zoom on.
+  const [x0, x1] = useMemo(() => lineExtent(card), [card]);
   const xOf = (x: number) => ML + ((x - x0) / (x1 - x0)) * plotW;
 
   // The cells by key, and those at a position along the line, in order.

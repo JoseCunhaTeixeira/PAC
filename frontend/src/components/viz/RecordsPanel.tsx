@@ -28,6 +28,7 @@ function RunGather({
   onXZoom: (x: Range | null) => void;
 }) {
   const [norm, setNorm] = useState<"trace" | "global">("trace");
+  const [gain, setGain] = useState(1);
   const gather = useJson<GatherData>(
     `${API}/quality/records/gather/${encodeURIComponent(folder)}/${encodeURIComponent(name)}?norm=${norm}`,
   );
@@ -36,10 +37,18 @@ function RunGather({
     <PlotBox>
       <div style={{ marginTop: 16 }} className={gather.loading ? "viz-stale" : undefined}>
         <PlotHead title={`${shown} · preprocessed, as the windows used it`}>
-          <Normalization value={norm} onChange={setNorm} />
+          <Normalization value={norm} onChange={setNorm} gain={gain} onGain={setGain} />
         </PlotHead>
         {gather.shown ? (
-          <LineGather key={shown} data={gather.shown} extent={extent} xZoom={xZoom} onXZoom={onXZoom} />
+          <LineGather
+            key={shown}
+            data={gather.shown}
+            extent={extent}
+            xZoom={xZoom}
+            onXZoom={onXZoom}
+            gain={gain}
+            onGain={setGain}
+          />
         ) : gather.error ? (
           <Empty>{gather.error}</Empty>
         ) : (
@@ -92,18 +101,40 @@ export function SavedSpectrum({
   );
 }
 
-export function Normalization({ value, onChange }: { value: "trace" | "global"; onChange: (value: "trace" | "global") => void }) {
+/** A gather's normalization, which resets its traces' scale, and under it, while Ctrl and the
+ * wheel changed that scale, the way back to it. */
+export function Normalization({
+  value,
+  onChange,
+  gain,
+  onGain,
+}: {
+  value: "trace" | "global";
+  onChange: (value: "trace" | "global") => void;
+  gain: number;
+  onGain: (gain: number) => void;
+}) {
   return (
-    <Segmented
-      size="sm"
-      label="Normalization"
-      value={value}
-      onChange={onChange}
-      options={[
-        { value: "trace", label: "By trace" },
-        { value: "global", label: "Global" },
-      ]}
-    />
+    <div className="viz-norm">
+      <Segmented
+        size="sm"
+        label="Normalization"
+        value={value}
+        onChange={(next) => {
+          onChange(next);
+          onGain(1);
+        }}
+        options={[
+          { value: "trace", label: "By trace" },
+          { value: "global", label: "Global" },
+        ]}
+      />
+      {gain !== 1 && (
+        <button type="button" className="box-reset" onClick={() => onGain(1)}>
+          Reset scale
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -119,6 +150,7 @@ interface RawGather {
 export function Gather({ profile, file }: { profile: string; file: string }) {
   const acquisition = useJson<Acquisition>(`${API}/acquisitions/${encodeURIComponent(profile)}`);
   const [norm, setNorm] = useState<"trace" | "global">("trace");
+  const [gain, setGain] = useState(1);
   // The zoom along the line, back to the whole record with another shot.
   const [zoomed, setZoomed] = useState<{ file: string; x: Range | null }>({ file, x: null });
   const xZoom = zoomed.file === file ? zoomed.x : null;
@@ -159,9 +191,17 @@ export function Gather({ profile, file }: { profile: string; file: string }) {
       <PlotBox>
         <div className={raw.loading ? "viz-stale" : undefined}>
           <PlotHead title={`${traced} · as recorded`}>
-            <Normalization value={norm} onChange={setNorm} />
+            <Normalization value={norm} onChange={setNorm} gain={gain} onGain={setGain} />
           </PlotHead>
-          <LineGather key={traced} data={data} extent={extent} xZoom={xZoom} onXZoom={setXZoom} />
+          <LineGather
+            key={traced}
+            data={data}
+            extent={extent}
+            xZoom={xZoom}
+            onXZoom={setXZoom}
+            gain={gain}
+            onGain={setGain}
+          />
         </div>
       </PlotBox>
       {spectra.shown && (

@@ -138,12 +138,15 @@ function Comparison({ folder, table }: { folder: string; table: TriedTable }) {
             ))}
             {clear && (
               <tr className="viz-measure">
-                <th scope="row" data-tip="Sample windows whose curve passed the checks">
+                <th
+                  scope="row"
+                  data-tip={"Sample windows whose curve passed the checks\nA change: under it, the windows asking it"}
+                >
                   Curves passed
                 </th>
                 {table.rows.map((row, index) => (
                   <td key={index} {...cell(index)}>
-                    {row.clear || "—"}
+                    <Lines text={row.clear || "—"} />
                   </td>
                 ))}
               </tr>

@@ -67,6 +67,7 @@ class LengthTrial(BaseModel):
     flags: tuple[str, ...] = ()
     uncertainty: float | None = None  # the passed curves' median velocity uncertainty
     compared: bool = False  # tried past the length kept, to compare
+    segment_s: float | None = None  # a passive line's segments for this length, s
 
 
 class LengthChoice(BaseModel):
@@ -111,8 +112,9 @@ class SegmentsTried(BaseModel):
 
 class LineTried(BaseModel):
     """One change of the line's settings the workflow's line loop tried (line_loop.json): the
-    change, the check that asked it and how many windows asked, the trial windows passing G3
-    with the line's settings before it and with it, and whether it was kept for the line."""
+    change, the check that asked it and how many windows asked, the sample windows passing G3
+    with the line's settings before it and with it, those asking it alike, and whether it was
+    kept for the line."""
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
@@ -123,6 +125,9 @@ class LineTried(BaseModel):
     xmids: tuple[float, ...] = ()
     before: int
     after: int
+    asked_xmids: tuple[float, ...] = ()  # an older line_loop.json tried the change on one sample
+    asked_before: int | None = None
+    asked_after: int | None = None
     kept: bool
     note: str = ""
 
@@ -537,8 +542,18 @@ def _lengths(choice: LengthChoice | None, spacing: float) -> TriedTable | None:
     if choice is None or not choice.trials:
         return None
     count = max(len(trial.xmids) for trial in choice.trials)
+    # A passive line's lengths each with its own segments: the segments the line keeps with it.
     columns, values = _compared(
-        [{"masw": {"length": trial.length}} for trial in choice.trials], spacing
+        [
+            {"masw": {"length": trial.length}}
+            | (
+                {"slicing": {"segment_duration": trial.segment_s, "segment_step": trial.segment_s}}
+                if trial.segment_s is not None
+                else {}
+            )
+            for trial in choice.trials
+        ],
+        spacing,
     )
     rows = [
         Tried(
@@ -676,7 +691,12 @@ def _line(tries: Sequence[LineTried], spacing: float) -> TriedTable | None:
         Tried(
             name="",
             values=(*said, plural(one.asked_by, "window")),
-            clear=f"{one.before} → {one.after} of {len(one.xmids)}",
+            clear=f"{one.before} → {one.after} of {len(one.xmids)}"
+            + (
+                f"{SEP}{one.asked_before} → {one.asked_after} of the {len(one.asked_xmids)} asking it"
+                if one.asked_xmids and set(one.asked_xmids) != set(one.xmids)
+                else ""
+            ),
             kept=one.kept,
         )
         for one, said in zip(tries, values, strict=True)

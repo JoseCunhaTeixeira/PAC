@@ -423,6 +423,13 @@ button.viz-option:active {
   transform: none;
 }
 
+/* A gather's normalization, and under it, while its traces are scaled, the way back (as the
+   box's tools hold their "Reset zoom"). */
+.viz-norm {
+  position: relative;
+  display: flex;
+}
+
 /* The chosen option's badge, beside its name, in the agents' blue: the table says which agent. */
 .viz-chosen {
   display: inline-block;

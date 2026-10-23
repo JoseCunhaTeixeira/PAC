@@ -60,6 +60,8 @@ export function LineGather({
   onXZoom,
   height = 440,
   mute,
+  gain = 1,
+  onGain,
 }: {
   data: GatherData;
   /** The line's extent along x, as the line plot has it. */
@@ -70,6 +72,10 @@ export function LineGather({
   height?: number;
   /** A muting to preview over the record. */
   mute?: MuteOverlay;
+  /** The traces' scale, which Ctrl and the wheel change (`onGain`: larger up, smaller down);
+   * without `onGain`, Ctrl and the wheel zoom as the wheel does. */
+  gain?: number;
+  onGain?: (gain: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const theme = useTheme();
@@ -82,7 +88,8 @@ export function LineGather({
   const [mouse, setMouse] = useState<{ x: number; y: number } | null>(null);
   const samples = data.traces[0]?.length ?? 0;
   const duration = Math.max(data.dt * Math.max(samples - 1, 1), 1e-6);
-  // The whole record first; the wheel and the box's tools zoom.
+  // The whole record first; the wheel and the box's tools zoom, Ctrl and the wheel scale the
+  // traces.
   const [ownY, setOwnY] = useState<Range | null>(null);
   const full = useMemo(() => ({ x: extent, y: [0, duration] as Range }), [extent, duration]);
   const plots: PlotRect[] = [{ left: ML, top: MT, width: plotW, height: plotH, xAxis: MB, yAxis: ML }];
@@ -94,6 +101,7 @@ export function LineGather({
     yDown: true,
     link: alongLine(xZoom, onXZoom, ownY, setOwnY, full),
     canvas: canvasRef,
+    onScaleWheel: onGain && ((factor) => onGain(Math.min(50, Math.max(0.05, gain / factor)))),
   });
   const [x0, x1] = zoom.view.x;
   const [t0, t1] = zoom.view.y;
@@ -151,6 +159,7 @@ export function LineGather({
     const amplitude = Math.max(2, Math.min(40, ((Number.isFinite(gap) ? gap : 1) / (x1 - x0)) * plotW * 0.9));
     const first = Math.max(0, Math.floor(t0 / data.dt));
     const last = Math.min(samples - 1, Math.ceil(t1 / data.dt));
+    const scale = amplitude * gain;
 
     ctx.save();
     ctx.beginPath();
@@ -166,7 +175,7 @@ export function LineGather({
         ctx.fillStyle = ink;
         ctx.beginPath();
         ctx.moveTo(base, Y(first * data.dt));
-        for (let j = first; j <= last; j++) ctx.lineTo(base + Math.max(0, trace[j]) * amplitude, Y(j * data.dt));
+        for (let j = first; j <= last; j++) ctx.lineTo(base + Math.max(0, trace[j]) * scale, Y(j * data.dt));
         ctx.lineTo(base, Y(last * data.dt));
         ctx.closePath();
         ctx.fill();
@@ -176,7 +185,7 @@ export function LineGather({
       ctx.lineWidth = out ? 1 : 0.7;
       ctx.beginPath();
       for (let j = first; j <= last; j++) {
-        const px = base + trace[j] * amplitude;
+        const px = base + trace[j] * scale;
         const py = Y(j * data.dt);
         if (j === first) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
@@ -296,7 +305,7 @@ export function LineGather({
     ctx.textBaseline = "middle";
     ctx.fillText("Time (s)", 0, 0);
     ctx.restore();
-  }, [data, width, height, plotW, plotH, x0, x1, t0, t1, samples, excluded, axes, palette, theme, mute, pointed]);
+  }, [data, width, height, plotW, plotH, x0, x1, t0, t1, samples, excluded, axes, palette, theme, mute, pointed, gain]);
 
   return (
     <div ref={containerRef} style={{ position: "relative", width: "100%" }}>

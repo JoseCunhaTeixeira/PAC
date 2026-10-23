@@ -28,6 +28,7 @@ const at = (folder: string) => encodeURIComponent(folder);
  * at its receiver; nothing in an active window (it stacks images, not correlations). */
 function WindowGather({ folder, xmid }: { folder: string; xmid: number }) {
   const [norm, setNorm] = useState<"trace" | "global">("trace");
+  const [gain, setGain] = useState(1);
   const [xZoom, setXZoom] = useState<Range | null>(null);
   const gather = useJson<GatherData>(`${API}/quality/dispersion/gather/${at(folder)}/${xmid}?norm=${norm}`);
   const shown = useShownUnit(xmid, gather.loading);
@@ -44,9 +45,18 @@ function WindowGather({ folder, xmid }: { folder: string; xmid: number }) {
     <PlotBox>
       <div style={{ marginTop: 16 }} className={gather.loading ? "viz-stale" : undefined}>
         <PlotHead title="Stacked correlations · the image's signal">
-          <Normalization value={norm} onChange={setNorm} />
+          <Normalization value={norm} onChange={setNorm} gain={gain} onGain={setGain} />
         </PlotHead>
-        <LineGather key={shown} data={gather.shown} extent={extent} xZoom={xZoom} onXZoom={setXZoom} height={320} />
+        <LineGather
+          key={shown}
+          data={gather.shown}
+          extent={extent}
+          xZoom={xZoom}
+          onXZoom={setXZoom}
+          height={320}
+          gain={gain}
+          onGain={setGain}
+        />
         <SavedSpectrum
           url={`${API}/quality/dispersion/spectrum/${at(folder)}/${xmid}`}
           title="Stacked correlations · their spectrum"
