@@ -511,17 +511,14 @@ def attempt_steps(
     """What was done to `unit` at the log's `stages`, a run a step in the order they ran, those a
     redo set aside too (the agent's picks and inversions again): what ran, why it ran again,
     what it changed (`changes`; by default its processing's steps in the run card's words), what
-    the checks said of it. None when each stage ran once: the card's badges and settings say it
-    all then."""
+    the checks said of it; each run, even when a stage ran once. None without a log (a run made
+    in PAC's pages)."""
     if log is None:
         return ()
     attempts = sorted(
         (one for stage in stages for one in log.runs_of(unit, stage)),
         key=lambda one: one.started_at,
     )
-    again = any(len(log.runs_of(unit, stage)) > 1 for stage in stages)
-    if not again and not any(one.status == "failed" for one in attempts):
-        return ()
     steps: list[Step] = []
     last: dict[str, Attempt] = {}
     for one in attempts:

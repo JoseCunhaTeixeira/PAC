@@ -1308,7 +1308,8 @@ def test_an_assistant_run_shows_g2_g3_g4(judged: str) -> None:
         {"label": "image", "state": "pass", "judged": True},
         {"label": "curve", "state": "pass", "judged": True},
     ]
-    assert card["steps"] == []  # each stage ran once
+    # Each stage ran once: what was done, each its step.
+    assert [step["title"] for step in card["steps"]] == ["Dispersion image made", "Curve picked"]
 
 
 def test_a_window_the_agent_picked_again_says_each_pick(judged: str) -> None:
@@ -1380,7 +1381,7 @@ def test_a_pick_changed_by_hand_leaves_the_assistants_curve_checks_behind(
     assert any(text.startswith("M0 picked by the user: ") for text in _texts(card))
     gates = {gate["gate"]: (gate["verdict"], gate["by_hand"]) for gate in card["gates"]}
     assert gates == {"G2": ("pass", False), "G3": ("pass", True), "G4": (None, True)}
-    assert card["steps"] == []
+    assert [step["title"] for step in card["steps"]] == ["Dispersion image made"]
     cells = {
         one["key"]: one
         for one in client.get(f"/quality/dispersion/overview/{folder}").json()["cells"]
@@ -1502,7 +1503,8 @@ def test_an_assistant_run_shows_g7_and_g8(judged: str) -> None:
     # Against its neighbours, in G8's measures: the sentences say what they do not.
     jump = next(one for one in gates["G8"]["metrics"] if one["name"] == "water_table_jump")
     assert (jump["value"], jump["threshold"]) == (0.5, 1.0)
-    assert "Water table at 1 m." in _texts(card) and card["steps"] == []
+    assert "Water table at 1 m." in _texts(card)
+    assert [step["title"] for step in card["steps"]] == ["Soil column made"]
 
 
 def test_the_endpoints_write_nothing(judged: str) -> None:
