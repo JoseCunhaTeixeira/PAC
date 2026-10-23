@@ -681,9 +681,15 @@ def _line(tries: Sequence[LineTried], spacing: float) -> TriedTable | None:
         )
         for one, said in zip(tries, values, strict=True)
     ]
+    # An older line_loop.json names no sample window.
+    count = max(len(one.xmids) for one in tries)
     return TriedTable(
         title="Changes tried where curves failed",
-        intro=("Each tried on the whole line, asked by the windows whose curve failed",),
+        intro=(
+            f"Each on the same {plural(count, 'sample window')}"
+            if count
+            else "Asked by the windows whose curve failed",
+        ),
         columns=(*columns, "Asked by"),
         rows=_options(rows),
         by="workflow",

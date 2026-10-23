@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { MAKER_LABELS, runDate } from "./format";
 import { FolderIcon } from "../icons";
 import { DispersionThumbs } from "./DispersionThumbs";
@@ -102,7 +102,10 @@ function Comparison({ folder, table }: { folder: string; table: TriedTable }) {
         </ul>
       )}
       <div className="viz-table-wrap">
-        <table className="viz-table viz-options">
+        <table
+          className="viz-table viz-options"
+          style={{ "--options": table.rows.length } as CSSProperties}
+        >
           <thead>
             <tr>
               <th />
@@ -115,11 +118,7 @@ function Comparison({ folder, table }: { folder: string; table: TriedTable }) {
                   ) : (
                     row.name
                   )}
-                  {row.kept && (
-                    <span className="viz-chosen">
-                      Chosen by the {AGENTS[table.by]}
-                    </span>
-                  )}
+                  {row.kept && <span className="viz-chosen">Chosen</span>}
                 </th>
               ))}
             </tr>

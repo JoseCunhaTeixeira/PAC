@@ -346,10 +346,11 @@
 /* Options side by side, a column each and every column as wide, a setting a row: the settings'
    names on the left, the option kept tinted, a setting's other parameters under its value; a
    narrow screen scrolls it. */
+/* Room for each option's words, the card's width shared: past it, the table scrolls. */
 .viz table.viz-options {
   table-layout: fixed;
   width: 100%;
-  min-width: 560px;
+  min-width: calc(150px + var(--options, 3) * 112px);
 }
 
 .viz table.viz-options thead th:first-child {
@@ -376,7 +377,7 @@
 }
 
 .viz table.viz-options .kept {
-  background: var(--ok-soft);
+  background: var(--blue-soft);
   color: var(--text);
 }
 
@@ -422,15 +423,15 @@ button.viz-option:active {
   transform: none;
 }
 
-/* The chosen option's badge, beside its name. */
+/* The chosen option's badge, beside its name, in the agents' blue: the table says which agent. */
 .viz-chosen {
   display: inline-block;
   white-space: nowrap;
   margin-left: 6px;
   padding: 0 7px;
   border-radius: 999px;
-  background: var(--ok-soft);
-  color: var(--ok);
+  background: var(--blue-soft);
+  color: var(--blue);
   font-size: 0.66rem;
   font-weight: 650;
   text-transform: none;
