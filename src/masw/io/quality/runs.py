@@ -26,7 +26,7 @@ from masw.io.quality.files import (
 )
 from masw.io.quality.history import (
     ASKED,
-    AUTO,
+    JUDGING,
     TRIALS,
     VISION,
     by_whom_counted,
@@ -77,6 +77,7 @@ from masw.io.quality.view import (
     BY_AGENT,
     BY_USER,
     REFUSALS,
+    How,
     Origin,
     Setting,
     Step,
@@ -995,7 +996,7 @@ def _study_history(
                 Step(
                     kind="commit",
                     by="agent",
-                    how=AUTO,
+                    how=How(label=str(manifest.preset.mode)),
                     at=entry.at,
                     title=title,
                     lines=tuple(plain(changes, spacing, length)),
@@ -1007,7 +1008,7 @@ def _study_history(
                 Step(
                     kind="freeze",
                     by="agent",
-                    how=AUTO,
+                    how=JUDGING,
                     at=entry.at,
                     title="Reviewed the curves",
                     lines=tuple(
@@ -1045,7 +1046,7 @@ def _survey_step(
     return Step(
         kind="survey",
         by="agent",
-        how=AUTO,
+        how=How(label=str(manifest.preset.mode)),
         at=asked,
         title="Looked at the records",
         lines=tuple(lines),

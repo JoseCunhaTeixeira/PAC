@@ -163,27 +163,30 @@ def _registered() -> None:
 
 
 # How a result was made, on its badge beside who made it: the method, the same whoever used it
-# (PAC's automatic picking is the agents' tracker): a curve, the way it was picked; another
-# result, computed automatically by the same code for every maker.
-AUTO = How(label="auto")
+# (PAC's automatic picking is the agents' tracker): a curve, the way it was picked; the records
+# and the images, the run's method (active, passive, passive-active: PAC's Compute pages); a Vs
+# profile, MCMC; a soil column, a Silex model.
+_AUTO = How(label="auto")
 _WAYS = {
-    "tracker": AUTO,
+    "tracker": _AUTO,
     "neighbours": How(label="guided", tip="Along the neighbouring curves"),
     "guide": How(label="guided", tip="Along points given"),
     "lasso": How(label="lasso"),
-    "auto": AUTO,
+    "auto": _AUTO,
     "hand lasso": How(label="lasso"),
     "box": How(label="box"),
     "hand": How(label="by hand"),
 }
+_METHODS = {"inversion": How(label="MCMC"), "petro_inversion": How(label="Silex")}
 # How the run's own steps were done: the user's requests and settings, in the agent's chat; the
 # workflow's choices, by trials on sample windows; the autonomous agent's choice of the
-# settings, by its vision; the rest, automatically.
+# settings, by its vision.
 ASKED = How(label="chat")
 TRIALS = How(label="trials", tip="Tried on sample windows, the one most of them passed kept")
 VISION = How(label="vision", tip="Dispersion images compared by the agent's vision")
-# A check's verdict, judged; a result no check judged, measured against the agent's limits.
-_JUDGED = How(label="judged")
+# A check's verdict, or the agent's on each curve, judged; a result no check judged, measured
+# against the agent's limits.
+JUDGING = How(label="judged")
 _MEASURED = How(label="measured", tip="Against the agent's limits, as its check takes them")
 # The user's ways of picking: their curve, taken as it is, which no check judges.
 _BY_HAND = frozenset({"hand lasso", "box", "hand"})
@@ -241,24 +244,29 @@ class Verdict:
 
 @dataclass(frozen=True)
 class Done:
-    """A result that stands: its stage (a curve's mode), who made it and when, why (a check or
-    the user asked it), how (a pick's way), what its settings changed on the run it replaced, and
-    the verdicts on it."""
+    """A result that stands: its stage (a curve's mode), who made it and when, how (its method,
+    on its badge), why (a check or the user asked it), a pick's way, what its settings changed on
+    the run it replaced, and the verdicts on it."""
 
     stage: str
     mode: str | None
     by: Maker
     at: datetime | None
+    how: How | None
     why: str
     way: str
     changes: tuple[str, ...]
     verdicts: tuple[Verdict, ...]
 
-    @property
-    def how(self) -> How | None:
-        """How it was made, on its badge, whoever made it: a curve, the way it was picked;
-        another result, automatically."""
-        return _WAYS.get(self.way) if self.stage == "picking" else AUTO
+
+def method(stage: str, way: str, run_method: str) -> How | None:
+    """How a result of `stage` was made, on its badge, whoever made it: a curve, its `way`; the
+    records and the images, the run's method; a Vs profile, a soil column, theirs."""
+    if stage == "picking":
+        return _WAYS.get(way)
+    if stage in _METHODS:
+        return _METHODS[stage]
+    return How(label=run_method) if run_method else None
 
 
 @dataclass
@@ -325,6 +333,7 @@ def _standing(sources: _Sources, unit: str, tested: Collection[str]) -> list[Don
     test."""
     manifest = sources.manifest
     record = manifest is not None and any(one.name == unit for one in manifest.records)
+    run_method = str(manifest.preset.mode) if manifest is not None else ""
     window = sources.run_folder / unit
     changes = read_changes(window) if not record and window.is_dir() else ()
     runs, asides, judged = _from_log(sources, unit, changes)
@@ -351,6 +360,7 @@ def _standing(sources: _Sources, unit: str, tested: Collection[str]) -> list[Don
                 mode=key.partition(":")[2] or None,
                 by=last.by,
                 at=last.at,
+                how=method(last.stage, last.way, run_method),
                 why=last.why,
                 way=last.way,
                 changes=last.changes,
@@ -724,7 +734,7 @@ def unit_steps(
             Step(
                 kind="test" if verdict.test else "check",
                 by="checks",
-                how=_MEASURED if verdict.test else _JUDGED,
+                how=_MEASURED if verdict.test else JUDGING,
                 at=verdict.at or one.at,
                 title=verdict.title,
                 lines=verdict.lines,

@@ -199,11 +199,11 @@ def test_a_pac_run_card_says_its_windows_came_from_pacs_form(run: str) -> None:
         (step["kind"], step["by"], _how(step), step["title"], step["lines"])
         for step in card["history"]
     ] == [
-        ("preprocessing", "you", "auto", "Read the records", ["2 of 2 records"]),
+        ("preprocessing", "you", "active", "Read the records", ["2 of 2 records"]),
         (
             "phase_shift",
             "you",
-            "auto",
+            "active",
             "Processed the whole line",
             ["3 of 3 windows", "Windows of 6 receivers (5 m), one every 3 receivers (3 m)"],
         ),
@@ -217,14 +217,14 @@ def test_a_pac_run_card_says_its_windows_came_from_pacs_form(run: str) -> None:
         (
             "inversion",
             "you",
-            "auto",
+            "MCMC",
             "Inverted the curves into Vs profiles",
             ["2 of 3 windows", "xmid 2.5 m, xmid 5.5 m"],
         ),
         (
             "petro_inversion",
             "you",
-            "auto",
+            "Silex",
             "Inverted the curves into soil columns",
             ["2 of 3 windows", "xmid 2.5 m, xmid 5.5 m"],
         ),
@@ -381,7 +381,7 @@ def test_a_pac_run_shows_its_records_measures_without_verdicts(run: str) -> None
     ]
     assert card["windows"] == ["xmid_2.50", "xmid_5.50", "xmid_8.50"]
     # What was done: preprocessed by the user, in PAC.
-    assert _done(card)[0] == ("Preprocessed", "you", "auto", [])
+    assert _done(card)[0] == ("Preprocessed", "you", "active", [])
     # Its measures in their tables, by object; its sentences, what they do not say.
     assert {metric["of"] for metric in gate["metrics"]} == {"signal", "spectrum"}
     assert _texts(card) == [
@@ -701,7 +701,7 @@ def test_an_inversion_card_shows_the_model_its_fit_and_its_chains(run: str) -> N
 
     assert card["inverted"] is True and card["title"] == "xmid 2.5 m · 1 layer over a half-space"
     assert card["parameters"]["n_layers"] == 2
-    assert _done(card)[0] == ("Inverted", "you", "auto", [])
+    assert _done(card)[0] == ("Inverted", "you", "MCMC", [])
     # No trial runs: the chains' moves follow the posterior.
     assert card["tuning"] == [] and card["step_factor"] is None
     assert len(card["acceptance"]) == PARAMETERS["n_chains"]
@@ -1300,7 +1300,7 @@ def test_an_assistant_run_shows_g1_and_what_it_redid(judged: str) -> None:
         (
             "Preprocessed",
             "workflow",
-            "auto",
+            "active",
             ["Asked by the signal check: trigger off", "Trigger: delay 12 ms"],
         ),
         ("Signal check: passed", "checks", "judged", []),
@@ -1342,7 +1342,7 @@ def test_an_assistant_run_shows_g2_g3_g4(judged: str) -> None:
     # it picked again over the user's box, how, with what its settings changed on the run's
     # picking settings, checked by G3 and G4. Its Vs profile and soil column on their cards.
     assert _done(card) == [
-        ("Dispersion image made", "workflow", "auto", []),
+        ("Dispersion image made", "workflow", "active", []),
         ("Dispersion image check: passed", "checks", "judged", []),
         ("M0 picked", "workflow", "auto", ["Threshold: 0.35"]),
         ("Curve check: passed", "checks", "judged", []),
@@ -1417,7 +1417,7 @@ def test_a_pick_changed_by_hand_leaves_the_assistants_curve_checks_behind(
     # What was done: the user's curve now, by hand, taken as it is (neither checked nor
     # measured); the workflow's pick it replaced and its checks left out.
     assert _done(card) == [
-        ("Dispersion image made", "workflow", "auto", []),
+        ("Dispersion image made", "workflow", "active", []),
         ("Dispersion image check: passed", "checks", "judged", []),
         ("M0 picked", "you", "by hand", []),
     ]
@@ -1497,7 +1497,7 @@ def test_an_assistant_run_shows_g5_and_what_each_attempt_changed(judged: str) ->
         (
             "Inverted",
             "workflow",
-            "auto",
+            "MCMC",
             [
                 "Asked by the model check: chains not converged",
                 "Sampling: 2000 iterations, was 1000",
@@ -1530,7 +1530,7 @@ def test_a_window_inverted_again_in_pac_drops_the_assistants_verdict(judged: str
     # What was done: the user's model now, dated by its files, measured against the agent's
     # limits as no check judged it; the workflow's, which it replaced, left out with its checks.
     (inverted, measured) = _done(card)
-    assert inverted == ("Inverted", "you", "auto", [])
+    assert inverted == ("Inverted", "you", "MCMC", [])
     assert measured[1:3] == ("checks", "measured")
     overview = client.get(f"/quality/inversion/overview/{folder}").json()
     assert overview["summary"].startswith("3 windows · 2 inverted by the user")
@@ -1553,7 +1553,7 @@ def test_a_soil_column_made_again_in_pac_drops_the_assistants_checks(judged: str
 
     assert card["verdict"] is None
     (soil, measured) = _done(card)
-    assert soil == ("Soil column made", "you", "auto", [])
+    assert soil == ("Soil column made", "you", "Silex", [])
     assert measured[1:3] == ("checks", "measured")
     assert {gate["gate"]: gate["verdict"] for gate in card["gates"]} == {"G7": None}
     assert card["column"] is not None
@@ -1570,7 +1570,7 @@ def test_an_assistant_run_shows_g7_and_g8(judged: str) -> None:
     assert "Water table at 1 m." in _texts(card)
     # What was done: the workflow's soil column over PAC's, checked by G7 and G8.
     assert _done(card) == [
-        ("Soil column made", "workflow", "auto", []),
+        ("Soil column made", "workflow", "Silex", []),
         ("Soil column check: passed", "checks", "judged", []),
         ("Check against the neighbouring soil columns: passed", "checks", "judged", []),
     ]
@@ -1581,18 +1581,18 @@ def test_a_run_processed_in_pac_says_what_was_done_to_each_unit(run: str) -> Non
     # as no check judged it.
     record = client.get(f"/quality/records/card/{run}/1.mseed").json()
     ((made, by, how, lines), (_, checks, measured, _)) = _done(record)
-    assert (made, by, how, lines) == ("Preprocessed", "you", "auto", [])
+    assert (made, by, how, lines) == ("Preprocessed", "you", "active", [])
     assert (checks, measured) == ("checks", "measured")
     # A window's image measured alike; its curve picked in a box, the user's, taken as it is.
     window = client.get(f"/quality/dispersion/card/{run}/2.5").json()
     steps = _done(window)
-    assert steps[0] == ("Dispersion image made", "you", "auto", [])
+    assert steps[0] == ("Dispersion image made", "you", "active", [])
     assert steps[1][1:3] == ("checks", "measured")
     assert steps[2:] == [("M0 picked", "you", "box", [])]
     # Its Vs profile and soil column made in PAC's pages, each measured as their checks would.
     for stage, title, tool in (
-        ("inversion", "Inverted", "auto"),
-        ("petro", "Soil column made", "auto"),
+        ("inversion", "Inverted", "MCMC"),
+        ("petro", "Soil column made", "Silex"),
     ):
         ((made, by, how, lines), (_, _, measured, _)) = _done(
             client.get(f"/quality/{stage}/card/{run}/2.5").json()
@@ -2311,7 +2311,7 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
         (
             "commit",
             "agent",
-            "auto",
+            "active",
             "Processed the whole line",
             ["Windows: 6 receivers (5 m)", "Dispersion image: up to 60 Hz"],
         ),
@@ -2322,14 +2322,14 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
         (
             "inversion",
             "you",
-            "auto",
+            "MCMC",
             "Inverted the curves into Vs profiles",
             ["1 of 3 windows", "xmid 5.5 m"],
         ),
         (
             "petro_inversion",
             "you",
-            "auto",
+            "Silex",
             "Inverted the curves into soil columns",
             ["1 of 3 windows", "xmid 5.5 m"],
         ),
@@ -2347,7 +2347,7 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
         (
             "inversion",
             "agent",
-            "auto",
+            "MCMC",
             "Inverted the curves into Vs profiles",
             [
                 "1 of 3 windows",
@@ -2358,7 +2358,7 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
         (
             "petro_inversion",
             "agent",
-            "auto",
+            "Silex",
             "Inverted the curves into soil columns",
             [
                 "1 of 3 windows",
