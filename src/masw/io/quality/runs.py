@@ -4,11 +4,12 @@ where it comes from (the user, the workflow, the agent, or the preset's default)
 to choose them, the run's history step by step, how far each stage went, and the line's geometry
 for the profile plot: every receiver, every shot, every window's receivers."""
 
+import json
 import math
 import re
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -27,6 +28,7 @@ from masw.io.quality.files import (
 from masw.io.quality.history import (
     ASKED,
     JUDGING,
+    SURVEYED,
     TRIALS,
     VISION,
     by_whom_counted,
@@ -1046,7 +1048,7 @@ def _survey_step(
     return Step(
         kind="survey",
         by="agent",
-        how=How(label=str(manifest.preset.mode)),
+        how=SURVEYED,
         at=asked,
         title="Looked at the records",
         lines=tuple(lines),
@@ -1095,10 +1097,11 @@ def near_field_used(run_folder: Path, log: QCLog | None) -> float | None:
 
 
 def _run_history(run_folder: Path, manifest: RunManifest, log: QCLog | None) -> tuple[Step, ...]:
-    """What PAC or the workflow did, from the run's files, a step each: the settings the user
-    gave, the records read, the workflow's choices on the line, the line processed, the curves
-    picked, inverted into Vs profiles and into soil columns, each by who made what stands of it
-    (quality.history's run_steps); what the user did in PAC after the workflow, last."""
+    """What PAC or the workflow did, from the run's files, a step each: what the user asked the
+    workflow and the settings they gave, the records preprocessed, the workflow's choices on the
+    line, the line processed, the curves picked, inverted into Vs profiles and into soil columns,
+    each by who made what stands of it (quality.history's run_steps); what the user did in PAC
+    after the workflow, last."""
     spacing = manifest.profile.receiver_spacing_m
     masw = preset_stage(manifest, "masw")
     length, step = int(masw["length"]), int(masw["step"])
@@ -1118,6 +1121,10 @@ def _run_history(run_folder: Path, manifest: RunManifest, log: QCLog | None) -> 
     )
     # The run's maker's steps in the pipeline's order; the user's after the workflow's, last.
     maker = log.chooser if log is not None else "you"
+    requests = _requests(run_folder)
+
+    def asked(stage: str) -> list[Step]:
+        return [one for started, one in requests if started == stage]
 
     def stage(kind: str) -> list[Step]:
         return [one for one in found if one.kind == kind and one.by == maker]
@@ -1138,22 +1145,91 @@ def _run_history(run_folder: Path, manifest: RunManifest, log: QCLog | None) -> 
         ]
 
     steps = [
+        *asked("processing"),
         *gave("processing"),
         *stage("preprocessing"),
         *_trials(run_folder, spacing),
         *stage("phase_shift"),
         *_line_tries(run_folder, spacing),
+        *asked("picking"),
         *gave("picking"),
         *stage("picking"),
+        *asked("inversion"),
         *gave("inversion"),
         *stage("inversion"),
+        *asked("petro"),
         *stage("petro_inversion"),
     ]
+    # The requests that started no stage of the run, with the user's work in PAC after it.
     later = sorted(
-        (one for one in found if one.by != maker),
+        [
+            *(one for one in found if one.by != maker),
+            *(one for started, one in requests if started not in _REQUESTED),
+        ],
         key=lambda one: one.at or datetime.min.replace(tzinfo=UTC),
     )
     return (*steps, *later)
+
+
+# PACo's trace of the workflow's calls on a run: when, the chat's conversation and turn, PACo's
+# reading of the message (its scope), the tool (paco.server's CALLS_FILE).
+CALLS_FILE = "agent_calls.jsonl"
+# The stage of a run each of the workflow's tools starts (masw.agent's RUN_STAGES).
+_CALL_STAGES = {
+    "run_processing": "processing",
+    "pick": "picking",
+    "judge": "picking",
+    "invert": "inversion",
+    "job_status": "inversion",
+    "invert_petro": "petro",
+}
+_REQUESTED = frozenset(_CALL_STAGES.values())
+# What a message asks, as PACo read it, in words.
+_ASKS = {
+    "process": "To process the records",
+    "pick": "To pick the curves",
+    "invert": "To invert the curves",
+    "soils": "To make the soil columns",
+}
+
+
+def _requests(run_folder: Path) -> list[tuple[str, Step]]:
+    """What the user asked the workflow agent on the run, a step each with the stage it
+    started: each turn of the chat that called a tool on the run (PACo's agent_calls.jsonl,
+    a call outside the chat left out), as PACo read the message, from when its first call
+    began."""
+    path = run_folder / CALLS_FILE
+    if not path.exists():
+        return []
+    turns: dict[tuple[str, object], tuple[str, Step]] = {}
+    for line in path.read_text().splitlines():
+        try:
+            call = cast(dict[str, Any], json.loads(line))
+            ended = datetime.fromisoformat(str(call["at"]))
+        except ValueError, KeyError, TypeError:
+            continue
+        conversation = call.get("conversation")
+        key = (str(conversation), call.get("turn"))
+        if not conversation or conversation == "paco-call" or key in turns:
+            continue
+        scope = cast(dict[str, Any], call.get("scope") or {})
+        lines = [_ASKS.get(str(one), str(one)) for one in cast(list[Any], scope.get("asked") or [])]
+        if scope.get("mode"):
+            lines.append(f"Method: {scope['mode']}")
+        if positions := cast(list[Any], scope.get("positions_m") or []):
+            lines.append("At xmid " + ", ".join(f"{number(float(one), 4)} m" for one in positions))
+        turns[key] = (
+            _CALL_STAGES.get(str(call.get("tool")), ""),
+            Step(
+                kind="request",
+                by="you",
+                how=ASKED,
+                at=ended - timedelta(seconds=float(call.get("seconds") or 0)),
+                title="Asked",
+                lines=tuple(lines),
+            ),
+        )
+    return sorted(turns.values(), key=lambda pair: pair[1].at or datetime.min.replace(tzinfo=UTC))
 
 
 def _trials(run_folder: Path, spacing: float) -> list[Step]:

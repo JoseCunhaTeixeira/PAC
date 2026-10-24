@@ -199,7 +199,7 @@ def test_a_pac_run_card_says_its_windows_came_from_pacs_form(run: str) -> None:
         (step["kind"], step["by"], _how(step), step["title"], step["lines"])
         for step in card["history"]
     ] == [
-        ("preprocessing", "you", "active", "Read the records", ["2 of 2 records"]),
+        ("preprocessing", "you", "active", "Preprocessed the records", ["2 of 2 records"]),
         (
             "phase_shift",
             "you",
@@ -1214,6 +1214,54 @@ def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
         ],
     )
     assert steps["line"]["lines"] == ["2 changes tried", f"Kept: mute 80{DASH}1500 m/s"]
+
+
+def test_a_workflow_run_says_what_the_user_asked_it(judged: str) -> None:
+    folder = f"{judged}-asked"
+    shutil.copytree(OUTPUT_DIR / judged, OUTPUT_DIR / folder)
+    process = {"asked": ["process"], "mode": "active"}
+    calls = [
+        {"at": "2026-10-24T01:02:40+00:00", "conversation": "c1", "turn": 2, "scope": process,
+         "tool": "run_processing", "seconds": 300},
+        {"at": "2026-10-24T01:03:08+00:00", "conversation": "c1", "turn": 3,
+         "scope": {"asked": ["pick"]}, "tool": "pick", "seconds": 8},
+        {"at": "2026-10-24T01:03:10+00:00", "conversation": "c1", "turn": 3,
+         "scope": {"asked": ["pick"]}, "tool": "judge", "seconds": 1},
+        {"at": "2026-10-24T01:04:00+00:00", "conversation": "paco-call", "turn": None,
+         "scope": None, "tool": "pick", "seconds": 1},
+    ]  # fmt: skip
+    _lines(OUTPUT_DIR / folder / "agent_calls.jsonl", calls)
+
+    history = client.get(f"/quality/run/{folder}").json()["history"]
+
+    # Each turn of the chat that called a tool on the run, as PACo read the message, before the
+    # stage it started; a call outside the chat left out.
+    said = [(one["title"], one["by"], _how(one), one["lines"]) for one in history]
+    assert [one for one in said if one[0] == "Asked"] == [
+        ("Asked", "you", "chat", ["To process the records", "Method: active"]),
+        ("Asked", "you", "chat", ["To pick the curves"]),
+    ]
+    titles = [one[0] for one in said]
+    assert titles[0] == "Asked" and titles[titles.index("Picked the curves") - 1] == "Asked"
+
+
+def test_the_agents_survey_of_the_records_is_measured(run: str) -> None:
+    from masw.io.quality.journal import SurveyDone
+    from masw.io.quality.runs import _survey_step  # pyright: ignore[reportPrivateUsage]
+
+    manifest = read_manifest(OUTPUT_DIR / run)
+    assert manifest is not None
+    survey = SurveyDone(receivers=12, shots=(1, 2), usable_spread_hz=(5.0, 60.0))
+
+    step = _survey_step(survey, (), manifest, None)
+
+    # Its raw records measured before any setting is chosen: no method of the run's yet.
+    assert (step.title, step.by, step.how.label if step.how else None) == (
+        "Looked at the records",
+        "agent",
+        "measured",
+    )
+    assert step.lines[:2] == ("2 shots on 12 receivers", "Signal usable from 5 to 60 Hz")
 
 
 def test_the_searchs_one_value_is_no_word_of_the_agents() -> None:

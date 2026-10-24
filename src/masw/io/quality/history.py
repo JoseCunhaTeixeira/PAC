@@ -100,7 +100,7 @@ class CheckKind:
 STAGES: dict[str, StageKind] = {
     kind.stage: kind
     for kind in (
-        StageKind("preprocessing", "record", "Preprocessed", "Read the records", 0),
+        StageKind("preprocessing", "record", "Preprocessed", "Preprocessed the records", 0),
         StageKind("phase_shift", "window", "Dispersion image made", "Processed the whole line", 1),
         StageKind("picking", "window", "{mode} picked", "Picked the curves", 2),
         StageKind("inversion", "window", "Inverted", "Inverted the curves into Vs profiles", 3),
@@ -179,9 +179,13 @@ _WAYS = {
 }
 _METHODS = {"inversion": How(label="MCMC"), "petro_inversion": How(label="Silex")}
 # How the run's own steps were done: the user's requests and settings, in the agent's chat; the
+# autonomous agent's survey of the records, measured before any setting is chosen; the
 # workflow's choices, by trials on sample windows; the autonomous agent's choice of the
 # settings, by its vision.
 ASKED = How(label="chat")
+SURVEYED = How(
+    label="measured", tip="The raw records, as the signal check measures them, before any setting"
+)
 TRIALS = How(label="trials", tip="Tried on sample windows, the one most of them passed kept")
 VISION = How(label="vision", tip="Dispersion images compared by the agent's vision")
 # A check's verdict, or the agent's on each curve, judged; a result no check judged, measured
