@@ -1771,6 +1771,19 @@ def test_a_window_the_agent_could_not_pick_is_marked_as_its_check_judged_it() ->
     assert said.mark == "fail"
 
 
+def test_a_window_is_judged_only_where_its_checks_made_its_state() -> None:
+    from masw.io.quality.dispersion import _judged  # pyright: ignore[reportPrivateUsage]
+
+    # Its image passed by the image check, its curve auto-picked in PAC beyond the agent's
+    # limits: the window's state is the curve's measure, no verdict.
+    assert not _judged("note", ("pass", True), ("note", False))
+    # Its curve within the limits by its measures: not every part in its state was checked.
+    assert not _judged("pass", ("pass", True), ("pass", False))
+    # Its image rejected by its check, whatever its curve; both parts passed by their checks.
+    assert _judged("fail", ("fail", True), ("pass", False))
+    assert _judged("pass", ("pass", True), ("pass", True))
+
+
 def test_a_window_asked_twice_for_one_flag_is_counted_once() -> None:
     from masw.io.quality.runs import _again  # pyright: ignore[reportPrivateUsage]
 

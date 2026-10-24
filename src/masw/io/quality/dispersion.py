@@ -183,8 +183,10 @@ def dispersion_overview(folder: str) -> Overview:
         image, picks = _states(g2, g3, g4, curve, picked_by, curve_measures, image_measures)
         images.add(image, g2 is not None)
         curves.add(picks, g3 is not None or g4 is not None)
+        state = _status(image, picks)
         status = windows.add(
-            _status(image, picks), g2 is not None or g3 is not None or g4 is not None
+            state,
+            _judged(state, (image, g2 is not None), (picks, g3 is not None or g4 is not None)),
         )
         # Its image and its curve apart, as its cell's parts, then its curve's figures.
         hover = [f"xmid {number(xmid_of(unit), 4)} m"]
@@ -322,6 +324,14 @@ def _status(image: PartState, curve: PartState) -> Status:
     if curve == "none":
         return "fail" if image == "fail" else "none"
     return worst(cast(Status, image), cast(Status, curve))
+
+
+def _judged(status: Status, *parts: tuple[PartState, bool]) -> bool:
+    """Whether checks made a window's state `status`: each of its `parts` (its state, whether a
+    check judged it) in that state judged. A part measured against the agent's limits, as a
+    curve picked in PAC on an image the agent's check passed, makes it a measure's state."""
+    at = [judged for state, judged in parts if state == status]
+    return bool(at) and all(at)
 
 
 def dispersion_card(folder: str, xmid: float) -> DispersionCard:
