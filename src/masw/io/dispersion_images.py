@@ -1,7 +1,10 @@
-from collections.abc import Sequence
+import shutil
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
+from masw.io.changes import record_pick
 from masw.io.folders import get_xmid_folders
 from masw.io.history import curve_changed, writing
 from masw.io.paths import output_folder
@@ -10,7 +13,7 @@ from masw.io.quality.log import read_log
 from sigpipe.algorithms.picking.dispersion.curve import pick_curves
 from sigpipe.algorithms.picking.dispersion.lasso import pick_lasso as lasso
 from sigpipe.algorithms.picking.dispersion.tracking import PickingParameters, pick_modes
-from sigpipe.base.dispersion_curve import DispersionCurve, Mode
+from sigpipe.base.dispersion_curve import DispersionCurve, DispersionCurves, Mode
 from sigpipe.base.dispersion_image import DispersionImage
 from sigpipe.masw.picks import (
     PseudoSection,
@@ -22,6 +25,7 @@ from sigpipe.masw.picks import (
 )
 from sigpipe.masw.runs import load_image
 from sigpipe.masw.runs.finding import IMAGE_FILE
+from sigpipe.masw.runs.history import set_aside
 from sigpipe.masw.runs.origin import Origin, mark_auto, mark_edited
 
 
@@ -46,9 +50,12 @@ def pick_lasso(
     image = load_dispersion_image(folder, xmid)
     mode = Mode.from_label(label)
     updated = lasso(image, polygon, mode)
+    window = xmid_folder(folder, xmid)
     with writing(output_folder(folder)):
-        save_curves(xmid_folder(folder, xmid), image, updated.dispersion_curves)
-        _edited(xmid_folder(folder, xmid), mode)
+        aside = set_aside(window, "picking", copy=True)
+        save_curves(window, image, updated.dispersion_curves)
+        inputs = {"polygon": [[float(f), float(v)] for f, v in polygon]}
+        _edited(window, mode, "lasso", inputs, updated.dispersion_curves, aside)
     return updated
 
 
@@ -78,26 +85,56 @@ def pick_box(
         modes=[mode.number],
         resample_over_wavelength=True,
     )
+    window = xmid_folder(folder, xmid)
+    box = {
+        "fmin": fmin,
+        "fmax": fmax,
+        "vmin": vmin,
+        "vmax": vmax,
+        "lbdmin": lbdmin,
+        "lbdmax": lbdmax,
+    }
     with writing(output_folder(folder)):
-        save_curves(xmid_folder(folder, xmid), image, updated.dispersion_curves)
-        _edited(xmid_folder(folder, xmid), mode)
+        aside = set_aside(window, "picking", copy=True)
+        save_curves(window, image, updated.dispersion_curves)
+        _edited(window, mode, "box", box, updated.dispersion_curves, aside)
     return updated
 
 
 def delete_curve(folder: str, xmid: float, label: str) -> DispersionImage:
     image = load_dispersion_image(folder, xmid)
     mode = Mode.from_label(label)
+    window = xmid_folder(folder, xmid)
     with writing(output_folder(folder)):
-        remaining = remove_pick(xmid_folder(folder, xmid), image, mode)
-        _edited(xmid_folder(folder, xmid), mode)
+        aside = set_aside(window, "picking", copy=True)
+        try:
+            remaining = remove_pick(window, image, mode)
+        except ValueError:
+            if aside is not None:  # no such curve: nothing replaced, nothing to keep
+                shutil.rmtree(window / aside)
+            raise
+        _edited(window, mode, "delete", {}, remaining, aside)
     return replace(image, dispersion_curves=remaining)
 
 
-def _edited(window: Path, mode: Mode) -> None:
-    """`window`'s curve of `mode` changed by hand: said so, and what was made of the older curve
-    forgotten (see masw.io.history)."""
+def _edited(
+    window: Path,
+    mode: Mode,
+    how: str,
+    inputs: Mapping[str, Any],
+    curves: DispersionCurves | None,
+    aside: str | None,
+) -> None:
+    """`window`'s curve of `mode` changed by hand (`how`, with `inputs`; `curves`: the window's
+    now, `aside`: where its curves before were set aside): said so, what was made of the older
+    curve forgotten (see masw.io.history), and the change recorded in its history."""
     mark_edited(window, mode)
-    curve_changed(window, mode)
+    later = curve_changed(window, mode)
+    record_pick(window, how, mode, inputs, _curve_of(curves, mode), aside, later)
+
+
+def _curve_of(curves: DispersionCurves | None, mode: Mode) -> DispersionCurve | None:
+    return next((curve for curve in curves or () if curve.mode == mode), None)
 
 
 def list_labels(folder: str) -> dict[str, int]:
@@ -158,7 +195,10 @@ def auto_pick_m0(folder: str, xmid: float) -> DispersionImage:
     if curve is None:
         raise NoCurveFound(f"The automatic picking found no fundamental mode at xmid {xmid:g} m.")
     with writing(output_folder(folder)):
+        aside = set_aside(window, "picking", copy=True)
         save_pick(window, image, curve)
-        curve_changed(window, curve.mode)
+        later = curve_changed(window, curve.mode)
         mark_auto(window)
+        picking = {"picking": PickingParameters().model_dump(mode="json")}
+        record_pick(window, "auto", curve.mode, picking, curve, aside, later)
     return load_dispersion_image(folder, xmid)

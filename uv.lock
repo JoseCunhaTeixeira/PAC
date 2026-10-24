@@ -1420,7 +1420,7 @@ wheels = [
 [[package]]
 name = "paco"
 version = "1.0.0"
-source = { git = "https://github.com/JoseCunhaTeixeira/PACo#faa96a46034f8693105207d01ba691bc13013219" }
+source = { git = "https://github.com/JoseCunhaTeixeira/PACo#f37f625ff73d11c11c4d3e0b7bfb70041bf25328" }
 dependencies = [
     { name = "anthropic" },
     { name = "anyio" },
@@ -2069,7 +2069,7 @@ wheels = [
 [[package]]
 name = "sigpipe"
 version = "1.0.0"
-source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#7694d6070ba5cb8c6f7f148b2bcdd4d5bb7a20ab" }
+source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#fba815f494d83da35ceda0733fec1492e4768003" }
 dependencies = [
     { name = "disba" },
     { name = "h5py" },

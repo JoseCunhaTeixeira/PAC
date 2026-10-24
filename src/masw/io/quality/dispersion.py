@@ -19,7 +19,6 @@ from masw.io.paths import workspace
 from masw.io.pick_origin import assistant_picked, checks_current_in, pick_origin
 from masw.io.quality.done import (
     Changes,
-    attempt_steps,
     records_in_common,
     steps_changed,
     window_ranges,
@@ -27,6 +26,7 @@ from masw.io.quality.done import (
     with_spreads,
 )
 from masw.io.quality.files import folder_path, fundamental, read_manifest, wavelengths
+from masw.io.quality.history import picking_base, register_step, unit_history
 from masw.io.quality.log import (
     GateResult,
     Metric,
@@ -371,11 +371,10 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         else ()
     )
     said = [Sentence(mark="info", text=f"Dispersion image made {_imaged_by(log, unit)}.")]
-    # A pick changed by hand leaves the assistant's curve checks and picking attempts behind:
-    # none of them is of the pick now in the window; nor after PAC picked it again itself, until
-    # the assistant judges that pick.
+    # A pick changed by hand leaves the assistant's curve checks behind: none of them is of the
+    # pick now in the window; nor after PAC picked it again itself, until the assistant judges
+    # that pick. Its history keeps them, with the pick they judged.
     judged = log is not None and picked_by != "hand"
-    current = judged and checks_current_in(window, log)
     by_hand = picked_by == "hand" and m0 is not None
     # What the checks said; of a curve picked by hand, the image's alone.
     verdict = verdict_sentence(g2, g3, g4) if log is not None else None
@@ -441,13 +440,7 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         sentences=tuple(said),
         gates=tuple(gates),
         parts=parts,
-        steps=attempt_steps(
-            log,
-            unit,
-            ("phase_shift", "picking") if current else ("phase_shift",),
-            spacing := manifest.profile.receiver_spacing_m if manifest is not None else 1.0,
-            changes=_changes(spacing),
-        ),
+        history=unit_history(run_folder, unit, log, manifest),
         picked_by=picked_by,
         curves=tuple(stats),
         settings=_settings(run_folder, window, manifest, log) if manifest is not None else (),
@@ -864,3 +857,26 @@ def window_gather(folder: str, xmid: float, norm: str = "trace") -> RecordGather
         raise ValueError(f"No stacked correlations for folder={folder}, xmid={xmid}")
     stream = load_stream([path])[0]
     return gather_of(stream, f"xmid {xmid:g} m", norm)
+
+
+def _changed(before: Mapping[str, Any], after: Mapping[str, Any], spacing: float) -> list[str]:
+    """What a window's image or pick changed on the one before, in words (`_changes`)."""
+    return _changes(spacing)(before, after)
+
+
+def _measured_image(run_folder: Path, unit: str) -> tuple[str, tuple[Metric, ...]] | None:
+    """An image no check judged, measured against G2's limits as G2 measures one."""
+    manifest = read_manifest(run_folder)
+    metrics = _image_metrics(run_folder, manifest, run_folder / unit, thresholds_of(run_folder))
+    return ("G2", metrics) if metrics else None
+
+
+def _measured_curve(run_folder: Path, unit: str) -> tuple[str, tuple[Metric, ...]] | None:
+    """An automatic M0 no check judged, measured against G3's limits as G3 measures a pick."""
+    window = run_folder / unit
+    metrics = _saved_curve_measures(window, fundamental(window), thresholds_of(run_folder))
+    return ("G3", metrics) if metrics else None
+
+
+register_step("phase_shift", changes=_changed, measures=_measured_image)
+register_step("picking", changes=_changed, base=picking_base, measures=_measured_curve)

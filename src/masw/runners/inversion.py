@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import cast
 
 from masw.io import inversion as io
+from masw.io.changes import record_inversion
 from masw.io.dispersion_images import xmid_folder
 from masw.io.history import redone, writing
 from masw.io.paths import output_folder
@@ -119,11 +120,12 @@ def _run_inversion(
                 pos_err = None
                 try:
                     duration_s = future.result()
-                    # Its new results replace all its old ones, and its earlier attempts' (the
-                    # assistant's) are forgotten.
+                    # Its new results replace all its old ones, set aside, and its earlier
+                    # attempts' (the assistant's) are forgotten; the change in its history.
                     window = xmid_folder(config.folder, xmid)
-                    commit(window, replacing=STAGE_FILES["inversion"])
-                    redone(window, "inversion")
+                    aside = commit(window, replacing=STAGE_FILES["inversion"], aside="inversion")
+                    redone(window, "inversion", aside)
+                    record_inversion(window, config.labels, config.parameters, aside)
                     logger.info("Finished xmid=%.2f", xmid)
                     results.append({"xmid": xmid, "status": "success", "duration_s": duration_s})
                 except Exception as exc:

@@ -25,6 +25,7 @@ from masw.io.quality.files import (
     read_window,
     shot_distances,
 )
+from masw.io.quality.history import SAME_ACTION
 from masw.io.quality.journal import (
     JournalEntry,
     SearchDone,
@@ -83,6 +84,8 @@ from sigpipe.masw.petro.window import MODEL_FILE
 from sigpipe.masw.picks import CURVES_FILE, load_curves
 from sigpipe.masw.presets.making import make_preset
 from sigpipe.masw.runs import RunManifest, window_folders, xmid_of
+from sigpipe.masw.runs.history import read_changes
+from sigpipe.masw.runs.origin import JUDGED
 
 # Who made a run: PAC's pages, PACo's workflow, or its autonomous mode.
 type Maker = Literal["manual", "workflow", "autonomous"]
@@ -1085,23 +1088,59 @@ def near_field_used(run_folder: Path, log: QCLog | None) -> float | None:
 
 def _redone(run_folder: Path, log: QCLog | None) -> list[Step]:
     """What the user did in PAC in a run an agent made (`log`'s), a step each: the curves picked,
-    the windows inverted into Vs profiles and into soil columns, with their windows; none for a
-    run PAC made."""
+    the windows inverted into Vs profiles and into soil columns, with their windows and how, as
+    each window's record of its changes says; for a window from before those records, as its
+    files say. None for a run PAC made."""
     if log is None:
         return []
-    done: dict[str, list[tuple[str, float]]] = {"picks": [], "inversion": [], "petro": []}
+    done: dict[str, dict[str, tuple[datetime, list[str]]]] = {
+        "picks": {},
+        "inversion": {},
+        "petro": {},
+    }
     units = window_folders(run_folder)
     for unit in units:
         window = run_folder / unit
+        changes = read_changes(window)
+        for change in changes:
+            kind = _CHANGED.get(change.stage)
+            if kind is None:
+                continue
+            # The user's change that stands: no run of the agent's at its stage came after it.
+            if _agent_after(log, unit, change.stage, change.at):
+                done[kind].pop(unit, None)
+                continue
+            at, ways = done[kind].get(unit, (change.at, []))
+            done[kind][unit] = (max(at, change.at), [*ways, change.how])
+        # What the window's files say PAC made, but what PAC recorded as it did it (the
+        # history's rule, quality.history).
+        recorded = {
+            stage: max(change.at for change in changes if change.stage == stage)
+            for stage in {change.stage for change in changes}
+        }
+
         saved = load_curves(window)
         modes = [one.mode for one in saved.dispersion_curves] if saved is not None else []
         origin = pick_origin(window, log, modes)
-        if origin == "hand" or (origin == "auto" and not assistant_picked(window, log)):
-            done["picks"].append((unit, _newest(window, CURVES_FILE)))
-        if (window / SAMPLES_FILE).exists() and not inversion_by_agent(log, unit, run_folder):
-            done["inversion"].append((unit, _newest(window, SAMPLES_FILE)))
-        if (window / MODEL_FILE).exists() and not soil_by_agent(log, window):
-            done["petro"].append((unit, _newest(window, MODEL_FILE)))
+        picked_at = _dated(window, CURVES_FILE)
+        if (origin == "hand" or (origin == "auto" and not assistant_picked(window, log))) and (
+            _unrecorded(recorded, "picking", picked_at)
+        ):
+            done["picks"][unit] = (picked_at, ["hand" if origin == "hand" else "auto"])
+        inverted_at = _dated(window, SAMPLES_FILE)
+        if (
+            (window / SAMPLES_FILE).exists()
+            and not inversion_by_agent(log, unit, run_folder)
+            and _unrecorded(recorded, "inversion", inverted_at)
+        ):
+            done["inversion"][unit] = (inverted_at, ["inversion"])
+        soils_at = _dated(window, MODEL_FILE)
+        if (
+            (window / MODEL_FILE).exists()
+            and not soil_by_agent(log, window)
+            and _unrecorded(recorded, "petro_inversion", soils_at)
+        ):
+            done["petro"][unit] = (soils_at, ["petro"])
     titles = {
         "picks": "Picked the curves",
         "inversion": "Inverted the curves into Vs profiles",
@@ -1111,12 +1150,13 @@ def _redone(run_folder: Path, log: QCLog | None) -> list[Step]:
         Step(
             kind=kind,
             by="you",
-            at=datetime.fromtimestamp(max(at for _, at in made), UTC),
+            at=max(at for at, _ in made.values()),
             title=titles[kind],
             lines=(
                 f"{len(made)} of {plural(len(units), 'window')}",
+                *([_ways(made.values())] if kind == "picks" else []),
                 *(
-                    [", ".join(f"xmid {number(xmid_of(unit), 4)} m" for unit, _ in made)]
+                    [", ".join(f"xmid {number(xmid_of(unit), 4)} m" for unit in made)]
                     if len(made) <= MOST_LISTED
                     else []
                 ),
@@ -1125,6 +1165,47 @@ def _redone(run_folder: Path, log: QCLog | None) -> list[Step]:
         for kind, made in done.items()
         if made
     ]
+
+
+def _unrecorded(recorded: Mapping[str, datetime], stage: str, at: datetime) -> bool:
+    """Whether what a window's files say PAC made at `stage` at `at` came after what PAC
+    recorded of it (`recorded`: each stage's latest change): an older PAC's work."""
+    last = recorded.get(stage)
+    return last is None or at > last + SAME_ACTION
+
+
+def _agent_after(log: QCLog, unit: str, stage: str, at: datetime) -> bool:
+    """Whether the agent ran `unit`'s `stage` after `at` (a check of a curve as it is aside)."""
+    return any(
+        (run.finished_at or run.started_at) > at
+        for run in log.runs_of(unit, stage)
+        if run.triggered_by != JUDGED
+    )
+
+
+# The steps of the run card's history each stage PAC changed is said in.
+_CHANGED = {"picking": "picks", "inversion": "inversion", "petro_inversion": "petro"}
+# Each way of picking in PAC, as the run card counts them.
+_PAC_WAYS = {
+    "auto": "PAC's automatic picking",
+    "lasso": "by hand, with the lasso",
+    "box": "by hand, in a box",
+    "hand": "by hand",
+    "delete": "deleted",
+}
+
+
+def _ways(made: Iterable[tuple[datetime, list[str]]]) -> str:
+    """How the user picked in PAC, each way with the windows it last picked: "PAC's automatic
+    picking on 3, by hand, with the lasso on 1"."""
+    counts = Counter(ways[-1] for _, ways in made if ways)
+    said = [f"{_PAC_WAYS.get(how, how)} on {count}" for how, count in counts.most_common()]
+    return (", ".join(said))[:1].upper() + (", ".join(said))[1:]
+
+
+def _dated(window: Path, name: str) -> datetime:
+    """When window folder `window`'s file `name` was written (its folder's, without it)."""
+    return datetime.fromtimestamp(_newest(window, name), UTC)
 
 
 def _newest(window: Path, name: str) -> float:

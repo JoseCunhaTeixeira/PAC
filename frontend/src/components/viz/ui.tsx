@@ -3,6 +3,7 @@ import { BoxTools, Callout, Segmented } from "../kit";
 import {
   capitalized,
   checkName,
+  MARK_ICONS,
   measured,
   metricLabel,
   metricLimit,
@@ -16,7 +17,6 @@ import {
 } from "./format";
 import type {
   GateView,
-  Mark,
   Metric,
   Origin,
   PartState,
@@ -33,7 +33,6 @@ import "./viz.css";
 // sentences, the settings a stage ran with, and folded under a card, each check's measures and
 // what was done, a step each.
 
-const MARK_ICONS: Record<Mark, string> = { pass: "✓", warn: "!", flag: "!", fail: "✕", info: "i" };
 const VERDICT_STATUS: Record<Verdict, Status> = { pass: "pass", retry: "warn", reject: "fail" };
 // A check's verdict, as its badge says it.
 const VERDICT_WORDS: Record<Verdict, string> = { pass: "passed", retry: "flagged", reject: "rejected" };

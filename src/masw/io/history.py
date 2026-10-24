@@ -20,23 +20,29 @@ from sigpipe.masw.runs.writing import RunBusy, run_lock
 logger = logging.getLogger(__name__)
 
 
-def redone(window: Path, stage: Stage) -> None:
+def redone(window: Path, stage: Stage, aside: str | None = None) -> None:
     """`window`'s `stage` done again by hand, its new result in place: its earlier attempts at
-    it forgotten, with their archived results and the checks the assistant made of them."""
-    forget(window.parent, window.name, stage, later=False, results=False)
+    it forgotten, with their archived results and the checks the assistant made of them, set
+    aside with the results it replaced (`aside`, in the window, when it replaced some)."""
+    into = window / aside if aside is not None else None
+    forget(window.parent, window.name, stage, later=False, results=False, into=into)
 
 
-def curve_changed(window: Path, mode: Mode) -> None:
+def curve_changed(window: Path, mode: Mode) -> tuple[Stage, ...]:
     """`window`'s curve of `mode` picked again or deleted in PAC (by hand, or by PAC's automatic
     picking): what was made of the older curve forgotten, the seismic inversion that inverted
     that mode and the soil column (made of the fundamental mode); the assistant's picks and
-    checks of the window kept, its history."""
+    checks of the window kept, its history. The stages forgotten."""
     run_folder, unit = window.parent, window.name
+    later: list[Stage] = []
     if _inverted(window, mode):
         forget(run_folder, unit, "inversion", later=False)
+        later.append("inversion")
     if mode.number == 0 and any(window.glob("PetroInversion_*")):
         forget(run_folder, unit, "petro_inversion", later=False)
+        later.append("petro_inversion")
     redraw_picks(run_folder, mode)
+    return tuple(later)
 
 
 # One redraw of a run's picks figures at a time.

@@ -157,6 +157,92 @@ class Overview(BaseModel):
     gates: tuple[GateView, ...] = ()
 
 
+# A history's version's state: its result the one in the unit now, replaced by a later version,
+# set aside (made of an older result) and not made again, deleted, or failed.
+type State = Literal["current", "replaced", "set aside", "deleted", "failed"]
+# Who made a version: the user in PAC, the workflow agent, the autonomous agent.
+type Maker = Literal["you", "workflow", "agent"]
+
+
+class Module(BaseModel):
+    """A part of a history's element, a line each: why it was made (`why`), how (`how`), what it
+    made (`result`), what it set aside with it (`later`), what a check found (`found`)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    key: str
+    label: str
+    lines: tuple[str, ...]
+
+
+class Element(BaseModel):
+    """What a check said of a version (`kind` "check": a gate's verdict, its measures, what its
+    flags found), or a result no check judged, measured against the agent's limits as a check
+    would take it ("measure")."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: Literal["check", "measure"]
+    key: str  # the gate
+    title: str
+    tone: Status
+    at: datetime | None = None
+    gate: GateView | None = None  # its measures, as the cards' tables show them
+    modules: tuple[Module, ...] = ()
+
+
+class Version(BaseModel):
+    """One version of a step's result: what made it, by whom, when, why, how and what it made,
+    then what the checks said of it; until when it stood (replaced, set aside), by whom, why."""
+
+    model_config = ConfigDict(frozen=True)
+
+    title: str
+    by: Maker
+    at: datetime | None
+    state: State
+    modules: tuple[Module, ...] = ()
+    elements: tuple[Element, ...] = ()
+    ended: datetime | None = None
+    ended_by: Maker | None = None
+    ended_why: str = ""
+
+
+class HistoryStep(BaseModel):
+    """A step of a unit's history, one of its results: its version now (none: set aside, deleted
+    or failed, said by its latest) and the versions it replaced, latest first."""
+
+    model_config = ConfigDict(frozen=True)
+
+    key: str  # its kind's: a stage, or a curve's "picking:M0"
+    kind: str  # its stage
+    title: str
+    state: State
+    current: Version | None
+    replaced: tuple[Version, ...] = ()
+
+
+class HistoryKind(BaseModel):
+    """A kind of element a history holds, for the page's filter: a step's (its stage), a check's
+    (its gate), the measures'."""
+
+    model_config = ConfigDict(frozen=True)
+
+    key: str
+    group: Literal["step", "check", "measure"]
+    label: str
+
+
+class UnitHistory(BaseModel):
+    """A unit's history: its steps in the pipeline's order, and the kinds of elements they hold."""
+
+    model_config = ConfigDict(frozen=True)
+
+    unit: str
+    steps: tuple[HistoryStep, ...] = ()
+    kinds: tuple[HistoryKind, ...] = ()
+
+
 class Card(BaseModel):
     """The selected unit's card: its state, a title, a few sentences, and folded under them each
     gate's metrics; each stage's card adds its attempts."""
@@ -176,6 +262,9 @@ class Card(BaseModel):
     # Its attempts, a step each, when one ran again (quality.done's attempt_steps); none when
     # each stage ran once.
     steps: tuple[Step, ...] = ()
+    # Its unit's history, each step's version now and those it replaced (quality.history): a
+    # window's, the same on each of its cards.
+    history: UnitHistory | None = None
 
 
 def worst(*statuses: Status) -> Status:

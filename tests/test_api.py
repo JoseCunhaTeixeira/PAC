@@ -332,14 +332,23 @@ def test_a_window_done_again_by_hand_keeps_nothing_older(run: str) -> None:
     assert not (window / "SeismicInversion_Model_0000_old.csv").exists()
     assert (window / "SeismicInversion_Samples_0000.npz").exists()
     assert [one["unit"] for one in log_entries(run_folder) if "attempt" in one] == ["xmid_5.50"]
-    # Set aside, not deleted: the earlier attempt's models, and its lines behind a reset.
-    (aside,) = (window / REPLACED_FOLDER).iterdir()
+    # Set aside, not deleted, in one folder: the models it replaced, the earlier attempt's, and
+    # their lines behind a reset.
+    (aside,) = [
+        one for one in (window / REPLACED_FOLDER).iterdir() if one.name.endswith("_inversion")
+    ]
+    assert (aside / "SeismicInversion_Model_0000_old.csv").exists()
     assert (aside / "attempts" / "1_inversion" / "SeismicInversion_Samples_0000.npz").exists()
     assert len(log.read_text().splitlines()) == len(lines) + 1
     card = client.get(f"/quality/inversion/card/{run}/2.5").json()
-    assert card["steps"] == [] and any(
-        one["text"] == "Inverted by the user." for one in card["sentences"]
-    )
+    assert any(one["text"] == "Inverted by the user." for one in card["sentences"])
+    # Its history: the user's inversion now, the ones it replaced under it, the agent's too.
+    (vs,) = [step for step in card["history"]["steps"] if step["key"] == "inversion"]
+    assert vs["state"] == "current" and vs["current"]["by"] == "you"
+    how = next(one for one in vs["current"]["modules"] if one["key"] == "how")
+    assert how["lines"][:2] == ["PAC's seismic inversion", "Modes: M0"]
+    assert [one["by"] for one in vs["replaced"]] == ["you", "workflow", "workflow"]
+    assert all(one["state"] == "replaced" for one in vs["replaced"])
     section = run_folder / "SeismicInversion_VelocitySection_0000.png"
     assert section.exists()
 

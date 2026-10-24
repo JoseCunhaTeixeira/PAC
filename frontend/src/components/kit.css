@@ -1879,6 +1879,13 @@ button.pick-step:hover:not(:disabled) {
   background: var(--accent);
 }
 
+/* Who made the curve now and how, as its window's history says. */
+.curve-made {
+  flex: 1 1 200px;
+  min-width: 0;
+  font-size: var(--fs-caption);
+}
+
 .howto {
   margin: 0;
   padding-left: 18px;

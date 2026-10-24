@@ -6,6 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import cast
 
+from masw.io.changes import record_soils
 from masw.io.dispersion_images import xmid_folder
 from masw.io.folders import get_xmid_folders
 from masw.io.history import redone, writing
@@ -70,9 +71,12 @@ def _run_petro_inversion(
             errors[outcome.unit] = error
             logger.error("Petro inversion failed for xmid=%.2f: %s", error.xmid, error.message)
         else:
-            # In place (sigpipe replaced all its old results): its earlier attempts forgotten.
-            redone(out_dir / outcome.unit, "petro_inversion")
-            _measure(out_dir / outcome.unit, config.model_name)
+            # In place (sigpipe set aside all its old results): its earlier attempts forgotten,
+            # the change in its history.
+            window = out_dir / outcome.unit
+            redone(window, "petro_inversion", outcome.aside)
+            _measure(window, config.model_name)
+            record_soils(window, config.model_name, outcome.aside)
             logger.info("Finished xmid=%.2f", xmids[outcome.unit])
         if on_progress is not None:
             on_progress(done, total, error)

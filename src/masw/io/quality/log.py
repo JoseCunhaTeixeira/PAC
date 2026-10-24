@@ -118,6 +118,10 @@ class Attempt(BaseModel):
     error: str | None = None
     notes: tuple[str, ...] = ()
     results: dict[str, GateResult] = {}
+    # How a pick was made (PACo's Attempt.how: tracker, neighbours, guide, lasso, delete, judge)
+    # and what that way took (a lasso's polygon); None in a log from before attempts said it.
+    how: str | None = None
+    inputs: dict[str, Any] = {}
 
 
 class AttemptSummary(BaseModel):
@@ -138,12 +142,25 @@ class AttemptSummary(BaseModel):
     flags: tuple[str, ...]  # every gate's, by name
 
 
+class Reset(BaseModel):
+    """A unit's stages started afresh, or their results set aside (sigpipe's runs.history
+    `forget`): when, and by whom."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    unit: str
+    stages: tuple[str, ...]
+    at: datetime
+    actor: str | None = None
+
+
 class QCLog:
     """A run's attempts, each at its current state, in the order they were first logged; every
     state each went through (`history`), where a flag acted on (traces left out) is no longer
     raised by the attempt's last state; every run of a unit's stage at its last state (`runs`),
     those a stage done afresh set aside too (a redo of the agent's starts again at attempt 1);
-    and who chose what they changed (`chooser`)."""
+    the runs and the resets in the order they were logged (`sequence`); and who chose what they
+    changed (`chooser`)."""
 
     def __init__(
         self,
@@ -151,11 +168,13 @@ class QCLog:
         history: Sequence[Attempt] = (),
         chooser: Chooser = "workflow",
         runs: Sequence[Attempt] | None = None,
+        sequence: Sequence[Attempt | Reset] | None = None,
     ) -> None:
         self.attempts = tuple(attempts)
         self.history = tuple(history)
         self.chooser: Chooser = chooser
         self.runs = tuple(self.attempts if runs is None else runs)
+        self.sequence = tuple(self.runs if sequence is None else sequence)
 
     def of(self, unit: str, stage: str) -> tuple[Attempt, ...]:
         return tuple(a for a in self.attempts if a.unit == unit and a.stage == stage)
@@ -220,7 +239,8 @@ def read_log(run_folder: Path) -> QCLog | None:
         current[attempt.unit, attempt.stage, attempt.attempt] = attempt
         history.append(attempt)
     chooser: Chooser = "agent" if is_autonomous(run_folder) else "workflow"
-    return QCLog(list(current.values()), history, chooser, _runs(run_folder))
+    runs, sequence = _runs(run_folder)
+    return QCLog(list(current.values()), history, chooser, runs, sequence)
 
 
 # What PACo's checks no longer judge or raise, read so from a log made before: the nearest shot,
@@ -255,19 +275,33 @@ def _as_now(result: GateResult) -> GateResult:
     return result.model_copy(update={"metrics": metrics, "flags": flags})
 
 
-def _runs(run_folder: Path) -> list[Attempt]:
+def _runs(run_folder: Path) -> tuple[list[Attempt], list[Attempt | Reset]]:
     """Every run of a unit's stage the log holds, each at its last state, in the order first
     logged: a run is its stage's start (its unit, stage, attempt and start), its gates' verdicts
-    and notes the lines after it; the runs a reset set aside kept."""
+    and notes the lines after it; the runs a reset set aside kept. And the runs with the resets,
+    in the order logged."""
     runs: dict[tuple[str, str, int, datetime], Attempt] = {}
+    order: list[tuple[str, str, int, datetime] | Reset] = []
     for line in (run_folder / LOG_FILE).read_text().splitlines():
         try:
             entry = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if isinstance(entry, dict) and (attempt := _attempt(cast(dict[str, Any], entry))):
-            runs[attempt.unit, attempt.stage, attempt.attempt, attempt.started_at] = attempt
-    return list(runs.values())
+        if not isinstance(entry, dict):
+            continue
+        entry = cast(dict[str, Any], entry)
+        if entry.get("event") == "reset":
+            try:
+                order.append(Reset.model_validate(entry))
+            except ValidationError:
+                continue
+        elif attempt := _attempt(entry):
+            key = (attempt.unit, attempt.stage, attempt.attempt, attempt.started_at)
+            if key not in runs:
+                order.append(key)
+            runs[key] = attempt
+    sequence = [one if isinstance(one, Reset) else runs[one] for one in order]
+    return list(runs.values()), sequence
 
 
 def is_autonomous(run_folder: Path) -> bool:

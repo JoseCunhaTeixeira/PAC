@@ -8,7 +8,17 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from masw.io.quality import dispersion, figures, inversion, options, petro, records, runs, sources
+from masw.io.quality import (
+    dispersion,
+    figures,
+    history,
+    inversion,
+    options,
+    petro,
+    records,
+    runs,
+    sources,
+)
 from masw.io.quality.dispersion import DispersionCard
 from masw.io.quality.inversion import Chains, FigureName, InversionCard
 from masw.io.quality.options import OptionImage
@@ -16,7 +26,7 @@ from masw.io.quality.petro import PetroCard
 from masw.io.quality.records import RecordCard, RecordGather, SavedSpectra
 from masw.io.quality.runs import ProfileRuns, RunCard
 from masw.io.quality.sources import WindowSources
-from masw.io.quality.view import Overview
+from masw.io.quality.view import Overview, UnitHistory
 from sigpipe.dataio.selection_plotting import SelectionScores
 from sigpipe.masw.inversion.section import DEFAULT_MODEL, ModelName
 
@@ -79,6 +89,13 @@ def get_record_gather(
 def get_record_spectra(folder: str, name: str) -> SavedSpectra:
     """The record's spectra, preprocessed, as its job saved them."""
     return _found(lambda: records.record_spectra(folder, name))
+
+
+@router.get("/quality/history/{folder:path}/{unit}")
+def get_history(folder: str, unit: str) -> UnitHistory:
+    """A unit's history: a window's (its image, curves, Vs profile, soil column) or a record's,
+    each step's version now and those it replaced."""
+    return _found(lambda: history.history_of(folder, unit))
 
 
 @router.get("/quality/dispersion/overview/{folder:path}")

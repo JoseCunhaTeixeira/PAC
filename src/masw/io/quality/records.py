@@ -15,8 +15,9 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from masw.io.paths import workspace
-from masw.io.quality.done import attempt_steps, record_ranges, record_settings, with_spreads
+from masw.io.quality.done import record_ranges, record_settings, steps_changed, with_spreads
 from masw.io.quality.files import folder_path, line_geometry, read_manifest
+from masw.io.quality.history import register_step, unit_history
 from masw.io.quality.log import (
     GateResult,
     Metric,
@@ -448,7 +449,7 @@ def record_card(folder: str, name: str) -> RecordCard:
         verdict=verdict,
         sentences=tuple(said),
         gates=(gate_view(GATE, g1, metrics),),
-        steps=attempt_steps(log, name, (STAGE,), manifest.profile.receiver_spacing_m),
+        history=unit_history(run_folder, name, log, manifest),
         x=x,
         windows=windows,
         excluded_traces=excluded_traces,
@@ -585,3 +586,15 @@ def _manifest(run_folder: Path, folder: str) -> RunManifest:
     if manifest is None:
         raise ValueError(f"No run manifest in folder={folder}: a folder of the older layout")
     return manifest
+
+
+def _measured(run_folder: Path, name: str) -> tuple[str, tuple[Metric, ...]] | None:
+    """A record no check judged, measured against G1's limits as PAC's job saved its measures."""
+    manifest = read_manifest(run_folder)
+    if manifest is None:
+        return None
+    _, metrics, _ = _judged(run_folder, manifest, None, name)
+    return (GATE, metrics) if metrics else None
+
+
+register_step(STAGE, changes=steps_changed, measures=_measured)

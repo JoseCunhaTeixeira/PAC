@@ -13,6 +13,7 @@ import { UnitCard } from "./panel";
 import { CurveFitPlot, SoilColumnView, type CurveAxis } from "./plots";
 import type { Overview, PetroCard } from "./types";
 import { runFigures, useRunFigures } from "./runFigures";
+import { HistoryFold } from "./History";
 import { Details, Empty, ErrorBox, SavedFigures, Skeleton, SmoothingSwitch } from "./ui";
 import { nearestCell } from "./cells";
 import { useJson } from "./useJson";
@@ -110,7 +111,8 @@ export function PetroPanel({
                 details={
                   petroCard && (
                     <>
-                      <Details gates={petroCard.gates} steps={petroCard.steps} />
+                      <Details gates={petroCard.gates} />
+                      <HistoryFold history={petroCard.history} />
                       <SavedFigures
                         figures={runFigures(folder, windowSaved, "PetroInversion_", xmid !== null ? { xmid } : {})}
                       />

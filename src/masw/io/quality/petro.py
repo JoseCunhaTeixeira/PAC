@@ -12,8 +12,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from masw.io.quality.done import attempt_steps
 from masw.io.quality.files import folder_path, fundamental
+from masw.io.quality.history import register_step, unit_history
 from masw.io.quality.inversion import FitCurve, fit_curve
 from masw.io.quality.log import (
     GateResult,
@@ -249,7 +249,7 @@ def petro_card(folder: str, xmid: float) -> PetroCard:
         verdict=verdict,
         sentences=tuple(said),
         gates=gates if measures is not None else (),
-        steps=attempt_steps(log, unit, (STAGE,), 1.0) if ours else (),
+        history=unit_history(run_folder, unit, log),
         model=model,
         column=(
             SoilColumn(
@@ -421,3 +421,14 @@ def _fit_sentences(fit: ModelFit, thresholds: PetroThresholds) -> list[Sentence]
 
 def _curve(window: Path, observed: DispersionCurve | None) -> FitCurve | None:
     return fit_curve(observed, load_modeled_curve(window)) if observed is not None else None
+
+
+def _measured(run_folder: Path, unit: str) -> tuple[str, tuple[Metric, ...]] | None:
+    """A soil column no check judged, measured against G7's limits as G7 measures one."""
+    measures = _measures(run_folder / unit)
+    if measures is None:
+        return None
+    return "G7", fit_metrics(measures, thresholds_of(run_folder))
+
+
+register_step(STAGE, measures=_measured)
