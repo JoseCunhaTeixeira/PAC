@@ -162,32 +162,24 @@ def _registered() -> None:
         import_module(f"masw.io.quality.{name}")
 
 
-# How a result was made, on its badge beside who made it, the same on every page: a curve, the
-# way it was picked (the agent's, then PAC's, the user's); another result, the agent
-# automatically, or the PAC page the user made it with.
+# How a result was made, on its badge beside who made it: the method, the same whoever used it
+# (PAC's automatic picking is the agents' tracker): a curve, the way it was picked; another
+# result, computed automatically by the same code for every maker.
+AUTO = How(label="auto")
 _WAYS = {
-    "tracker": How(label="automatic"),
-    "neighbours": How(
-        label="neighbouring curves", tip="Automatically, along the neighbouring curves"
-    ),
-    "guide": How(label="points given", tip="Automatically, along points the agent gave"),
-    "lasso": How(label="lasso", tip="Automatically, inside a lasso the agent drew"),
-    "auto": How(label="PAC's automatic picking"),
-    "hand lasso": How(label="lasso", tip="By hand, with the lasso"),
-    "box": How(label="box", tip="By hand, in a box"),
+    "tracker": AUTO,
+    "neighbours": How(label="guided", tip="Along the neighbouring curves"),
+    "guide": How(label="guided", tip="Along points given"),
+    "lasso": How(label="lasso"),
+    "auto": AUTO,
+    "hand lasso": How(label="lasso"),
+    "box": How(label="box"),
     "hand": How(label="by hand"),
 }
-AUTOMATIC = How(label="automatic")
-_PAC_TOOLS = {
-    "preprocessing": How(label="PAC's computing"),
-    "phase_shift": How(label="PAC's computing"),
-    "inversion": How(label="PAC's seismic inversion"),
-    "petro_inversion": How(label="PAC's petrophysical inversion"),
-}
-# How the run's own steps were done: the user's requests and settings, in PAC's AI agent page;
-# the workflow's choices, by trials on sample windows; the autonomous agent's choice of the
+# How the run's own steps were done: the user's requests and settings, in the agent's chat; the
+# workflow's choices, by trials on sample windows; the autonomous agent's choice of the
 # settings, by its vision; the rest, automatically.
-ASKED = How(label="PAC's AI agent")
+ASKED = How(label="chat")
 TRIALS = How(label="trials", tip="Tried on sample windows, the one most of them passed kept")
 VISION = How(label="vision", tip="Dispersion images compared by the agent's vision")
 # A check's verdict, judged; a result no check judged, measured against the agent's limits.
@@ -264,11 +256,9 @@ class Done:
 
     @property
     def how(self) -> How | None:
-        """How it was made, on its badge: a curve, the way it was picked; another result, the
-        agent automatically, or the PAC page the user made it with."""
-        if self.stage == "picking":
-            return _WAYS.get(self.way)
-        return _PAC_TOOLS[self.stage] if self.by == "you" else AUTOMATIC
+        """How it was made, on its badge, whoever made it: a curve, the way it was picked;
+        another result, automatically."""
+        return _WAYS.get(self.way) if self.stage == "picking" else AUTO
 
 
 @dataclass
