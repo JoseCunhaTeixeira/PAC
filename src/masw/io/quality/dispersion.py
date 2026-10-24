@@ -18,7 +18,6 @@ from pydantic import BaseModel, ConfigDict
 from masw.io.paths import workspace
 from masw.io.pick_origin import assistant_picked, checks_current_in, pick_origin
 from masw.io.quality.done import (
-    Changes,
     records_in_common,
     steps_changed,
     window_ranges,
@@ -26,7 +25,7 @@ from masw.io.quality.done import (
     with_spreads,
 )
 from masw.io.quality.files import folder_path, fundamental, read_manifest, wavelengths
-from masw.io.quality.history import picking_base, register_step, unit_history
+from masw.io.quality.history import register_stage, unit_steps
 from masw.io.quality.log import (
     GateResult,
     Metric,
@@ -81,7 +80,7 @@ from sigpipe.algorithms.picking.dispersion.curve import (
     longest_reached_wavelength,
     min_resolvable_wavelength,
 )
-from sigpipe.base.dispersion_curve import DispersionCurve, Mode
+from sigpipe.base.dispersion_curve import DispersionCurve
 from sigpipe.base.dispersion_image import DispersionImage
 from sigpipe.base.stream import Stream
 from sigpipe.dataio.selection_plotting import SelectionScores, load_selection
@@ -227,11 +226,9 @@ def dispersion_overview(folder: str) -> Overview:
 
 
 def _picker(log: QCLog | None, picked_by: Origin, assistant: bool) -> str:
-    """Who picked a window's curve: the run's agent (its picker, automatically), or the user (by
-    hand, or with PAC's automatic picking)."""
-    if picked_by == "auto" and assistant:
-        return by_whom(log, True)
-    return f"{BY_USER}, automatically" if picked_by == "auto" else BY_USER
+    """Who picked a window's curve: the run's agent, or the user (by hand, or with PAC's
+    automatic picking); how, in its card's "What was done" (quality.history)."""
+    return by_whom(log, picked_by == "auto" and assistant)
 
 
 def _part_lines(
@@ -243,7 +240,7 @@ def _part_lines(
     if state == "none":
         return [f"{part}: {'not picked' if part == 'Curve' else 'not made'}"]
     if state == "hand":
-        return [f"{part}: picked by the user"]
+        return [f"{part}: picked by hand"]
     head, *rest = state_lines(cast(Status, state), *results, metrics=metrics)
     return [f"{part}: {head[:1].lower()}{head[1:]}", *rest]
 
@@ -373,7 +370,7 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
     said = [Sentence(mark="info", text=f"Dispersion image made {_imaged_by(log, unit)}.")]
     # A pick changed by hand leaves the assistant's curve checks behind: none of them is of the
     # pick now in the window; nor after PAC picked it again itself, until the assistant judges
-    # that pick. Its history keeps them, with the pick they judged.
+    # that pick.
     judged = log is not None and picked_by != "hand"
     by_hand = picked_by == "hand" and m0 is not None
     # What the checks said; of a curve picked by hand, the image's alone.
@@ -440,7 +437,7 @@ def dispersion_card(folder: str, xmid: float) -> DispersionCard:
         sentences=tuple(said),
         gates=tuple(gates),
         parts=parts,
-        history=unit_history(run_folder, unit, log, manifest),
+        steps=unit_steps(run_folder, unit, log, manifest, ("phase_shift", "picking")),
         picked_by=picked_by,
         curves=tuple(stats),
         settings=_settings(run_folder, window, manifest, log) if manifest is not None else (),
@@ -466,37 +463,33 @@ _PICKING: dict[str, tuple[str, Callable[[Any], str]]] = {
 }
 
 
-def _changes(spacing: float) -> Changes:
-    """What a window's attempt changed, in words: the phase shift's steps as the run card says
-    them; a pick's parameters, its band first."""
-
-    def said(before: Mapping[str, Any], after: Mapping[str, Any]) -> list[str]:
-        if any(isinstance(value, Mapping) for value in after.values()):
-            return steps_changed(before, after, spacing)
-        changed = [key for key, value in after.items() if before.get(key) != value]
-        lines: list[str] = []
-        if {"fmin", "fmax"} & set(changed):
-            low, high = after.get("fmin"), after.get("fmax")
-            band = (
-                span(low, high, "Hz", 4)
-                if low is not None and high is not None
-                else f"from {number(low, 4)} Hz"
-                if low is not None
-                else f"up to {number(high, 4)} Hz"
-                if high is not None
-                else "the image's"
-            )
-            lines.append(f"Picking band: {band}")
-        for key in changed:
-            if key in ("fmin", "fmax"):
-                continue
-            name, words = _PICKING.get(
-                key, (key.replace("_", " ").capitalize(), lambda value: str(value))
-            )
-            lines.append(f"{name}: {words(after[key])}")
-        return lines
-
-    return said
+def _changed(before: Mapping[str, Any], after: Mapping[str, Any], spacing: float) -> list[str]:
+    """What a window's image or pick changed on the one before, in words: the phase shift's
+    steps as the run card says them; a pick's parameters, its band first."""
+    if any(isinstance(value, Mapping) for value in after.values()):
+        return steps_changed(before, after, spacing)
+    changed = [key for key, value in after.items() if before.get(key) != value]
+    lines: list[str] = []
+    if {"fmin", "fmax"} & set(changed):
+        low, high = after.get("fmin"), after.get("fmax")
+        band = (
+            span(low, high, "Hz", 4)
+            if low is not None and high is not None
+            else f"from {number(low, 4)} Hz"
+            if low is not None
+            else f"up to {number(high, 4)} Hz"
+            if high is not None
+            else "the image's"
+        )
+        lines.append(f"Picking band: {band}")
+    for key in changed:
+        if key in ("fmin", "fmax"):
+            continue
+        name, words = _PICKING.get(
+            key, (key.replace("_", " ").capitalize(), lambda value: str(value))
+        )
+        lines.append(f"{name}: {words(after[key])}")
+    return lines
 
 
 def _results(
@@ -511,12 +504,6 @@ def _results(
     if picked_by == "hand" or not checks_current_in(window, log):
         return g2, None, None
     return g2, log.result(unit, "picking", "G3"), log.result(unit, "picking", "G4")
-
-
-def _modes(window: Path) -> list[Mode]:
-    """The modes window folder `window` holds a curve of."""
-    saved = load_curves(window)
-    return [one.mode for one in saved.dispersion_curves] if saved is not None else []
 
 
 def _imaged_by(log: QCLog | None, unit: str) -> str:
@@ -588,31 +575,6 @@ def _picks(
     return said
 
 
-def _picking_setting(log: QCLog | None, picked_by: Origin | None, assistant: bool) -> Setting:
-    """Who picked a window's curves: by hand or PAC's automatic picking (the Dispersion picking
-    page), or the agent's picker along M0's ridge (`assistant`)."""
-    if picked_by is None:
-        return Setting(key="picking", label="Picking", value="none", why="", origin="default")
-    if picked_by == "hand" or log is None or not assistant:
-        return Setting(
-            key="picking",
-            label="Picking",
-            value="by hand" if picked_by == "hand" else "automatic",
-            detail="in the Dispersion picking page",
-            why="",
-            origin="you",
-        )
-    # Each time it was picked again, in its card's steps.
-    return Setting(
-        key="picking",
-        label="Picking",
-        value="automatic",
-        detail="M0 tracked along its ridge",
-        why="",
-        origin=log.chooser,
-    )
-
-
 def _records_settings(
     window: Path, manifest: RunManifest, log: QCLog | None
 ) -> tuple[Setting, ...]:
@@ -648,18 +610,9 @@ def _settings(
 def _line_settings(
     run_folder: Path, manifest: RunManifest, log: QCLog | None
 ) -> dict[str, tuple[Setting, ...]]:
-    """Each window's settings: how its image was made (window_settings), who picked its curves."""
-    return {
-        unit: (
-            *window_settings(manifest, log, unit),
-            _picking_setting(
-                log,
-                pick_origin(run_folder / unit, log, _modes(run_folder / unit)),
-                assistant_picked(run_folder / unit, log),
-            ),
-        )
-        for unit in window_folders(run_folder)
-    }
+    """Each window's settings: how its image was made (window_settings). Who picked its curves
+    and how: its "What was done"."""
+    return {unit: window_settings(manifest, log, unit) for unit in window_folders(run_folder)}
 
 
 def coherent_band(
@@ -859,11 +812,6 @@ def window_gather(folder: str, xmid: float, norm: str = "trace") -> RecordGather
     return gather_of(stream, f"xmid {xmid:g} m", norm)
 
 
-def _changed(before: Mapping[str, Any], after: Mapping[str, Any], spacing: float) -> list[str]:
-    """What a window's image or pick changed on the one before, in words (`_changes`)."""
-    return _changes(spacing)(before, after)
-
-
 def _measured_image(run_folder: Path, unit: str) -> tuple[str, tuple[Metric, ...]] | None:
     """An image no check judged, measured against G2's limits as G2 measures one."""
     manifest = read_manifest(run_folder)
@@ -878,5 +826,10 @@ def _measured_curve(run_folder: Path, unit: str) -> tuple[str, tuple[Metric, ...
     return ("G3", metrics) if metrics else None
 
 
-register_step("phase_shift", changes=_changed, measures=_measured_image)
-register_step("picking", changes=_changed, base=picking_base, measures=_measured_curve)
+def _picking_base(run_folder: Path) -> Mapping[str, Any]:
+    """The picking settings a run's picks start from: its QC configuration's (PACo's)."""
+    return config_section(run_folder, "picking")
+
+
+register_stage("phase_shift", changes=_changed, measures=_measured_image)
+register_stage("picking", changes=_changed, base=_picking_base, measures=_measured_curve)

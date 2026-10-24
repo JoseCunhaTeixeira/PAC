@@ -229,70 +229,6 @@ export interface GateView {
   flagged_by?: string[];
 }
 
-// A history's version's state: its result the one in the unit now, replaced by a later version,
-// set aside (made of an older result) and not made again, deleted, or failed.
-export type VersionState = "current" | "replaced" | "set aside" | "deleted" | "failed";
-// Who made a version: the user in PAC, the workflow agent, the autonomous agent.
-export type HistoryMaker = "you" | "workflow" | "agent";
-
-// A part of a history's element, a line each: why, how, what it made, what it set aside with
-// it, what a check found.
-export interface HistoryModule {
-  key: string;
-  label: string;
-  lines: string[];
-}
-
-// What a check said of a version, or a result no check judged measured against the agent's
-// limits; its measures as the cards' tables show them.
-export interface HistoryElement {
-  kind: "check" | "measure";
-  key: string;
-  title: string;
-  tone: Status;
-  at: string | null;
-  gate: GateView | null;
-  modules: HistoryModule[];
-}
-
-// One version of a step's result: who made it, when, why, how and what it made, the checks
-// that judged it; until when it stood, by whom, why.
-export interface HistoryVersion {
-  title: string;
-  by: HistoryMaker;
-  at: string | null;
-  state: VersionState;
-  modules: HistoryModule[];
-  elements: HistoryElement[];
-  ended: string | null;
-  ended_by: HistoryMaker | null;
-  ended_why: string;
-}
-
-// A step of a unit's history, one of its results: its version now and those it replaced,
-// latest first.
-export interface HistoryStep {
-  key: string;
-  kind: string;
-  title: string;
-  state: VersionState;
-  current: HistoryVersion | null;
-  replaced: HistoryVersion[];
-}
-
-// A kind of element a history holds, for its filter: a step's, a check's, the measures'.
-export interface HistoryKind {
-  key: string;
-  group: "step" | "check" | "measure";
-  label: string;
-}
-
-export interface UnitHistory {
-  unit: string;
-  steps: HistoryStep[];
-  kinds: HistoryKind[];
-}
-
 export interface Card {
   key: string;
   status: Status;
@@ -304,10 +240,8 @@ export interface Card {
   parts?: { label: string; state: PartState; judged?: boolean }[];
   /** What was done to it: each step with the settings it ran with. */
   settings?: Setting[];
-  /** Its attempts, a step each, when one ran again. */
+  /** What was done to it: what made its results that stand, and each check's verdict on them. */
   steps?: Step[];
-  /** Its unit's history: a window's, the same on each of its cards. */
-  history?: UnitHistory | null;
 }
 
 export interface RecordCard extends Card {

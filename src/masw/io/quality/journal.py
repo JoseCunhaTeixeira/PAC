@@ -216,28 +216,6 @@ def experiment_of(study: Path, name: str) -> ExperimentDone | None:
         return None
 
 
-def corrected(study: Path, run_id: str) -> int:
-    """The windows of run `run_id` the assistant picked again its own way: their latest pick not
-    the line's."""
-    try:
-        lines = (study / PICKS_FILE).read_text().splitlines()
-    except OSError:
-        return 0
-    latest: dict[str, str] = {}
-    for line in lines:
-        try:
-            pick: Any = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(pick, dict):
-            continue
-        found = cast(dict[str, Any], pick)
-        if found.get("run_id") == run_id:
-            recipe = cast(dict[str, Any], found.get("recipe") or {})
-            latest[str(found.get("unit"))] = str(recipe.get("how", "line"))
-    return sum(1 for how in latest.values() if how != "line")
-
-
 def _judged(study: Path, since: datetime) -> list[dict[str, Any]]:
     """The sheets the eye judged since `since`, the search's making (a search made again is
     judged afresh)."""

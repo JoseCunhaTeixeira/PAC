@@ -15,6 +15,8 @@ export interface DispersionCurve {
   fs: number[];
   vs: number[];
   vs_std?: number[] | null;
+  /** Who picked it and how: "Picked by the user, by hand, in a box". */
+  picked?: string | null;
 }
 
 export interface DispersionImage {

@@ -14,7 +14,6 @@ import {
   type InformedWindow,
 } from "../VelocitySectionCanvas";
 import { ChainLegend, ChainTracesCanvas, MarginalsGrid } from "./ChainPlots";
-import { HistoryFold } from "./History";
 import { DEPTH_INFORMED_TIP, MODEL_LABELS, num, parameterLabel, xmidOf } from "./format";
 import { UnitCard } from "./panel";
 import { CurveFitPlot, VsProfilePlot, type CurveAxis } from "./plots";
@@ -29,6 +28,7 @@ import {
   SavedFigures,
   Skeleton,
   SmoothingSwitch,
+  Timeline,
 } from "./ui";
 import { nearestCell } from "./cells";
 import { useJson } from "./useJson";
@@ -378,7 +378,11 @@ export function InversionPanel({
                       <Fold title="Model and sampling">
                         <ModelTable card={inversionCard} />
                       </Fold>
-                      <HistoryFold history={inversionCard.history} />
+                      {(inversionCard.steps?.length ?? 0) > 0 && (
+                        <Fold title="What was done">
+                          <Timeline steps={inversionCard.steps ?? []} />
+                        </Fold>
+                      )}
                       <Fold title="Chains and marginals" open={chainsOpen} onToggle={setChainsOpen}>
                         {chainsOpen && xmid !== null && <ChainsView folder={folder} xmid={xmid} />}
                       </Fold>

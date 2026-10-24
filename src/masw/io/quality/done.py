@@ -1,29 +1,22 @@
 """What was done to a unit, as its stage's "Settings" say it: each step it went through with the
 settings it ran with (the run's preset with the unit's own changes on top: the agent's retries,
 from its QC log; a window's, the line's too), in the run card's words, where each comes from,
-and how the line's other units differ in it; and its attempts, a step each, when one ran again.
-Read, never measured."""
+and how the line's other units differ in it. Read, never measured."""
 
 import re
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
-from functools import partial
 from typing import Any, cast
 
 from masw.io.quality.files import merged, preset_stage
-from masw.io.quality.log import LINE, LINE_RULES, Attempt, GateResult, QCLog
+from masw.io.quality.history import cause
+from masw.io.quality.log import LINE, LINE_RULES, Attempt, QCLog
 from masw.io.quality.runs import is_default, noted
 from masw.io.quality.tried import SEP, settings_said, step_words
 from masw.io.quality.view import (
-    CHECK_NAMES,
-    REFUSALS,
     Origin,
     Setting,
-    Step,
-    by_whom,
-    counted,
-    flag_text,
     number,
     plural,
     receivers,
@@ -95,34 +88,6 @@ _NUMBERS = re.compile(r"\d[\d.,]*")
 # From sigpipe c17b3de on (its commit's time, in UTC), a shot's trigger is corrected with its
 # muting only; the runs before corrected it whatever the muting.
 _TRIGGER_WITH_MUTING = datetime(2026, 9, 28, 14, 46, tzinfo=UTC)
-# What asked a stage to run again, other than a check's flag, in words: a redo of the agent's
-# (backtrack) said by its kind, the run's.
-_CAUSES = {
-    "initial": "",
-    "mute trial": "with the mute trial's mute",
-    "line change": "with a change of the line's settings",
-    "asked": "asked by the user",
-}
-# What each stage did, as a step's title.
-_DONE = {
-    "preprocessing": "Preprocessed",
-    "phase_shift": "Dispersion image made",
-    "picking": "Curve picked",
-    "inversion": "Inverted",
-    "petro_inversion": "Soil column made",
-}
-_VERDICTS = {"pass": "passed", "retry": "flagged", "reject": "rejected"}
-
-
-def cause(triggered_by: str, log: QCLog | None = None) -> str:
-    """Why an attempt ran, in words ("asked by the curve check: points off the ridge's top",
-    "asked by the autonomous agent" for a redo `log`'s agent chose); "" for a first run."""
-    gate, _, flag = triggered_by.partition(":")
-    if flag:
-        return f"asked by {CHECK_NAMES.get(gate, gate)}: {flag_text(flag)}"
-    if triggered_by == "backtrack":
-        return f"asked {by_whom(log, True) if log is not None else 'by the agent'}"
-    return _CAUSES.get(triggered_by, triggered_by.replace("_", " "))
 
 
 def trigger_text(attempt: Attempt, log: QCLog | None = None) -> str:
@@ -144,10 +109,6 @@ def _field(key: str, value: object) -> str:
     unit = _UNITS.get(key)
     shown = number(value, 4) if isinstance(value, int | float) else str(value)
     return f"{shown} {unit}" if unit else shown
-
-
-def _capitalized(text: str) -> str:
-    return text[:1].upper() + text[1:]
 
 
 class _Origins:
@@ -495,65 +456,6 @@ def _ranges(per_unit: Mapping[str, dict[str, dict[str, Any]]]) -> dict[str, str]
         )
         for stage, fields in numbers.items()
     }
-
-
-# What an attempt changed of the one before, in words, a line each.
-type Changes = Callable[[Mapping[str, Any], Mapping[str, Any]], list[str]]
-
-
-def attempt_steps(
-    log: QCLog | None,
-    unit: str,
-    stages: Sequence[str],
-    spacing: float,
-    changes: Changes | None = None,
-) -> tuple[Step, ...]:
-    """What was done to `unit` at the log's `stages`, a run a step in the order they ran, those a
-    redo set aside too (the agent's picks and inversions again): what ran, why it ran again,
-    what it changed (`changes`; by default its processing's steps in the run card's words), what
-    the checks said of it; each run, even when a stage ran once. None without a log (a run made
-    in PAC's pages)."""
-    if log is None:
-        return ()
-    attempts = sorted(
-        (one for stage in stages for one in log.runs_of(unit, stage)),
-        key=lambda one: one.started_at,
-    )
-    steps: list[Step] = []
-    last: dict[str, Attempt] = {}
-    for one in attempts:
-        before = last.get(one.stage)
-        lines: list[str] = []
-        if why := cause(one.triggered_by, log):
-            lines.append(_capitalized(why))
-        if before is not None:
-            lines += (changes or partial(steps_changed, spacing=spacing))(
-                before.parameters, one.parameters
-            )
-        if one.status == "failed":
-            lines.append(f"Failed: {one.error}" if one.error else "Failed")
-        lines += [_verdict_line(gate, result) for gate, result in one.results.items()]
-        steps.append(
-            Step(
-                kind=one.stage,
-                by="checks" if ":" in one.triggered_by else log.chooser,
-                at=one.started_at,
-                title=_DONE.get(one.stage, _capitalized(one.stage.replace("_", " ")))
-                + (" again" if before is not None else ""),
-                lines=tuple(lines),
-            )
-        )
-        last[one.stage] = one
-    return tuple(steps)
-
-
-def _verdict_line(gate: str, result: GateResult) -> str:
-    """A check's verdict on a run, in a line, with what it flagged when it did not pass:
-    "Curve check: flagged (near field)"."""
-    said = f"{_capitalized(CHECK_NAMES.get(gate, gate).removeprefix('the '))}: "
-    said += _VERDICTS[result.verdict]
-    flags = [flag.name for flag in result.flags if flag.name not in REFUSALS]
-    return said + (f" ({counted(flags)})" if result.verdict != "pass" and flags else "")
 
 
 def steps_changed(before: Mapping[str, Any], after: Mapping[str, Any], spacing: float) -> list[str]:

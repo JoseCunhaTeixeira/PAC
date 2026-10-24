@@ -3,7 +3,6 @@ import { BoxTools, Callout, Segmented } from "../kit";
 import {
   capitalized,
   checkName,
-  MARK_ICONS,
   measured,
   metricLabel,
   metricLimit,
@@ -17,6 +16,7 @@ import {
 } from "./format";
 import type {
   GateView,
+  Mark,
   Metric,
   Origin,
   PartState,
@@ -33,6 +33,7 @@ import "./viz.css";
 // sentences, the settings a stage ran with, and folded under a card, each check's measures and
 // what was done, a step each.
 
+const MARK_ICONS: Record<Mark, string> = { pass: "✓", warn: "!", flag: "!", fail: "✕", info: "i" };
 const VERDICT_STATUS: Record<Verdict, Status> = { pass: "pass", retry: "warn", reject: "fail" };
 // A check's verdict, as its badge says it.
 const VERDICT_WORDS: Record<Verdict, string> = { pass: "passed", retry: "flagged", reject: "rejected" };
@@ -53,7 +54,7 @@ const PART_WORDS: Record<PartState, string> = {
   note: "beyond limits",
   warn: "flagged",
   fail: "rejected",
-  hand: "picked by the user",
+  hand: "picked by hand",
   none: "not checked",
 };
 const NONE_WORDS: Record<string, string> = { image: "not made", curve: "not picked" };
@@ -82,7 +83,7 @@ export function GateBadge({ gate }: { gate: GateView }) {
   if (gate.by_hand) {
     const passed = gate.verdict === "pass";
     return (
-      <span className={`viz-badge ${passed ? "hand" : "none"}`}>{passed ? "picked by the user" : "not checked"}</span>
+      <span className={`viz-badge ${passed ? "hand" : "none"}`}>{passed ? "picked by hand" : "not checked"}</span>
     );
   }
   if (gate.verdict === null) {
@@ -394,8 +395,8 @@ export function GateTables({ gates }: { gates: GateView[] }) {
   );
 }
 
-/** A card's details: each check's measures, then what was done to its unit, a step each, when
- * a step ran again, folded. */
+/** A card's details: each check's measures, then what was done to its unit, a step each,
+ * folded. */
 export function Details({ gates, steps = [], children }: {
   gates: GateView[];
   steps?: Step[];

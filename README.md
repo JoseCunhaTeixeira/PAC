@@ -183,7 +183,7 @@ PAC looks for your recordings in `data/input/` and writes its results to `data/o
 
 The Dispersion Picking, Seismic Inversion, Petrophysical Inversion and Visualization pages list the runs, the most recent first, and open on it. Results computed by earlier versions of PAC, straight in `output/<profile>/`, are listed too.
 
-The **Visualization** page shows one run: how it was made (by hand, by the agent's workflow or by its autonomous mode; each setting with who set it, what was tried to choose it, and the run's history step by step), the line with its windows coloured by quality at each stage, and for the window you select its image, picks, velocity model and checks, with its history: each result now, by whom, why and how it was made, and the versions it replaced, each with the checks that judged it. The **Dispersion Picking** page shows the same history for the window you pick. Nothing PAC replaces is deleted: it goes to the window's `replaced/` folder.
+The **Visualization** page shows one run: how it was made (by hand, by the agent's workflow or by its autonomous mode; each setting with who set it, what was tried to choose it, and the run's history step by step), the line with its windows coloured by quality at each stage, and for the window you select its image, picks, velocity model and checks, with what was done to it step by step: who made each result, why and how, and what the checks said. On the **Dispersion Picking** page, each picked curve says who picked it and how. Nothing PAC replaces is deleted: it goes to the window's `replaced/` folder.
 
 To process your own data, simply drop a profile folder like the above into `data/input/` — no restart needed.
 

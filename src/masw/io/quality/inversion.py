@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from masw.io.quality.done import trigger_text, with_spreads
 from masw.io.quality.files import folder_path
-from masw.io.quality.history import register_step, unit_history
+from masw.io.quality.history import register_stage, unit_steps
 from masw.io.quality.log import (
     GateResult,
     Metric,
@@ -517,10 +517,10 @@ def inversion_card(folder: str, xmid: float, model: ModelName = DEFAULT_MODEL) -
     measured = window_measures(window)
     measures = measured[1] if measured is not None else None
     title = f"xmid {number(xmid, 4)} m"
-    history = unit_history(run_folder, unit, log)
+    steps = unit_steps(run_folder, unit, log, None, (STAGE,))
     if measured is None or measures is None:
         return _not_inverted(unit, title, log, measured is not None).model_copy(
-            update={"history": history}
+            update={"steps": steps}
         )
     ran = measured[0]
     parameters = ran.parameters
@@ -547,7 +547,7 @@ def inversion_card(folder: str, xmid: float, model: ModelName = DEFAULT_MODEL) -
         verdict=verdict,
         sentences=tuple(said),
         gates=(gate_view(GATE, g5, metrics),) + ((gate_view("G6", g6),) if g6 is not None else ()),
-        history=history,
+        steps=steps,
         inverted=True,
         parameters=parameters,
         tuning=ran.tuning,
@@ -764,9 +764,12 @@ def _fixed(parameters: InversionParameters) -> str:
     return ", ".join(said)
 
 
-def _changes(before: Mapping[str, object], after: Mapping[str, object]) -> list[str]:
-    """What an attempt's parameters change on the one before, in words, a line each, the
-    settings' names first: "Sampling: 20 000 iterations, was 10 000"."""
+def _changed(
+    before: Mapping[str, object], after: Mapping[str, object], _spacing: float = 0.0
+) -> list[str]:
+    """What an inversion's parameters change on the one before, in words, a line each, the
+    settings' names first: "Sampling: 20 000 iterations, was 10 000"; no window's length in
+    them."""
     try:
         old = InversionParameters.model_validate(before)
         new = InversionParameters.model_validate(after)
@@ -1025,33 +1028,6 @@ def _histogram(values: np.ndarray, low: float, high: float) -> tuple[int, ...]:
     return tuple(int(count) for count in counts)
 
 
-def _settings(parameters: Mapping[str, object]) -> list[str]:
-    """A model's settings in words, as an attempt's changes say them: its layers, its deepest
-    interface, its sampling and its Vs bounds."""
-    try:
-        one = InversionParameters.model_validate(parameters)
-    except ValueError:
-        return []
-    said = [
-        f"Layers: chosen by the data, {one.free.max_layers} at most"
-        if one.layering == "free"
-        else f"Layers: {_layers(one.n_layers)}"
-    ]
-    said.append(f"Deepest interface: {number(model_depth(one))} m at most")
-    said.append(f"Sampling: {grouped(one.n_iterations)} iterations")
-    if (vs := _highest_vs(one)) is not None:
-        said.append(f"Vs bounds: up to {number(vs)} m/s")
-    return said
-
-
-def _changed(
-    before: Mapping[str, object], after: Mapping[str, object], _spacing: float
-) -> list[str]:
-    """What a window's inversion changed on the one before, in words (`_changes`): no window's
-    length in it."""
-    return _changes(before, after)
-
-
 def _measured(run_folder: Path, unit: str) -> tuple[str, tuple[Metric, ...]] | None:
     """A model no check judged, measured against G5's limits as G5 measures one."""
     measured = window_measures(run_folder / unit)
@@ -1060,4 +1036,4 @@ def _measured(run_folder: Path, unit: str) -> tuple[str, tuple[Metric, ...]] | N
     return GATE, model_metrics(measured[0].parameters, measured[1], thresholds_of(run_folder))
 
 
-register_step(STAGE, changes=_changed, settings=_settings, measures=_measured)
+register_stage(STAGE, changes=_changed, measures=_measured)

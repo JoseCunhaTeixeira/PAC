@@ -13,7 +13,6 @@ import { UnitCard } from "./panel";
 import { Normalization, SavedSpectrum } from "./RecordsPanel";
 import { runFigures, useRunFigures } from "./runFigures";
 import type { DispersionCard, Overview, WindowSources } from "./types";
-import { HistoryFold } from "./History";
 import { Details, Empty, ErrorBox, PlotHead, SavedFigures, Skeleton } from "./ui";
 import { nearestCell } from "./cells";
 import { useJson, useShownUnit } from "./useJson";
@@ -202,8 +201,7 @@ export function DispersionPanel({
             details={
               shown && (
                 <>
-                  <Details gates={shown.gates} />
-                  <HistoryFold history={shown.history} />
+                  <Details gates={shown.gates} steps={shown.steps} />
                   <SavedFigures
                     figures={runFigures(
                       folder,

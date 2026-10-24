@@ -7,7 +7,6 @@ import { LineGather, type GatherData } from "./LineGather";
 import { UnitCard } from "./panel";
 import type { Overview, RecordCard } from "./types";
 import { runFigures, useRunFigures } from "./runFigures";
-import { HistoryFold } from "./History";
 import { Details, Empty, PlotHead, SavedFigures, Skeleton } from "./ui";
 import { useJson, useShownUnit } from "./useJson";
 
@@ -264,8 +263,7 @@ export function RecordsPanel({
           details={
             card && (
               <>
-                <Details gates={card.gates} />
-                <HistoryFold history={card.history} />
+                <Details gates={card.gates} steps={card.steps} />
                 <SavedFigures figures={runFigures(folder, figures, "", place ?? {})} />
               </>
             )

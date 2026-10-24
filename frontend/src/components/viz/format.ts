@@ -1,5 +1,5 @@
 import { thousands } from "../numbers";
-import type { HistoryMaker, Maker, Mark, Metric, Origin, RunEntry, StageKey, Status, UnitHistory } from "./types";
+import type { Maker, Metric, Origin, RunEntry, StageKey, Status } from "./types";
 
 // How Visualization says things: the checks' measures (a name a geophysicist reads, what it is
 // on its hover, and the value in the unit it is judged in), numbers, dates, and where a setting
@@ -455,27 +455,4 @@ export function xmidOf(key: string): number {
 
 export function capitalized(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-// A sentence's mark, as its icon shows it.
-export const MARK_ICONS: Record<Mark, string> = { pass: "✓", warn: "!", flag: "!", fail: "✕", info: "i" };
-
-// Who made a version of a unit's history, as the cards say who made things.
-export const BY_WORDS: Record<HistoryMaker, string> = {
-  you: "the user",
-  workflow: "the workflow agent",
-  agent: "the autonomous agent",
-};
-
-/** Who made a unit's result now and how, in a few words, from its history (`key`: its step's,
- * a curve's "picking:M0"): "Picked again by the user, PAC's automatic picking: …"; null when
- * the history holds none. */
-export function madeNow(history: UnitHistory | null, key: string): string | null {
-  const step = history?.steps.find((one) => one.key === key);
-  const version = step?.current;
-  if (!version) return null;
-  const how = version.modules.find((module) => module.key === "how")?.lines[0];
-  // Said after a comma: its first letter in lower case, unless its first word is a name ("PAC's").
-  const said = how && how.charAt(1) === how.charAt(1).toLowerCase() ? how.charAt(0).toLowerCase() + how.slice(1) : how;
-  return `${version.title} by ${BY_WORDS[version.by]}${said ? `, ${said}` : ""}`;
 }

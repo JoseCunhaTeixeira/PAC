@@ -14,7 +14,6 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   CheckIcon,
-  ClockIcon,
   CrosshairIcon,
   ImageIcon,
   RulerIcon,
@@ -44,10 +43,7 @@ import {
 } from "./components/PositionRail";
 import { useStoredState } from "./components/stored";
 import { judged, railItems, useReceivers, useStageStates, xmidKey } from "./components/railStates";
-import { madeNow, num } from "./components/viz/format";
-import { History } from "./components/viz/History";
-import type { UnitHistory } from "./components/viz/types";
-import { useJson } from "./components/viz/useJson";
+import { num } from "./components/viz/format";
 
 const LABEL_PATTERN = /^[A-Z]{1,3}[0-9]+$/;
 // The rail's parts' states in words, in the legend's order: a window's image's (G2), its
@@ -65,7 +61,7 @@ const CURVE_TONES: [RailTone, string][] = [
   ["warn", "flagged"],
   ["fail", "rejected"],
   ["auto", "not checked"],
-  ["hand", "picked by the user"],
+  ["hand", "picked by hand"],
   ["none", "not picked"],
 ];
 const LABEL_PARTS = /^([A-Z]{1,3})([0-9]+)$/;
@@ -141,13 +137,6 @@ export default function DispersionPickingPage() {
   );
   // The line's receivers: a window's cell is their spacing wide, whatever the step.
   const { receivers, loading: receiversLoading } = useReceivers(folder);
-  // The window's history, as Visualization's cards show it; again after every pick and deletion.
-  const history = useJson<UnitHistory>(
-    folder && xmid !== null
-      ? `${API}/quality/history/${encodeURIComponent(folder)}/xmid_${xmid.toFixed(2)}`
-      : null,
-    picks,
-  ).shown;
 
   const [error, setError] = useState<string | null>(null);
   // The window's M0 being picked automatically.
@@ -430,10 +419,10 @@ export default function DispersionPickingPage() {
       ? state.hover.filter((line) => !MODES_LINE.test(line))
       : [
           `xmid ${num(position.xmid, 4)} m`,
-          hasCurve ? (hand ? "Curve: picked by the user" : "Curve: picked automatically") : "Curve: not picked",
+          hasCurve ? (hand ? "Curve: picked by hand" : "Curve: picked automatically") : "Curve: not picked",
         ];
     const at = lines.findIndex((line) => line.startsWith("Curve"));
-    const now = !hasCurve ? "Curve: not picked" : hand ? "Curve: picked by the user" : undefined;
+    const now = !hasCurve ? "Curve: not picked" : hand ? "Curve: picked by hand" : undefined;
     if (now !== undefined && at >= 0) lines[at] = now;
     const n = position.labels.length;
     if (hasCurve)
@@ -648,9 +637,7 @@ export default function DispersionPickingPage() {
                         <span className="faint">
                           {curve.fs.length} point{curve.fs.length === 1 ? "" : "s"}
                         </span>
-                        {madeNow(history, `picking:${curve.label}`) && (
-                          <span className="faint curve-made">{madeNow(history, `picking:${curve.label}`)}</span>
-                        )}
+                        {curve.picked && <span className="faint curve-made">{curve.picked}</span>}
                         <button
                           type="button"
                           className="danger icon"
@@ -664,15 +651,6 @@ export default function DispersionPickingPage() {
                   </ul>
                 )}
               </Card>
-              {history && history.steps.length > 0 && (
-                <Card
-                  icon={<ClockIcon size={17} />}
-                  title="History"
-                  hint={"What was done to this window\nEach step's version now, by whom and how, and those it replaced"}
-                >
-                  <History history={history} />
-                </Card>
-              )}
             </div>
           )}
 

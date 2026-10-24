@@ -342,13 +342,11 @@ def test_a_window_done_again_by_hand_keeps_nothing_older(run: str) -> None:
     assert len(log.read_text().splitlines()) == len(lines) + 1
     card = client.get(f"/quality/inversion/card/{run}/2.5").json()
     assert any(one["text"] == "Inverted by the user." for one in card["sentences"])
-    # Its history: the user's inversion now, the ones it replaced under it, the agent's too.
-    (vs,) = [step for step in card["history"]["steps"] if step["key"] == "inversion"]
-    assert vs["state"] == "current" and vs["current"]["by"] == "you"
-    how = next(one for one in vs["current"]["modules"] if one["key"] == "how")
-    assert how["lines"][:2] == ["PAC's seismic inversion", "Modes: M0"]
-    assert [one["by"] for one in vs["replaced"]] == ["you", "workflow", "workflow"]
-    assert all(one["state"] == "replaced" for one in vs["replaced"])
+    # What was done: the user's inversion now, measured against the agent's limits as no check
+    # judged it; those it replaced, the agent's too, left out.
+    (inverted, measured) = [(one["title"], one["by"]) for one in card["steps"]]
+    assert inverted == ("Inverted", "you")
+    assert measured[0].startswith("Measured: ") and measured[1] == "checks"
     section = run_folder / "SeismicInversion_VelocitySection_0000.png"
     assert section.exists()
 

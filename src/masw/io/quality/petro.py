@@ -13,7 +13,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from masw.io.quality.files import folder_path, fundamental
-from masw.io.quality.history import register_step, unit_history
+from masw.io.quality.history import register_stage, unit_steps
 from masw.io.quality.inversion import FitCurve, fit_curve
 from masw.io.quality.log import (
     GateResult,
@@ -249,7 +249,7 @@ def petro_card(folder: str, xmid: float) -> PetroCard:
         verdict=verdict,
         sentences=tuple(said),
         gates=gates if measures is not None else (),
-        history=unit_history(run_folder, unit, log),
+        steps=unit_steps(run_folder, unit, log, None, (STAGE,)),
         model=model,
         column=(
             SoilColumn(
@@ -431,4 +431,4 @@ def _measured(run_folder: Path, unit: str) -> tuple[str, tuple[Metric, ...]] | N
     return "G7", fit_metrics(measures, thresholds_of(run_folder))
 
 
-register_step(STAGE, measures=_measured)
+register_stage(STAGE, measures=_measured)

@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict
 from masw.io.paths import workspace
 from masw.io.quality.done import record_ranges, record_settings, steps_changed, with_spreads
 from masw.io.quality.files import folder_path, line_geometry, read_manifest
-from masw.io.quality.history import register_step, unit_history
+from masw.io.quality.history import register_stage, unit_steps
 from masw.io.quality.log import (
     GateResult,
     Metric,
@@ -449,7 +449,7 @@ def record_card(folder: str, name: str) -> RecordCard:
         verdict=verdict,
         sentences=tuple(said),
         gates=(gate_view(GATE, g1, metrics),),
-        history=unit_history(run_folder, name, log, manifest),
+        steps=unit_steps(run_folder, name, log, manifest, (STAGE,)),
         x=x,
         windows=windows,
         excluded_traces=excluded_traces,
@@ -597,4 +597,4 @@ def _measured(run_folder: Path, name: str) -> tuple[str, tuple[Metric, ...]] | N
     return (GATE, metrics) if metrics else None
 
 
-register_step(STAGE, changes=steps_changed, measures=_measured)
+register_stage(STAGE, changes=steps_changed, measures=_measured)

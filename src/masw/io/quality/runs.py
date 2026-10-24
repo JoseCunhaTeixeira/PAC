@@ -16,7 +16,6 @@ from pydantic import BaseModel, ConfigDict
 
 from masw.io.folders import get_input_folders, get_output_folders
 from masw.io.paths import INPUT_DIR
-from masw.io.pick_origin import assistant_picked, pick_origin
 from masw.io.quality.files import (
     folder_path,
     line_geometry,
@@ -25,12 +24,12 @@ from masw.io.quality.files import (
     read_window,
     shot_distances,
 )
-from masw.io.quality.history import SAME_ACTION
+from masw.io.quality.history import Maker as By
+from masw.io.quality.history import by_whom_counted, counted_cause, makers, run_steps
 from masw.io.quality.journal import (
     JournalEntry,
     SearchDone,
     SurveyDone,
-    corrected,
     journal_of,
     search_of,
     study_of,
@@ -46,7 +45,6 @@ from masw.io.quality.log import (
     line_receivers,
     read_log,
 )
-from masw.io.quality.makers import inversion_by_agent, soil_by_agent
 from masw.io.quality.sources import near_field
 from masw.io.quality.tried import (
     SEP,
@@ -79,13 +77,10 @@ from masw.io.quality.view import (
     receivers,
 )
 from sigpipe.masw.inversion.section import is_inverted
-from sigpipe.masw.inversion.window import SAMPLES_FILE
 from sigpipe.masw.petro.window import MODEL_FILE
-from sigpipe.masw.picks import CURVES_FILE, load_curves
+from sigpipe.masw.picks import CURVES_FILE
 from sigpipe.masw.presets.making import make_preset
 from sigpipe.masw.runs import RunManifest, window_folders, xmid_of
-from sigpipe.masw.runs.history import read_changes
-from sigpipe.masw.runs.origin import JUDGED
 
 # Who made a run: PAC's pages, PACo's workflow, or its autonomous mode.
 type Maker = Literal["manual", "workflow", "autonomous"]
@@ -112,13 +107,6 @@ _KEYS = {"dispersion": "band", "muting": "mute"}
 _RANKED: tuple[Origin, ...] = ("agent", "workflow", "checks", "you", "default")
 # A journal entry's id the agent's reasons name in parentheses: "(E2)", "(L1, E2)", "(E2 current)".
 _REFERENCES = re.compile(r"\s*\((?:[A-Z]\d+|current)(?:[\s,;]+(?:[A-Z]\d+|current))*\)")
-# What asked for a stage to run again, other than a check's flag, in words.
-_CAUSES = {
-    "backtrack": "after an earlier stage",
-    "mute trial": "the mute trial",
-    "line change": "a change of the line's settings",
-    "asked": "at the request",
-}
 
 
 class RunEntry(BaseModel):
@@ -246,12 +234,12 @@ def run_card(folder: str) -> RunCard:
     survey = survey_of(study) if study is not None else None
     spacing = manifest.profile.receiver_spacing_m
     defaults = make_preset(manifest.preset.mode).model_dump(mode="json")
+    made = makers(run_folder, manifest, log, ("picking", "inversion"))
     settings = (
         *processing_settings(manifest, log, length_choice(run_folder), run_folder, search),
-        _curves(stages, journal, maker),
-        _profiles(stages, journal, log, maker),
+        _curves(stages, journal, maker, made["picking"]),
+        _profiles(stages, journal, log, maker, made["inversion"]),
     )
-    picked = corrected(study, run_folder.name) if study is not None else 0
     return RunCard(
         folder=folder,
         profile=manifest.profile.name,
@@ -279,9 +267,9 @@ def run_card(folder: str) -> RunCard:
             int(masw["length"]),
             idle=near_field(log) is not None and near_field_used(run_folder, log) is None,
         ),
-        history=_study_history(journal, search, survey, manifest, log, picked, run_folder)
+        history=_study_history(journal, search, survey, manifest, log, run_folder)
         if study is not None
-        else (*_run_history(run_folder, manifest, log, stages), *_redone(run_folder, log)),
+        else _run_history(run_folder, manifest, log),
         stages=stages,
         receivers=line.receivers,
         sources=line.sources,
@@ -552,9 +540,10 @@ def _trace_reasons(log: QCLog | None, traces: Mapping[str, tuple[int, ...]]) -> 
 
 
 def _again(log: QCLog | None, stage: str, unit: str) -> str:
-    """The units the checks ran `stage` again on, and what asked for it: "8 windows (6 too
-    few points, 2 no ridge)", each flag's units (one asked twice counted once). A redo's fresh
-    first attempt counts, as every attempt after the first run."""
+    """The units `stage` ran again on, and what asked for it, as the run card's history counts
+    it: "8 windows (6 too few points, 2 asked by the workflow agent)", each cause's units (one
+    asked twice counted once). A redo's fresh first attempt counts, as every attempt after the
+    first run."""
     again = [
         attempt
         for attempt in (log.attempts if log is not None else ())
@@ -563,17 +552,11 @@ def _again(log: QCLog | None, stage: str, unit: str) -> str:
     if not again:
         return ""
     units = {attempt.unit for attempt in again}
-    # A check's flag counted; another cause (a change of the line's settings) said once.
-    flags: dict[str, set[str]] = {}
-    others: dict[str, None] = {}
+    asked: dict[str, set[str]] = {}
     for attempt in again:
-        gate, _, flag = attempt.triggered_by.partition(":")
-        if flag:
-            flags.setdefault(flag_text(flag), set()).add(attempt.unit)
-        else:
-            others[_CAUSES.get(gate, gate)] = None
-    ranked = sorted(flags.items(), key=lambda item: -len(item[1]))
-    said = [f"{len(asked)} {flag}" for flag, asked in ranked] + list(others)
+        asked.setdefault(counted_cause(attempt.triggered_by, log), set()).add(attempt.unit)
+    ranked = sorted(asked.items(), key=lambda item: -len(item[1]))
+    said = [f"{len(found)} {words}" for words, found in ranked]
     return f"{plural(len(units), unit)} ({', '.join(said)})"
 
 
@@ -755,8 +738,14 @@ _SETTING_NAMES = {
 }
 
 
-def _curves(stages: Iterable[StageCount], journal: Sequence[JournalEntry], maker: Maker) -> Setting:
-    """The curves tile: those the freeze kept and rejected, else those picked."""
+def _curves(
+    stages: Iterable[StageCount],
+    journal: Sequence[JournalEntry],
+    maker: Maker,
+    picked_by: Mapping[By, int] | None = None,
+) -> Setting:
+    """The curves tile: those the freeze kept and rejected, else those picked, and who picked
+    the curves that stand (`picked_by`: each with how many, quality.history's makers)."""
     picked = next(count for count in stages if count.key == "dispersion")
     frozen = next(
         (
@@ -777,21 +766,28 @@ def _curves(stages: Iterable[StageCount], journal: Sequence[JournalEntry], maker
             why="the autonomous agent accepted or rejected each window's curve",
             origin=by,
         )
+    # Tagged by who picked the most of them.
+    most: Origin | None = next(iter(picked_by)) if picked_by else None
     return Setting(
         key="curves",
         label="Curves",
         value=f"{picked.done} of {picked.total}",
         detail="windows picked",
-        why=f"picked {_BY[maker]}",
-        origin=by if picked.done else None,
+        why=f"picked {by_whom_counted(picked_by) if picked_by else _BY[maker]}",
+        origin=most or (by if picked.done else None),
     )
 
 
 def _profiles(
-    stages: Iterable[StageCount], journal: Sequence[JournalEntry], log: QCLog | None, maker: Maker
+    stages: Iterable[StageCount],
+    journal: Sequence[JournalEntry],
+    log: QCLog | None,
+    maker: Maker,
+    inverted_by: Mapping[By, int] | None = None,
 ) -> Setting:
     """The Vs profiles tile: how many passed the model's check of those made, how many it
-    flagged and rejected; else how many windows were inverted."""
+    flagged and rejected; else how many windows were inverted, and by whom (`inverted_by`: each
+    with how many of those that stand, quality.history's makers)."""
     inverted = next(count for count in stages if count.key == "inversion")
     verdicts = _model_verdicts(journal, log)
     if verdicts:
@@ -805,13 +801,15 @@ def _profiles(
             origin=_MAKERS[maker],
         )
     if inverted.done:
+        # Tagged by who inverted the most of them.
+        most: Origin | None = next(iter(inverted_by)) if inverted_by else None
         return Setting(
             key="profiles",
             label="Vs profiles",
             value=f"{inverted.done} of {inverted.total}",
             detail="windows inverted",
-            why=f"inverted {_BY[maker]}",
-            origin=_MAKERS[maker],
+            why=f"inverted {by_whom_counted(inverted_by) if inverted_by else _BY[maker]}",
+            origin=most or _MAKERS[maker],
         )
     return Setting(
         key="profiles",
@@ -921,16 +919,17 @@ def _study_history(
     survey: SurveyDone | None,
     manifest: RunManifest,
     log: QCLog | None,
-    picked: int,
     run_folder: Path,
 ) -> tuple[Step, ...]:
     """What the autonomous mode did, a step each, in order: what the user asked, the records, the
-    choice of the settings, the line processed, the curves picked, the Vs profiles, then what the
-    user did again in PAC; the assistant's own reasoning left to its journal."""
+    choice of the settings, the line processed, then who made the curves, the Vs profiles and the
+    soil columns that stand (quality.history's run_steps), the freeze's verdicts with the
+    agent's curves; the assistant's own reasoning left to its journal."""
     spacing = manifest.profile.receiver_spacing_m
     length = int(preset_stage(manifest, "masw")["length"])
     steps: list[Step] = []
     commits = 0
+    frozen: list[str] = []
     # The near field the run's windows show none of (no window kept a farther shot): not said.
     idle = near_field(log) if near_field_used(run_folder, log) is None else None
     for entry in journal:
@@ -978,30 +977,14 @@ def _study_history(
                     lines=tuple(plain(changes, spacing, length)),
                 )
             )
-        elif entry.kind == "freeze":
-            found = _FROZEN.search(entry.text)
-            total = len(manifest.windows)
-            lines = [f"{total} of {plural(total, 'window')}"]
-            if picked:
-                lines.append(f"{picked} picked again")
-            if found:
-                lines += [f"{found.group(1)} accepted", f"{found.group(2)} rejected"]
-            steps.append(
-                Step(
-                    kind="freeze",
-                    by="agent",
-                    at=entry.at,
-                    title="Picked the curves",
-                    lines=tuple(lines),
-                )
-            )
+        elif entry.kind == "freeze" and (found := _FROZEN.search(entry.text)):
+            frozen = _counted((int(found.group(1)), "accepted"), (int(found.group(2)), "rejected"))
     if survey is not None:
         steps.append(_survey_step(survey, journal, manifest, log))
     if (tried := _tried_step(search)) is not None:
         steps.append(tried)
-    if (inverted := _inverted_step(journal, log, len(manifest.windows))) is not None:
-        steps.append(inverted)
-    steps += _redone(run_folder, log)
+    stages = ("picking", "inversion", "petro_inversion")
+    steps += run_steps(run_folder, manifest, log, stages, {"picking": frozen}, MOST_LISTED)
     first = min((step.at for step in steps if step.at is not None), default=None)
     return tuple(sorted(steps, key=lambda step: step.at or first or datetime.min))
 
@@ -1046,26 +1029,6 @@ def _tried_step(search: SearchDone | None) -> Step | None:
     )
 
 
-def _inverted_step(journal: Sequence[JournalEntry], log: QCLog | None, total: int) -> Step | None:
-    """The curves inverted into Vs profiles: how many, and how many passed the model's check, were
-    flagged and rejected."""
-    runs = [entry for entry in journal if entry.kind == "inversion"]
-    if not runs:
-        return None
-    latest = _model_verdicts(journal, log)
-    passed, flagged, rejected = _verdict_counts(latest)
-    return Step(
-        kind="inversion",
-        by="agent",
-        at=runs[0].at,
-        title="Inverted the curves into Vs profiles",
-        lines=(
-            f"{len(latest)} of {plural(total, 'window')}",
-            *_counted((passed, "passed"), (flagged, "flagged"), (rejected, "rejected")),
-        ),
-    )
-
-
 def near_field_used(run_folder: Path, log: QCLog | None) -> float | None:
     """The near field the line set (near_field) as the run's windows show it: where one of them
     stacks no shot nearer than it to its receivers; None when every window still stacks one (it
@@ -1086,146 +1049,33 @@ def near_field_used(run_folder: Path, log: QCLog | None) -> float | None:
     return None
 
 
-def _redone(run_folder: Path, log: QCLog | None) -> list[Step]:
-    """What the user did in PAC in a run an agent made (`log`'s), a step each: the curves picked,
-    the windows inverted into Vs profiles and into soil columns, with their windows and how, as
-    each window's record of its changes says; for a window from before those records, as its
-    files say. None for a run PAC made."""
-    if log is None:
-        return []
-    done: dict[str, dict[str, tuple[datetime, list[str]]]] = {
-        "picks": {},
-        "inversion": {},
-        "petro": {},
-    }
-    units = window_folders(run_folder)
-    for unit in units:
-        window = run_folder / unit
-        changes = read_changes(window)
-        for change in changes:
-            kind = _CHANGED.get(change.stage)
-            if kind is None:
-                continue
-            # The user's change that stands: no run of the agent's at its stage came after it.
-            if _agent_after(log, unit, change.stage, change.at):
-                done[kind].pop(unit, None)
-                continue
-            at, ways = done[kind].get(unit, (change.at, []))
-            done[kind][unit] = (max(at, change.at), [*ways, change.how])
-        # What the window's files say PAC made, but what PAC recorded as it did it (the
-        # history's rule, quality.history).
-        recorded = {
-            stage: max(change.at for change in changes if change.stage == stage)
-            for stage in {change.stage for change in changes}
-        }
-
-        saved = load_curves(window)
-        modes = [one.mode for one in saved.dispersion_curves] if saved is not None else []
-        origin = pick_origin(window, log, modes)
-        picked_at = _dated(window, CURVES_FILE)
-        if (origin == "hand" or (origin == "auto" and not assistant_picked(window, log))) and (
-            _unrecorded(recorded, "picking", picked_at)
-        ):
-            done["picks"][unit] = (picked_at, ["hand" if origin == "hand" else "auto"])
-        inverted_at = _dated(window, SAMPLES_FILE)
-        if (
-            (window / SAMPLES_FILE).exists()
-            and not inversion_by_agent(log, unit, run_folder)
-            and _unrecorded(recorded, "inversion", inverted_at)
-        ):
-            done["inversion"][unit] = (inverted_at, ["inversion"])
-        soils_at = _dated(window, MODEL_FILE)
-        if (
-            (window / MODEL_FILE).exists()
-            and not soil_by_agent(log, window)
-            and _unrecorded(recorded, "petro_inversion", soils_at)
-        ):
-            done["petro"][unit] = (soils_at, ["petro"])
-    titles = {
-        "picks": "Picked the curves",
-        "inversion": "Inverted the curves into Vs profiles",
-        "petro": "Inverted the curves into soil columns",
-    }
-    return [
-        Step(
-            kind=kind,
-            by="you",
-            at=max(at for at, _ in made.values()),
-            title=titles[kind],
-            lines=(
-                f"{len(made)} of {plural(len(units), 'window')}",
-                *([_ways(made.values())] if kind == "picks" else []),
-                *(
-                    [", ".join(f"xmid {number(xmid_of(unit), 4)} m" for unit in made)]
-                    if len(made) <= MOST_LISTED
-                    else []
-                ),
-            ),
-        )
-        for kind, made in done.items()
-        if made
-    ]
-
-
-def _unrecorded(recorded: Mapping[str, datetime], stage: str, at: datetime) -> bool:
-    """Whether what a window's files say PAC made at `stage` at `at` came after what PAC
-    recorded of it (`recorded`: each stage's latest change): an older PAC's work."""
-    last = recorded.get(stage)
-    return last is None or at > last + SAME_ACTION
-
-
-def _agent_after(log: QCLog, unit: str, stage: str, at: datetime) -> bool:
-    """Whether the agent ran `unit`'s `stage` after `at` (a check of a curve as it is aside)."""
-    return any(
-        (run.finished_at or run.started_at) > at
-        for run in log.runs_of(unit, stage)
-        if run.triggered_by != JUDGED
-    )
-
-
-# The steps of the run card's history each stage PAC changed is said in.
-_CHANGED = {"picking": "picks", "inversion": "inversion", "petro_inversion": "petro"}
-# Each way of picking in PAC, as the run card counts them.
-_PAC_WAYS = {
-    "auto": "PAC's automatic picking",
-    "lasso": "by hand, with the lasso",
-    "box": "by hand, in a box",
-    "hand": "by hand",
-    "delete": "deleted",
-}
-
-
-def _ways(made: Iterable[tuple[datetime, list[str]]]) -> str:
-    """How the user picked in PAC, each way with the windows it last picked: "PAC's automatic
-    picking on 3, by hand, with the lasso on 1"."""
-    counts = Counter(ways[-1] for _, ways in made if ways)
-    said = [f"{_PAC_WAYS.get(how, how)} on {count}" for how, count in counts.most_common()]
-    return (", ".join(said))[:1].upper() + (", ".join(said))[1:]
-
-
-def _dated(window: Path, name: str) -> datetime:
-    """When window folder `window`'s file `name` was written (its folder's, without it)."""
-    return datetime.fromtimestamp(_newest(window, name), UTC)
-
-
-def _newest(window: Path, name: str) -> float:
-    """When window folder `window`'s file `name` was written (its folder's, without it)."""
-    path = window / name
-    return (path if path.exists() else window).stat().st_mtime
-
-
-def _run_history(
-    run_folder: Path,
-    manifest: RunManifest,
-    log: QCLog | None,
-    stages: Iterable[StageCount],
-) -> tuple[Step, ...]:
+def _run_history(run_folder: Path, manifest: RunManifest, log: QCLog | None) -> tuple[Step, ...]:
     """What PAC or the workflow did, from the run's files, a step each: the settings the user
     gave, the records read, the workflow's choices on the line, the line processed, the curves
-    picked, inverted into Vs profiles and into soil columns, each by who did it."""
+    picked, inverted into Vs profiles and into soil columns, each by who made what stands of it
+    (quality.history's run_steps); what the user did in PAC after the workflow, last."""
     spacing = manifest.profile.receiver_spacing_m
-    done = {count.key: count for count in stages}
+    masw = preset_stage(manifest, "masw")
+    length, step = int(masw["length"]), int(masw["step"])
     given = given_settings(run_folder)
+    excluded = manifest.exclusions.records
+    left = [f"{plural(len(excluded), 'record')} left out"] if excluded else []
+    left += [one[:1].upper() + one[1:] for one in _left_out(log, excluded)]
+    windows = f"Windows of {receivers(length, spacing)}, one every "
+    windows += receivers(step, spacing, length=False)
+    found = run_steps(
+        run_folder,
+        manifest,
+        log,
+        ("preprocessing", "phase_shift", "picking", "inversion", "petro_inversion"),
+        {"preprocessing": left, "phase_shift": [windows]},
+        MOST_LISTED,
+    )
+    # The run's maker's steps in the pipeline's order; the user's after the workflow's, last.
+    maker = log.chooser if log is not None else "you"
+
+    def stage(kind: str) -> list[Step]:
+        return [one for one in found if one.kind == kind and one.by == maker]
 
     def gave(family: str) -> list[Step]:
         title = "Gave the settings" if family == "processing" else f"Gave the {family} settings"
@@ -1235,76 +1085,29 @@ def _run_history(
                 by="you",
                 at=one.at,
                 title=title,
-                lines=tuple(
-                    plain(one.values, spacing, int(preset_stage(manifest, "masw")["length"]))
-                ),
+                lines=tuple(plain(one.values, spacing, length)),
             )
             for one in given
             if one.family == family
         ]
 
-    def stage(
-        kind: str, log_stage: str, title: str, lines: list[str], unit: str = "window"
-    ) -> Step:
-        attempts = [one for one in log.attempts if one.stage == log_stage] if log else []
-        if again := _again(log, log_stage, unit):
-            lines.append(f"Done again: {again}")
-        return Step(
-            kind=kind,
-            by=log.chooser if log is not None and attempts else "you",
-            at=min((one.started_at for one in attempts), default=None),
-            title=title,
-            lines=tuple(lines),
-        )
-
-    steps = gave("processing")
-    used = sum(record.status == "succeeded" for record in manifest.records) - len(
-        manifest.exclusions.records
+    steps = [
+        *gave("processing"),
+        *stage("preprocessing"),
+        *_trials(run_folder, spacing),
+        *stage("phase_shift"),
+        *_line_tries(run_folder, spacing),
+        *gave("picking"),
+        *stage("picking"),
+        *gave("inversion"),
+        *stage("inversion"),
+        *stage("petro_inversion"),
+    ]
+    later = sorted(
+        (one for one in found if one.by != maker),
+        key=lambda one: one.at or datetime.min.replace(tzinfo=UTC),
     )
-    lines = [f"{used} of {plural(len(manifest.records), 'record')} used"]
-    if manifest.exclusions.records:
-        lines += [one[:1].upper() + one[1:] for one in _left_out(log, manifest.exclusions.records)]
-    steps.append(
-        stage("records", "preprocessing", "Read the records", lines, "record").model_copy(
-            update={"at": manifest.started_at}
-        )
-    )
-    steps += _trials(run_folder, spacing)
-    masw = preset_stage(manifest, "masw")
-    length, step = int(masw["length"]), int(masw["step"])
-    steps.append(
-        stage(
-            "images",
-            "phase_shift",
-            "Processed the whole line",
-            [
-                f"{plural(len(manifest.windows), 'window')} of {receivers(length, spacing)}",
-                f"One every {receivers(step, spacing, length=False)}",
-            ],
-        )
-    )
-    steps += _line_tries(run_folder, spacing)
-    steps += gave("picking")
-    picked = done["dispersion"]
-    steps.append(
-        stage(
-            "picks",
-            "picking",
-            "Picked the curves",
-            [f"{picked.done} of {plural(picked.total, 'window')}"],
-        )
-    )
-    steps += gave("inversion")
-    for key, log_stage, title in (
-        ("inversion", "inversion", "Inverted the curves into Vs profiles"),
-        ("petro", "petro_inversion", "Inverted the curves into soil columns"),
-    ):
-        count = done[key]
-        if count.done:
-            steps.append(
-                stage(key, log_stage, title, [f"{count.done} of {plural(count.total, 'window')}"])
-            )
-    return tuple(steps)
+    return (*steps, *later)
 
 
 def _trials(run_folder: Path, spacing: float) -> list[Step]:

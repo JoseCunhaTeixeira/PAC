@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Mapping
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
@@ -27,6 +28,7 @@ class DispersionCurveOut(BaseModel):
     fs: list[float]
     vs: list[float]
     vs_std: list[float] | None = None
+    picked: str | None = None  # who picked it and how: "Picked by the user, by hand, in a box"
 
 
 class DispersionImageOut(BaseModel):
@@ -92,7 +94,8 @@ def nan_to_none(rows: np.ndarray, decimals: int | None = None) -> list[list[floa
     return result
 
 
-def _to_image_out(image: DispersionImage) -> DispersionImageOut:
+def _to_image_out(image: DispersionImage, picked: Mapping[str, str]) -> DispersionImageOut:
+    """The image, its curves each with who picked it and how (`picked`, by mode)."""
     curves = (
         [
             DispersionCurveOut(
@@ -100,6 +103,7 @@ def _to_image_out(image: DispersionImage) -> DispersionImageOut:
                 fs=c.fs.tolist(),
                 vs=c.vs.tolist(),
                 vs_std=c.vs_err.tolist() if c.vs_err is not None else None,
+                picked=picked.get(c.mode.label),
             )
             for c in sorted(image.dispersion_curves, key=lambda c: c.mode)
         ]
@@ -138,7 +142,8 @@ def get_xmids(folder: str) -> list[float]:
 @router.get("/dispersion_images/{folder:path}/{xmid}")
 def get_dispersion_image(folder: str, xmid: float) -> DispersionImageOut:
     try:
-        return _to_image_out(io.load_dispersion_image(folder, xmid))
+        image = io.load_dispersion_image(folder, xmid)
+        return _to_image_out(image, io.picked_by(folder, xmid))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -146,7 +151,8 @@ def get_dispersion_image(folder: str, xmid: float) -> DispersionImageOut:
 @router.post("/dispersion_images/{folder:path}/{xmid}/pick/lasso")
 def pick_lasso(folder: str, xmid: float, request: LassoPickRequest) -> DispersionImageOut:
     try:
-        return _to_image_out(io.pick_lasso(folder, xmid, request.polygon, request.label))
+        image = io.pick_lasso(folder, xmid, request.polygon, request.label)
+        return _to_image_out(image, io.picked_by(folder, xmid))
     except RunBusy as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
@@ -156,19 +162,18 @@ def pick_lasso(folder: str, xmid: float, request: LassoPickRequest) -> Dispersio
 @router.post("/dispersion_images/{folder:path}/{xmid}/pick/box")
 def pick_box(folder: str, xmid: float, request: BoxPickRequest) -> DispersionImageOut:
     try:
-        return _to_image_out(
-            io.pick_box(
-                folder,
-                xmid,
-                fmin=request.fmin,
-                fmax=request.fmax,
-                vmin=request.vmin,
-                vmax=request.vmax,
-                lbdmin=request.lbdmin,
-                lbdmax=request.lbdmax,
-                label=request.label,
-            )
+        image = io.pick_box(
+            folder,
+            xmid,
+            fmin=request.fmin,
+            fmax=request.fmax,
+            vmin=request.vmin,
+            vmax=request.vmax,
+            lbdmin=request.lbdmin,
+            lbdmax=request.lbdmax,
+            label=request.label,
         )
+        return _to_image_out(image, io.picked_by(folder, xmid))
     except RunBusy as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
@@ -179,7 +184,8 @@ def pick_box(folder: str, xmid: float, request: BoxPickRequest) -> DispersionIma
 def pick_auto(folder: str, xmid: float) -> DispersionImageOut:
     """The window's M0 picked automatically, replacing its M0."""
     try:
-        return _to_image_out(io.auto_pick_m0(folder, xmid))
+        image = io.auto_pick_m0(folder, xmid)
+        return _to_image_out(image, io.picked_by(folder, xmid))
     except RunBusy as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except io.NoCurveFound as exc:
@@ -191,7 +197,8 @@ def pick_auto(folder: str, xmid: float) -> DispersionImageOut:
 @router.delete("/dispersion_images/{folder:path}/{xmid}/pick/{label}")
 def delete_pick(folder: str, xmid: float, label: str) -> DispersionImageOut:
     try:
-        return _to_image_out(io.delete_curve(folder, xmid, label))
+        image = io.delete_curve(folder, xmid, label)
+        return _to_image_out(image, io.picked_by(folder, xmid))
     except RunBusy as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
