@@ -24,8 +24,17 @@ from masw.io.quality.files import (
     read_window,
     shot_distances,
 )
+from masw.io.quality.history import (
+    ASKED,
+    AUTOMATIC,
+    TRIALS,
+    VISION,
+    by_whom_counted,
+    counted_cause,
+    makers,
+    run_steps,
+)
 from masw.io.quality.history import Maker as By
-from masw.io.quality.history import by_whom_counted, counted_cause, makers, run_steps
 from masw.io.quality.journal import (
     JournalEntry,
     SearchDone,
@@ -922,14 +931,13 @@ def _study_history(
     run_folder: Path,
 ) -> tuple[Step, ...]:
     """What the autonomous mode did, a step each, in order: what the user asked, the records, the
-    choice of the settings, the line processed, then who made the curves, the Vs profiles and the
-    soil columns that stand (quality.history's run_steps), the freeze's verdicts with the
-    agent's curves; the assistant's own reasoning left to its journal."""
+    choice of the settings, the line processed, who made the curves, the Vs profiles and the soil
+    columns that stand and how (quality.history's run_steps), the agent's review of its curves
+    (the freeze's verdicts); the assistant's own reasoning left to its journal."""
     spacing = manifest.profile.receiver_spacing_m
     length = int(preset_stage(manifest, "masw")["length"])
     steps: list[Step] = []
     commits = 0
-    frozen: list[str] = []
     # The near field the run's windows show none of (no window kept a farther shot): not said.
     idle = near_field(log) if near_field_used(run_folder, log) is None else None
     for entry in journal:
@@ -944,7 +952,14 @@ def _study_history(
             )
             lines += plain(cast(dict[str, Any], typed.get("inversion") or {}), spacing)
             steps.append(
-                Step(kind="objective", by="you", at=entry.at, title="Asked", lines=tuple(lines))
+                Step(
+                    kind="objective",
+                    by="you",
+                    how=ASKED,
+                    at=entry.at,
+                    title="Asked",
+                    lines=tuple(lines),
+                )
             )
         elif entry.kind == "settings":
             changed = tuple(str(one) for one in cast(list[Any], entry.data.get("changed") or []))
@@ -952,6 +967,7 @@ def _study_history(
                 Step(
                     kind="settings",
                     by="you",
+                    how=ASKED,
                     at=entry.at,
                     title="Changed the settings",
                     lines=changed,
@@ -960,7 +976,14 @@ def _study_history(
         elif entry.kind == "reopen":
             asked = str(entry.data.get("request") or "")
             steps.append(
-                Step(kind="reopen", by="you", at=entry.at, title="Asked again", lines=(asked,))
+                Step(
+                    kind="reopen",
+                    by="you",
+                    how=ASKED,
+                    at=entry.at,
+                    title="Asked again",
+                    lines=(asked,),
+                )
             )
         elif entry.kind == "commit":
             commits += 1
@@ -972,19 +995,34 @@ def _study_history(
                 Step(
                     kind="commit",
                     by="agent",
+                    how=AUTOMATIC,
                     at=entry.at,
                     title=title,
                     lines=tuple(plain(changes, spacing, length)),
                 )
             )
         elif entry.kind == "freeze" and (found := _FROZEN.search(entry.text)):
-            frozen = _counted((int(found.group(1)), "accepted"), (int(found.group(2)), "rejected"))
+            # Each window's curve accepted or rejected, before the inversion.
+            steps.append(
+                Step(
+                    kind="freeze",
+                    by="agent",
+                    how=AUTOMATIC,
+                    at=entry.at,
+                    title="Reviewed the curves",
+                    lines=tuple(
+                        _counted(
+                            (int(found.group(1)), "accepted"), (int(found.group(2)), "rejected")
+                        )
+                    ),
+                )
+            )
     if survey is not None:
         steps.append(_survey_step(survey, journal, manifest, log))
     if (tried := _tried_step(search)) is not None:
         steps.append(tried)
     stages = ("picking", "inversion", "petro_inversion")
-    steps += run_steps(run_folder, manifest, log, stages, {"picking": frozen}, MOST_LISTED)
+    steps += run_steps(run_folder, manifest, log, stages, listed=MOST_LISTED)
     first = min((step.at for step in steps if step.at is not None), default=None)
     return tuple(sorted(steps, key=lambda step: step.at or first or datetime.min))
 
@@ -1005,7 +1043,12 @@ def _survey_step(
         lines += [one[:1].upper() + one[1:] for one in _left_out(log, excluded)]
     asked = next((entry.at for entry in journal if entry.kind == "objective"), None)
     return Step(
-        kind="survey", by="agent", at=asked, title="Looked at the records", lines=tuple(lines)
+        kind="survey",
+        by="agent",
+        how=AUTOMATIC,
+        at=asked,
+        title="Looked at the records",
+        lines=tuple(lines),
     )
 
 
@@ -1023,6 +1066,7 @@ def _tried_step(search: SearchDone | None) -> Step | None:
     return Step(
         kind="search",
         by="agent",
+        how=VISION,
         at=search.at,
         title="Chose the processing settings",
         lines=tuple(lines),
@@ -1083,6 +1127,7 @@ def _run_history(run_folder: Path, manifest: RunManifest, log: QCLog | None) -> 
             Step(
                 kind="given",
                 by="you",
+                how=ASKED,
                 at=one.at,
                 title=title,
                 lines=tuple(plain(one.values, spacing, length)),
@@ -1121,6 +1166,7 @@ def _trials(run_folder: Path, spacing: float) -> list[Step]:
             Step(
                 kind="length",
                 by="workflow",
+                how=TRIALS,
                 title="Chose the window length",
                 lines=(
                     f"{plural(len(choice.trials), 'length')} tried on {plural(count, 'sample window')}",
@@ -1136,6 +1182,7 @@ def _trials(run_folder: Path, spacing: float) -> list[Step]:
             Step(
                 kind="mute",
                 by="workflow",
+                how=TRIALS,
                 title="Chose the mute",
                 lines=(
                     *(
@@ -1155,6 +1202,7 @@ def _trials(run_folder: Path, spacing: float) -> list[Step]:
             Step(
                 kind="segments",
                 by="workflow",
+                how=TRIALS,
                 title="Chose the segments",
                 lines=(
                     f"{plural(len(segments), 'combination')} of segments and selection tried",
@@ -1177,6 +1225,7 @@ def _line_tries(run_folder: Path, spacing: float) -> list[Step]:
         Step(
             kind="line",
             by="workflow",
+            how=TRIALS,
             title="Changed the line where curves failed",
             lines=(f"{plural(len(tries), 'change')} tried", *kept),
         )

@@ -9,8 +9,9 @@ from masw.io.folders import get_xmid_folders
 from masw.io.history import curve_changed, writing
 from masw.io.paths import output_folder
 from masw.io.pick_origin import pick_origin
-from masw.io.quality.history import picked
+from masw.io.quality.history import Maker, picked
 from masw.io.quality.log import read_log
+from masw.io.quality.view import How
 from sigpipe.algorithms.picking.dispersion.curve import pick_curves
 from sigpipe.algorithms.picking.dispersion.lasso import pick_lasso as lasso
 from sigpipe.algorithms.picking.dispersion.tracking import PickingParameters, pick_modes
@@ -138,9 +139,8 @@ def _curve_of(curves: DispersionCurves | None, mode: Mode) -> DispersionCurve | 
     return next((curve for curve in curves or () if curve.mode == mode), None)
 
 
-def picked_by(folder: str, xmid: float) -> dict[str, str]:
-    """Who picked each of the window's curves and how, by its mode's label: "Picked by the
-    user, PAC's automatic picking" (quality.history)."""
+def picked_by(folder: str, xmid: float) -> dict[str, tuple[Maker, How | None]]:
+    """Who picked each of the window's curves and how, by its mode's label (quality.history)."""
     run_folder = output_folder(folder)
     return picked(run_folder, xmid_folder(folder, xmid).name, read_log(run_folder))
 

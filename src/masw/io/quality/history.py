@@ -36,6 +36,7 @@ from masw.io.quality.view import (
     MEASURED_WORDS,
     REFUSALS,
     WARNED,
+    How,
     Status,
     Step,
     after_colon,
@@ -161,26 +162,37 @@ def _registered() -> None:
         import_module(f"masw.io.quality.{name}")
 
 
-# What made a result, as its entry says it and as the run card counts it, the same on every
-# page: a curve, the way it was picked (the agent's, then PAC's, the user's); another result, the
-# agent automatically, or the PAC page the user made it with.
+# How a result was made, on its badge beside who made it, the same on every page: a curve, the
+# way it was picked (the agent's, then PAC's, the user's); another result, the agent
+# automatically, or the PAC page the user made it with.
 _WAYS = {
-    "tracker": ("Automatically", "automatically"),
-    "neighbours": ("Automatically, along the neighbouring curves", "along the neighbouring curves"),
-    "guide": ("Automatically, along points the agent gave", "along points the agent gave"),
-    "lasso": ("Automatically, inside a lasso the agent drew", "inside a lasso the agent drew"),
-    "auto": ("PAC's automatic picking", "PAC's automatic picking"),
-    "hand lasso": ("By hand, with the lasso", "by hand, with the lasso"),
-    "box": ("By hand, in a box", "by hand, in a box"),
-    "hand": ("By hand", "by hand"),
+    "tracker": How(label="automatic"),
+    "neighbours": How(
+        label="neighbouring curves", tip="Automatically, along the neighbouring curves"
+    ),
+    "guide": How(label="points given", tip="Automatically, along points the agent gave"),
+    "lasso": How(label="lasso", tip="Automatically, inside a lasso the agent drew"),
+    "auto": How(label="PAC's automatic picking"),
+    "hand lasso": How(label="lasso", tip="By hand, with the lasso"),
+    "box": How(label="box", tip="By hand, in a box"),
+    "hand": How(label="by hand"),
 }
-_AUTOMATICALLY = "Automatically"
+AUTOMATIC = How(label="automatic")
 _PAC_TOOLS = {
-    "preprocessing": "PAC's computing",
-    "phase_shift": "PAC's computing",
-    "inversion": "PAC's seismic inversion",
-    "petro_inversion": "PAC's petrophysical inversion",
+    "preprocessing": How(label="PAC's computing"),
+    "phase_shift": How(label="PAC's computing"),
+    "inversion": How(label="PAC's seismic inversion"),
+    "petro_inversion": How(label="PAC's petrophysical inversion"),
 }
+# How the run's own steps were done: the user's requests and settings, in PAC's AI agent page;
+# the workflow's choices, by trials on sample windows; the autonomous agent's choice of the
+# settings, by its vision; the rest, automatically.
+ASKED = How(label="PAC's AI agent")
+TRIALS = How(label="trials", tip="Tried on sample windows, the one most of them passed kept")
+VISION = How(label="vision", tip="Dispersion images compared by the agent's vision")
+# A check's verdict, judged; a result no check judged, measured against the agent's limits.
+_JUDGED = How(label="judged")
+_MEASURED = How(label="measured", tip="Against the agent's limits, as its check takes them")
 # The user's ways of picking: their curve, taken as it is, which no check judges.
 _BY_HAND = frozenset({"hand lasso", "box", "hand"})
 # Why a stage ran again, other than a check's flag or the agent's own redo, in words.
@@ -251,12 +263,12 @@ class Done:
     verdicts: tuple[Verdict, ...]
 
     @property
-    def how(self) -> str:
-        """What made it, in its entry's words: a curve, the way it was picked; another result,
-        the agent automatically, or the PAC page the user made it with."""
+    def how(self) -> How | None:
+        """How it was made, on its badge: a curve, the way it was picked; another result, the
+        agent automatically, or the PAC page the user made it with."""
         if self.stage == "picking":
-            return _WAYS[self.way][0] if self.way in _WAYS else ""
-        return _PAC_TOOLS[self.stage] if self.by == "you" else _AUTOMATICALLY
+            return _WAYS.get(self.way)
+        return _PAC_TOOLS[self.stage] if self.by == "you" else AUTOMATIC
 
 
 @dataclass
@@ -590,7 +602,7 @@ def _test(kind: StageKind, run_folder: Path, unit: str, key: str) -> list[Verdic
     )
     lines = [_capitalized(", ".join(flag_text(one) for one in beyond))] if beyond else []
     lines += [f"Note: {flag_text(one)}" for one in warned_flags(metrics)]
-    title = f"Measured: {MEASURED_WORDS[status]}"
+    title = _capitalized(MEASURED_WORDS[status])
     return [Verdict(gate, status, True, title, tuple(lines), None)]
 
 
@@ -702,26 +714,27 @@ def unit_steps(
     stages: Collection[str],
 ) -> tuple[Step, ...]:
     """A card's "What was done": in time order, what made `unit`'s results of `stages` that
-    stand, an entry each (who, when, what made it, why, what its settings changed), each followed
-    by each verdict on it, an entry of its own."""
+    stand, an entry each (who and how, a badge each; when; why, what its settings changed), each
+    followed by each verdict on it, an entry of its own."""
     steps: list[Step] = []
     for one in standing(run_folder, unit, log, manifest, tested=stages):
         if one.stage not in stages:
             continue
-        lines = [*([one.how] if one.how else []), *([one.why] if one.why else []), *one.changes]
         steps.append(
             Step(
                 kind=one.stage,
                 by=one.by,
+                how=one.how,
                 at=one.at,
                 title=STAGES[one.stage].made.format(mode=one.mode or ""),
-                lines=tuple(lines),
+                lines=(*([one.why] if one.why else []), *one.changes),
             )
         )
         steps += [
             Step(
                 kind="test" if verdict.test else "check",
                 by="checks",
+                how=_MEASURED if verdict.test else _JUDGED,
                 at=verdict.at or one.at,
                 title=verdict.title,
                 lines=verdict.lines,
@@ -740,10 +753,10 @@ def run_steps(
     listed: int = 6,
 ) -> list[Step]:
     """The run card's entries of `stages`, the results that stand over the line counted: a
-    stage's an entry by each who made some, first who made the first, each saying how many of
-    its units, what made them, the curves of other modes, each check's verdicts, the user's units
-    named when some of them, `listed` or fewer; a stage's facts of the whole run (`lines`) in its
-    first entry. The tests of results no check judged stay on their cards."""
+    stage's an entry by each who made some and how (a badge each), first who made the first,
+    each saying how many of its units, the curves of other modes, each check's verdicts, the
+    user's units named when some of them, `listed` or fewer; a stage's facts of the whole run
+    (`lines`) in its first entry. The tests of results no check judged stay on their cards."""
     sources = _sources(run_folder, log, manifest)
     units = {
         "record": [one.name for one in manifest.records],
@@ -758,14 +771,15 @@ def run_steps(
             if unit not in found:
                 found[unit] = _standing(sources, unit, ())
         done = [(unit, one) for unit in own for one in found[unit] if one.stage == stage]
-        makers: dict[Maker, list[tuple[str, Done]]] = {}
+        # An entry by who made them and how.
+        groups: dict[tuple[Maker, str], list[tuple[str, Done]]] = {}
         for unit, one in sorted(done, key=lambda pair: pair[1].at or _EARLIEST):
-            makers.setdefault(one.by, []).append((unit, one))
-        for index, (maker, group) in enumerate(makers.items()):
+            how = one.how.label if one.how is not None else ""
+            groups.setdefault((one.by, how), []).append((unit, one))
+        for index, ((maker, _), group) in enumerate(groups.items()):
             # A window's curve: its M0; the other modes, the user's, said apart.
             main = [one for _, one in group if one.mode in (None, "M0")]
             said = [f"{len(main)} of {plural(len(own), kind.unit)}"] if main else []
-            said += _hows(main)
             said += (lines or {}).get(stage, ()) if index == 0 else ()
             said += _other_modes([one for _, one in group])
             said += _verdict_counts(main)
@@ -773,7 +787,14 @@ def run_steps(
             if maker == "you" and 0 < len(named) < len(own) and len(named) <= listed:
                 said.append(", ".join(f"xmid {number(xmid, 4)} m" for xmid in named))
             steps.append(
-                Step(kind=stage, by=maker, at=group[0][1].at, title=kind.run, lines=tuple(said))
+                Step(
+                    kind=stage,
+                    by=maker,
+                    how=group[0][1].how,
+                    at=group[0][1].at,
+                    title=kind.run,
+                    lines=tuple(said),
+                )
             )
     return steps
 
@@ -810,31 +831,14 @@ def by_whom_counted(counts: Mapping[Maker, int]) -> str:
     return ", ".join(f"by {_WHO[maker]} on {count}" for maker, count in counts.items())
 
 
-def _hows(done: Sequence[Done]) -> list[str]:
-    """What made the results, as their entries say it: one thing alone ("Automatically"); more,
-    each with how many it made ("Automatically on 65, inside a lasso the agent drew on 16")."""
-    hows = Counter(one.how for one in done if one.how)
-    if len(hows) < 2:
-        return list(hows)
-    short = {one.how: _WAYS[one.way][1] if one.way in _WAYS else one.how for one in done}
-    return [
-        _capitalized(", ".join(f"{short[how]} on {count}" for how, count in hows.most_common()))
-    ]
-
-
 def _other_modes(done: Sequence[Done]) -> list[str]:
-    """The curves of modes other than M0, a line each mode: how many windows hold one and what
-    made them, "M1 on 3 windows, by hand, in a box"."""
-    modes: dict[str, list[Done]] = {}
-    for one in done:
-        if one.mode is not None and one.mode != "M0":
-            modes.setdefault(one.mode, []).append(one)
-    said: list[str] = []
-    for mode in sorted(modes, key=lambda label: _order(f"picking:{label}")):
-        hows = _hows(modes[mode])
-        made = f", {after_colon(hows[0])}" if hows else ""
-        said.append(f"{mode} on {plural(len(modes[mode]), 'window')}{made}")
-    return said
+    """The curves of modes other than M0, each mode with how many windows hold one: "M1 on 3
+    windows"."""
+    counts = Counter(one.mode for one in done if one.mode is not None and one.mode != "M0")
+    return [
+        f"{mode} on {plural(counts[mode], 'window')}"
+        for mode in sorted(counts, key=lambda label: _order(f"picking:{label}"))
+    ]
 
 
 def _verdict_counts(done: Sequence[Done]) -> list[str]:
@@ -857,12 +861,11 @@ def _verdict_counts(done: Sequence[Done]) -> list[str]:
     ]
 
 
-def picked(run_folder: Path, unit: str, log: QCLog | None) -> dict[str, str]:
-    """Who picked each of `unit`'s curves that stand and how, by its mode's label, in a
-    sentence: "Picked by the user, PAC's automatic picking"."""
-    said: dict[str, str] = {}
-    for one in _standing(_sources(run_folder, log, None), unit, ()):
-        if one.stage == "picking" and one.mode is not None:
-            how = f", {after_colon(one.how)}" if one.how else ""
-            said[one.mode] = f"Picked by {_WHO[one.by]}{how}"
-    return said
+def picked(run_folder: Path, unit: str, log: QCLog | None) -> dict[str, tuple[Maker, How | None]]:
+    """Who picked each of `unit`'s curves that stand and how (a badge each, as its "What was
+    done" says them), by its mode's label."""
+    return {
+        one.mode: (one.by, one.how)
+        for one in _standing(_sources(run_folder, log, None), unit, ())
+        if one.stage == "picking" and one.mode is not None
+    }

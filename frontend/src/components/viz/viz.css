@@ -210,6 +210,11 @@
   margin-top: 4px;
 }
 
+/* How a step was done, in grey beside who did it. */
+.viz-origin + .viz-origin.how {
+  margin-left: 4px;
+}
+
 .viz-origin {
   display: inline-block;
   margin-top: 6px;
@@ -218,6 +223,7 @@
   font-size: var(--fs-caption);
   font-weight: 650;
   line-height: 1.6;
+  white-space: nowrap;
   background: var(--none-soft);
   color: var(--text-muted);
 }

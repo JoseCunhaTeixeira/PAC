@@ -16,6 +16,7 @@ import {
 } from "./format";
 import type {
   GateView,
+  How,
   Mark,
   Metric,
   Origin,
@@ -114,6 +115,16 @@ export function OriginTag({ origin }: { origin: Origin }) {
   return <span className={`viz-origin ${origin}`}>{ORIGIN_LABELS[origin]}</span>;
 }
 
+/** How a step was done, on a grey badge beside who did it ("automatic", "lasso"); its whole
+ * words on hover when the badge says less. */
+export function HowTag({ how }: { how: How }) {
+  return (
+    <span className="viz-origin how" data-tip={how.tip || undefined}>
+      {how.label}
+    </span>
+  );
+}
+
 /** Settings as a definition list: each its value and who set it, its other parameters a line
  * each, why when its unit's own, then how the line's other units differ in it. */
 export function SettingsList({ settings }: { settings: Setting[] }) {
@@ -155,6 +166,7 @@ export function Timeline({ steps }: { steps: Step[] }) {
           </span>
           <div className="viz-step-title">{step.title}</div>
           <OriginTag origin={step.by} />
+          {step.how && <HowTag how={step.how} />}
           {step.lines.length > 0 && (
             <ul className="viz-step-lines">
               {step.lines.map((line) => (

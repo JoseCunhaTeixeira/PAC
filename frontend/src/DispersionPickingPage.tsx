@@ -44,6 +44,7 @@ import {
 import { useStoredState } from "./components/stored";
 import { judged, railItems, useReceivers, useStageStates, xmidKey } from "./components/railStates";
 import { num } from "./components/viz/format";
+import { HowTag, OriginTag } from "./components/viz/ui";
 
 const LABEL_PATTERN = /^[A-Z]{1,3}[0-9]+$/;
 // The rail's parts' states in words, in the legend's order: a window's image's (G2), its
@@ -637,7 +638,12 @@ export default function DispersionPickingPage() {
                         <span className="faint">
                           {curve.fs.length} point{curve.fs.length === 1 ? "" : "s"}
                         </span>
-                        {curve.picked && <span className="faint curve-made">{curve.picked}</span>}
+                        {curve.made && (
+                          <span className="curve-made">
+                            <OriginTag origin={curve.made.by} />
+                            {curve.made.how && <HowTag how={curve.made.how} />}
+                          </span>
+                        )}
                         <button
                           type="button"
                           className="danger icon"

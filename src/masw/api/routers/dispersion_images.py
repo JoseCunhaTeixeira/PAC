@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 
 from masw.io import dispersion_images as io
 from masw.io.folders import get_output_folders, get_xmid_folders
+from masw.io.quality.history import Maker
+from masw.io.quality.view import How
 from sigpipe.algorithms.picking.dispersion.curve import (
     longest_reached_wavelength,
     min_resolvable_wavelength,
@@ -23,12 +25,19 @@ router = APIRouter(tags=["dispersion_images"])
 LABEL_PATTERN = r"^[A-Z]{1,3}[0-9]+$"
 
 
+class CurveMade(BaseModel):
+    """Who picked a curve and how, a badge each, as its window's "What was done" says them."""
+
+    by: Maker
+    how: How | None = None
+
+
 class DispersionCurveOut(BaseModel):
     label: str
     fs: list[float]
     vs: list[float]
     vs_std: list[float] | None = None
-    picked: str | None = None  # who picked it and how: "Picked by the user, by hand, in a box"
+    made: CurveMade | None = None
 
 
 class DispersionImageOut(BaseModel):
@@ -94,7 +103,9 @@ def nan_to_none(rows: np.ndarray, decimals: int | None = None) -> list[list[floa
     return result
 
 
-def _to_image_out(image: DispersionImage, picked: Mapping[str, str]) -> DispersionImageOut:
+def _to_image_out(
+    image: DispersionImage, picked: Mapping[str, tuple[Maker, How | None]]
+) -> DispersionImageOut:
     """The image, its curves each with who picked it and how (`picked`, by mode)."""
     curves = (
         [
@@ -103,7 +114,9 @@ def _to_image_out(image: DispersionImage, picked: Mapping[str, str]) -> Dispersi
                 fs=c.fs.tolist(),
                 vs=c.vs.tolist(),
                 vs_std=c.vs_err.tolist() if c.vs_err is not None else None,
-                picked=picked.get(c.mode.label),
+                made=CurveMade(by=picked[c.mode.label][0], how=picked[c.mode.label][1])
+                if c.mode.label in picked
+                else None,
             )
             for c in sorted(image.dispersion_curves, key=lambda c: c.mode)
         ]

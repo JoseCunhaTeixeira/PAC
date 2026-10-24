@@ -9,14 +9,15 @@ import type { DragTool } from "./plotBox";
 import { ZoomSelection } from "./ZoomOverlay";
 import { HoverTooltip } from "./HoverTooltip";
 import type { Tip } from "./tips";
+import type { How, Origin } from "./viz/types";
 
 export interface DispersionCurve {
   label: string;
   fs: number[];
   vs: number[];
   vs_std?: number[] | null;
-  /** Who picked it and how: "Picked by the user, by hand, in a box". */
-  picked?: string | null;
+  /** Who picked it and how, a badge each, as its window's "What was done" says them. */
+  made?: { by: Origin; how?: How | null } | null;
 }
 
 export interface DispersionImage {

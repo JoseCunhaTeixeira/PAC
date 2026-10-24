@@ -99,15 +99,27 @@ class Track(BaseModel):
     bound: Literal["min", "max"] | None = None
 
 
+class How(BaseModel):
+    """How a step was done, on its badge beside who did it: a word or two ("automatic",
+    "lasso", "PAC's seismic inversion"), its whole words on hover when the badge says less."""
+
+    model_config = ConfigDict(frozen=True)
+
+    label: str
+    tip: str = ""
+
+
 class Step(BaseModel):
-    """A step of what was done, in order: a title and its facts, a line each; by whom. A run's,
-    from the study's journal (the autonomous mode's) and the results that stand over the line; a
-    unit's, what made its results that stand and the checks' verdicts on them (quality.history)."""
+    """A step of what was done, in order: a title, who did it and how (a badge each), its facts,
+    a line each. A run's, from the study's journal (the autonomous mode's) and the results that
+    stand over the line; a unit's, what made its results that stand and the checks' verdicts on
+    them (quality.history)."""
 
     model_config = ConfigDict(frozen=True)
 
     kind: str
     by: Origin
+    how: How | None = None
     at: datetime | None = None
     title: str
     lines: tuple[str, ...] = ()

@@ -88,9 +88,16 @@ export interface Reason {
 }
 
 // A step of what was done, in order: its title and its facts, a line each; by whom.
+/** How a step was done, on its badge beside who did it; its whole words on hover. */
+export interface How {
+  label: string;
+  tip?: string;
+}
+
 export interface Step {
   kind: string;
   by: Origin;
+  how?: How | null;
   at: string | null;
   title: string;
   lines: string[];

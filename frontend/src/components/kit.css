@@ -1880,12 +1880,17 @@ button.pick-step:hover:not(:disabled) {
   background: var(--accent);
 }
 
-/* Who picked the curve and how, on a line of its own under it, after its dot. */
+/* Who picked the curve and how, a badge each, on a line of its own under it, after its dot. */
 .curve-made {
   order: 1;
   flex-basis: 100%;
   padding-left: 18px;
-  font-size: var(--fs-caption);
+}
+
+.curve-made .viz-origin {
+  margin-top: 0;
+  padding: 0 6px;
+  font-size: 0.66rem;
 }
 
 .howto {

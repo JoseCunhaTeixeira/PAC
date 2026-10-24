@@ -344,9 +344,9 @@ def test_a_window_done_again_by_hand_keeps_nothing_older(run: str) -> None:
     assert any(one["text"] == "Inverted by the user." for one in card["sentences"])
     # What was done: the user's inversion now, measured against the agent's limits as no check
     # judged it; those it replaced, the agent's too, left out.
-    (inverted, measured) = [(one["title"], one["by"]) for one in card["steps"]]
-    assert inverted == ("Inverted", "you")
-    assert measured[0].startswith("Measured: ") and measured[1] == "checks"
+    (inverted, measured) = [(one["title"], one["by"], one["how"]["label"]) for one in card["steps"]]
+    assert inverted == ("Inverted", "you", "PAC's seismic inversion")
+    assert measured[1:] == ("checks", "measured")
     section = run_folder / "SeismicInversion_VelocitySection_0000.png"
     assert section.exists()
 
