@@ -1420,7 +1420,7 @@ wheels = [
 [[package]]
 name = "paco"
 version = "1.0.0"
-source = { git = "https://github.com/JoseCunhaTeixeira/PACo#8933f8c525a2e7db2e1dd8c2bc4dfd23aa5cbdeb" }
+source = { git = "https://github.com/JoseCunhaTeixeira/PACo#958ebd591867ce5ecfe233801fa58f2d890e9bca" }
 dependencies = [
     { name = "anthropic" },
     { name = "anyio" },

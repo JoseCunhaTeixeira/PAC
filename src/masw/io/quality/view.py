@@ -661,7 +661,11 @@ def verdict_sentence(*results: GateResult | None) -> Sentence | None:
     if status == "fail":
         rejected = [result for result in judged if result.verdict == "reject"]
         flags = [flag for result in rejected for flag in result.flags]
-        reason = next((flag for flag in flags if flag.name not in REFUSALS), None)
+        # What rejected it: a flag no change fixes, before those that asked a retry.
+        reason = next(
+            (flag for flag in flags if not flag.fixable and not kept(flag)),
+            next((flag for flag in flags if flag.name not in REFUSALS), None),
+        )
         why = f": {after_colon(finding(reason.message))}" if reason is not None else "."
         return Sentence(mark="fail", text=f"Rejected by {checks_named(rejected)}{why}")
     flagged = [result for result in judged if result.verdict == "retry"]

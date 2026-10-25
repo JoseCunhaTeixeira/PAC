@@ -886,6 +886,41 @@ def test_a_unit_refused_its_retry_stays_flagged_its_reason_a_warning() -> None:
     ]
 
 
+def test_a_rejected_unit_is_said_rejected_by_what_no_change_fixes() -> None:
+    # PACo's retries spent on a curve too short to invert: rejected, the note and a flag that
+    # asked a retry before the one that rejected it.
+    curve = GateResult.model_validate(
+        _result(
+            "G3",
+            "xmid_2.50",
+            "reject",
+            [_metric("curve_points", 2, 4, "min")],
+            [
+                _flag(
+                    "budget_spent",
+                    "The retry budget is spent; the last attempt raised on_data, too_few_points.",
+                    "picking",
+                    {"kind": "keep", "note": "budget spent"},
+                ),
+                _flag("on_data", "Only 50 % on the ridge", "picking", {"kind": "override"}),
+                {
+                    **_flag(
+                        "too_few_points",
+                        "2 points in the curve, too few to invert.",
+                        "picking",
+                        {"kind": "reject", "reason": "too few points to invert"},
+                    ),
+                    "fixable": False,
+                },
+            ],
+        )
+    )
+
+    assert verdict_sentence(curve) == Sentence(
+        mark="fail", text="Rejected by the curve check: 2 points in the curve, too few to invert."
+    )
+
+
 def test_an_unknown_folder_is_not_found() -> None:
     for path in (
         "run/nope",
