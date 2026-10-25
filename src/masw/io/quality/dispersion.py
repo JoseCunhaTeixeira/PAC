@@ -460,6 +460,14 @@ _PICKING: dict[str, tuple[str, Callable[[Any], str]]] = {
         lambda value: "any" if value is None else f"{number(value)} window lengths",
     ),
     "guide": ("Guided", lambda value: f"along a curve of {len(value)} points" if value else "no"),
+    "max_low_fall": (
+        "Low end",
+        lambda value: (
+            "kept whole"
+            if value is None
+            else f"cut where over {number(100 * value)} % slower, at wavelengths over the window"
+        ),
+    ),
 }
 
 
