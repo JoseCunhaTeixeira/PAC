@@ -1359,7 +1359,7 @@ wheels = [
 
 [[package]]
 name = "pac"
-version = "3.0.0"
+version = "4.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "disba" },
@@ -1420,7 +1420,7 @@ wheels = [
 [[package]]
 name = "paco"
 version = "1.0.0"
-source = { git = "https://github.com/JoseCunhaTeixeira/PACo#f37f625ff73d11c11c4d3e0b7bfb70041bf25328" }
+source = { git = "https://github.com/JoseCunhaTeixeira/PACo#458a921a4c642ac29d6847945a94f7bbb21c71cc" }
 dependencies = [
     { name = "anthropic" },
     { name = "anyio" },

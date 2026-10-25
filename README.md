@@ -1,6 +1,6 @@
 # PAC — Passive and Active Computation of MASW
 
-[![License: CC BY 4.0](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey.svg)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14808813.svg)](https://doi.org/10.5281/zenodo.14808813)
 
 PAC is an app for processing **Multichannel Analysis of Surface Waves (MASW)** on linear arrays. It can handle both **passive** and **active** seismic data to automatically optimize and extract dispersion images, and it can apply cross-correlation to active data to sometimes improve dispersion retrieval quality. Dispersion curves can be semi-automatically picked on an interactive interface and then inverted into shear-wave velocity profiles.
@@ -249,7 +249,7 @@ and the web app with `npm install && npm run dev` in `frontend/`. Set the agent'
 The agent's processing uses half of the computer's cores (`PACO_WORKERS` to change it), and keeps the windows' images it makes in `data/output/.cache`, at most 2 GB, to take them again when a run makes the same ones (`PACO_CACHE_GB=0` keeps none). When a conversation ends, and when PAC starts (no conversation outlives it), the agent's working files are removed and that cache emptied: only the results stay.
 
 ## License
-This project is under Creative Commons Attribution 4.0 International license, allowing re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited.
+Copyright (c) 2026 J. Cunha Teixeira. This project is under the GNU Affero General Public License v3.0 or later (see `LICENSE`).
 Please cite as:
 > Cunha Teixeira, J. (2025). PAC - Passive and Active Computation of MASW. Zenodo. doi:[10.5281/zenodo.14808813](https://doi.org/10.5281/zenodo.14808813)
 

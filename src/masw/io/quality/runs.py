@@ -273,7 +273,6 @@ def run_card(folder: str) -> RunCard:
         ),
         reasons=_reasons(
             journal,
-            settings,
             given_settings(run_folder),
             spacing,
             int(masw["length"]),
@@ -869,7 +868,6 @@ def _model_verdicts(journal: Sequence[JournalEntry], log: QCLog | None) -> dict[
 
 def _reasons(
     journal: Sequence[JournalEntry],
-    settings: Sequence[Setting],
     given: Sequence[Given],
     spacing: float,
     length: int,
@@ -877,8 +875,9 @@ def _reasons(
 ) -> tuple[Reason, ...]:
     """Why the settings are what they are: the assistant's own reasons for those it chose (its
     commits', the latest of each setting; a commit's reasons for one setting `SEP` apart, each
-    once), then the settings the user set, each its value in words (the windows' `length` where
-    the shots used count from); the near field's left out when it dropped no shot (`idle`)."""
+    once), then the settings the user gave it, each its value in words (the windows' `length`
+    where the shots used count from); the near field's left out when it dropped no shot
+    (`idle`). None for a run made in PAC: its settings, the user's, are said by its tiles."""
     found: dict[tuple[str, str], Reason] = {}
     for entry in journal:
         if entry.kind != "commit":
@@ -915,13 +914,6 @@ def _reasons(
         if one.family == "processing":
             for name, value in settings_said(one.values, spacing, length).items():
                 found[name, "you"] = Reason(setting=name, text=value, by="you")
-    if not journal and not given:
-        for setting in settings:
-            # What the run gave, not a setting: its records used, its curves, its Vs profiles.
-            if setting.origin == "you" and setting.key not in ("records", "curves", "profiles"):
-                found[setting.label, "you"] = Reason(
-                    setting=setting.label, text=setting.value, by="you"
-                )
     return tuple(found.values())
 
 

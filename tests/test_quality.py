@@ -189,12 +189,10 @@ def test_a_pac_run_card_says_its_windows_came_from_pacs_form(run: str) -> None:
         "2 of 3",
         "windows inverted",
     )
-    # Nothing compared; the settings set by hand; what was done, a step each, its facts a line
-    # each: the records, the windows imaged, picked and inverted.
-    assert card["tried"] == []
-    assert [(one["setting"], one["text"], one["by"]) for one in card["reasons"]] == [
-        ("Windows", "6 receivers (5 m)", "you")
-    ]
+    # Nothing compared, nothing to say why: its settings, the user's, said by its tiles; what
+    # was done, a step each, its facts a line each: the records, the windows imaged, picked and
+    # inverted.
+    assert card["tried"] == [] and card["reasons"] == []
     assert [
         (step["kind"], step["by"], _how(step), step["title"], step["lines"])
         for step in card["history"]
@@ -1278,7 +1276,7 @@ def test_the_searchs_one_value_is_no_word_of_the_agents() -> None:
         },
     )
 
-    said = _reasons([commit], [], [], 1.5, 15)
+    said = _reasons([commit], [], 1.5, 15)
 
     # Its why on the setting, as code says it; the agent's own words for what it chose alone.
     assert [(one.setting, one.text, one.by) for one in said] == [
