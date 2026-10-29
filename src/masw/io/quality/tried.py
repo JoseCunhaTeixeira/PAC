@@ -205,7 +205,7 @@ def tried_tables(
 
 def plain(changes: Mapping[str, Any], spacing: float, length: int | None = None) -> list[str]:
     """Settings in the card's words, a line each, with the parameters a tile says: "Windows: 21
-    receivers (30 m)", "Shots used: up to 31.6 m", "Mute: 102.5-1,391 m/s"."""
+    receivers (30 m)", "Shots used: up to 31.6 m", "Mute: 102.5-1391 m/s"."""
     said = settings_said(changes, spacing, length, every=False)
     return [f"{column}: {value}" for column, value in said.items()]
 

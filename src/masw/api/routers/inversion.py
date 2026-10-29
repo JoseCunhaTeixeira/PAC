@@ -24,7 +24,7 @@ class InversionDefaultsOut(BaseModel):
     half_space_layer: VsLayer  # the half-space's: it may be faster than the layers above
 
 
-# The half-space as PACo's priors start it: up to 2,000 m/s, where the layers stop at 1,000.
+# The half-space as PACo's priors start it: up to 2000 m/s, where the layers stop at 1000.
 HALF_SPACE = VsLayer(vs_max=PriorRules().half_space_vs_max)
 
 
@@ -86,7 +86,7 @@ class PseudoSectionComparisonOut(BaseModel):
 @router.get("/inversion/defaults")
 def get_inversion_defaults() -> InversionDefaultsOut:
     """The inversion form's starting values: sigpipe's, as PACo's agent gets them, the
-    half-space up to 2,000 m/s as PACo's priors start it."""
+    half-space up to 2000 m/s as PACo's priors start it."""
     parameters = InversionParameters()
     return InversionDefaultsOut(
         parameters=parameters.model_copy(

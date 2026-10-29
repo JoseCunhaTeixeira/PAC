@@ -317,7 +317,7 @@ export function metricValue(metric: Metric, value: number | null = metric.value)
   if (value == null) return WHOLE.has(metric.name) ? "the whole model" : "not measured";
   if (BOOLEANS.has(metric.name)) return value ? "yes" : "no";
   // A share in whole percents; a small one to two significant digits, never 0 when some are
-  // (the fk selection's 1 segment of 2,736: 0.04 %).
+  // (the fk selection's 1 segment of 2736: 0.04 %).
   if (SHARES.has(metric.name) && metric.unit === "")
     return value > 0 && value < 0.1 ? `${num(100 * value, 2)} %` : pct(value);
   if (metric.unit === "s") return `${num(value * 1000)} ms`;

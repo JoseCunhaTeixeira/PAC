@@ -10,13 +10,12 @@ import PetroInversionPage from "./PetroInversionPage";
 import VisualizationPage from "./VisualizationPage";
 import ChatPage from "./ChatPage";
 import AssistantSettingsPopup from "./AssistantSettings";
-import { API } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useStayPut } from "./components/stayPut";
 import { TipLayer } from "./components/TipLayer";
 import { runsAt, useRunning } from "./components/running";
 import { useAssistantNews, type News } from "./components/assistantNews";
-import { complete, SettingsPopupContext, type AssistantSettings } from "./components/assistantSettings";
+import { SettingsPopupContext } from "./components/assistantSettings";
 import { applyTheme, getInitialTheme, ThemeContext, type Theme } from "./theme";
 import {
   ActiveIcon,
@@ -87,10 +86,11 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme());
   // What runs, beside each page in the menu.
   const running = useRunning();
+  const onAgentPage = location.pathname === "/assistant";
   // What the assistant said while its page was not open: its menu row says so.
-  const news = useAssistantNews(running.conversations, location.pathname === "/assistant");
-  // The assistant's settings popup (opened from its page, or by itself at start), and its saves,
-  // for the chat to read them again.
+  const news = useAssistantNews(running.conversations, onAgentPage);
+  // The assistant's settings popup, on its page only (opened there, or by itself while the
+  // settings are incomplete), and its saves, for the chat to read them again.
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [saves, setSaves] = useState(0);
   const popup = useMemo(() => ({ open: () => setSettingsOpen(true), saved: saves }), [saves]);
@@ -100,20 +100,6 @@ export default function App() {
   }, [theme]);
   // What a click presses stays where it is on screen while the page changes around it.
   useStayPut();
-
-  // At start, the settings popup opens by itself while the assistant's settings are incomplete.
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`${API}/agent/settings`)
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((found: AssistantSettings) => {
-        if (!cancelled && !complete(found)) setSettingsOpen(true);
-      })
-      .catch(() => null);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   return (
     <ThemeContext.Provider value={theme}>
@@ -206,7 +192,7 @@ export default function App() {
           </ErrorBoundary>
         </main>
         <AssistantSettingsPopup
-          open={settingsOpen}
+          open={settingsOpen && onAgentPage}
           answering={running.assistant}
           onClose={() => setSettingsOpen(false)}
           onSaved={() => setSaves((count) => count + 1)}

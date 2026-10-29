@@ -1,6 +1,7 @@
 """The chat page's backend with a scripted model standing in for Qwen: PACo's tools run in this
 process, on PAC's own folders, and the page reads the conversation as events."""
 
+import http.server
 import json
 import shutil
 import threading
@@ -139,6 +140,27 @@ def test_a_model_server_that_does_not_answer_is_named(monkeypatch: pytest.Monkey
 
     assert not found["available"] and found["model"] == "Qwen/Qwen3-14B-FP8"
     assert "http://127.0.0.1:9/v1 does not answer" in found["reason"]
+
+
+def test_a_gateway_serving_no_model_list_answers(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A company's gateway may serve the chat and no /models (404), or guard it (401): it
+    # answers, all the status asks.
+    class NoList(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(404)
+            self.end_headers()
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), NoList)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setenv("PACO_LLM_BASE_URL", f"http://127.0.0.1:{server.server_port}/v1")
+    monkeypatch.setenv("PACO_LLM_MODEL", "company-model")
+    try:
+        found = client.get("/agent/status").json()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert found["available"], found
 
 
 def test_a_conversation_runs_pacos_tools_on_pacs_folders() -> None:

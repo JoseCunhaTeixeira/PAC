@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { API } from "./api";
 import { Callout } from "./components/kit";
 import { CrossIcon, LockIcon } from "./components/icons";
+import { thousands } from "./components/numbers";
 import type { AssistantSettings } from "./components/assistantSettings";
 import "./AssistantSettings.css";
 
@@ -342,7 +343,7 @@ function SettingsForm({
                     />
                   </Field>
                   {atServer && (
-                    <Field label="Context (optional)" hint="Empty: 16,384">
+                    <Field label="Context (optional)" hint={`Empty: ${thousands(String(SERVER_CONTEXT))}`}>
                       <input
                         type="number"
                         min={1}
@@ -357,7 +358,7 @@ function SettingsForm({
               )}
               {short && (
                 <Callout tone="warn" title="Context too short for the autonomous mode">
-                  Give it 131,072 tokens or more, or choose a provider&apos;s API.
+                  Give it {thousands(String(LONG_CONTEXT))} tokens or more, or choose a provider&apos;s API.
                 </Callout>
               )}
             </section>

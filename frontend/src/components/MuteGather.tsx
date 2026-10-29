@@ -66,7 +66,7 @@ export function MuteGather({
   const index = acquisition.files.indexOf(file);
   const data = useMemo((): GatherData | null => {
     if (!raw) return null;
-    // At most about 1,200 samples a trace: the plot shows no more.
+    // At most about 1200 samples a trace: the plot shows no more.
     const stride = Math.max(1, Math.ceil(raw.n_samples / 1200));
     return {
       positions: acquisition.receiver_positions.map((position) => position[0]),

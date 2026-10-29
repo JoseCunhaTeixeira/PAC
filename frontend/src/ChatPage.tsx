@@ -22,7 +22,7 @@ import {
   TrashIcon,
 } from "./components/icons";
 import { PageArt } from "./components/PageArt";
-import { useSettingsPopup } from "./components/assistantSettings";
+import { complete, useSettingsPopup, type AssistantSettings } from "./components/assistantSettings";
 import { usePageTitle } from "./components/pageTitle";
 import "./ChatPage.css";
 
@@ -38,6 +38,9 @@ interface AgentStatus {
 }
 
 const MODE_NAMES: Record<Mode, string> = { workflow: "Workflow", autonomous: "Autonomous" };
+// How long the check of the agent may take, in seconds, as the backend's (CHECK_S): the badge
+// counts it down.
+const CHECK_S = 60;
 // What a conversation cleared under the page says: the settings changed elsewhere.
 const CLEARED =
   "The agent's settings changed: the conversations were cleared. Your next message starts a new one.";
@@ -254,6 +257,7 @@ async function detail(res: Response): Promise<string> {
 export default function ChatPage() {
   usePageTitle("AI agent");
   const [status, setStatus] = useState<AgentStatus | null>(null);
+  const [checkLeft, setCheckLeft] = useState(CHECK_S);
   const [session, setSession] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [events, setEvents] = useState<ChatEvent[]>([]);
@@ -287,18 +291,40 @@ export default function ChatPage() {
         setError(err instanceof Error ? err.message : String(err)),
       );
   }, []);
+  // The check's countdown, a second at a time while it runs.
+  useEffect(() => {
+    if (status !== null) return;
+    const timer = window.setInterval(() => setCheckLeft((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [status]);
 
   // The settings popup. New settings clear the conversations: the page shows a new one, and the
   // assistant's state read again.
   const settings = useSettingsPopup();
   const takeSaved = useEffectEvent(() => {
-    checkStatus();
+    recheck();
     newConversation();
     void refreshList();
   });
   useEffect(() => {
     if (settings.saved > 0) takeSaved();
   }, [settings.saved]);
+  // On this page alone, the popup opens by itself while the settings are incomplete.
+  const openIncomplete = useEffectEvent((found: AssistantSettings) => {
+    if (!complete(found)) settings.open();
+  });
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API}/agent/settings`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((found: AssistantSettings) => {
+        if (!cancelled) openIncomplete(found);
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // The conversations the server keeps, the latest first.
   const refreshList = useCallback(async (): Promise<SessionInfo[]> => {
@@ -513,6 +539,13 @@ export default function ChatPage() {
     inputRef.current?.focus();
   }
 
+  // The agent checked again, the badge counting the check down.
+  function recheck() {
+    setStatus(null);
+    setCheckLeft(CHECK_S);
+    checkStatus();
+  }
+
   function toggle(key: number) {
     setUnfolded((previous) => {
       const next = new Set(previous);
@@ -552,7 +585,7 @@ export default function ChatPage() {
             <PageArt kind="assistant" />
           </div>
           <div className="chat-header-actions">
-            <StatusBadge status={status} onClick={settings.open} />
+            <StatusBadge status={status} left={checkLeft} onClick={settings.open} />
             <button
               ref={toggleRef}
               className={
@@ -662,7 +695,7 @@ export default function ChatPage() {
               <button className="chat-quiet" onClick={settings.open}>
                 Open the agent&apos;s settings
               </button>
-              <button className="chat-quiet" onClick={checkStatus}>
+              <button className="chat-quiet" onClick={recheck}>
                 Check again
               </button>
             </span>
@@ -746,12 +779,20 @@ export default function ChatPage() {
 }
 
 // The assistant's state, its mode and model: a click opens its settings.
-function StatusBadge({ status, onClick }: { status: AgentStatus | null; onClick: () => void }) {
+function StatusBadge({
+  status,
+  left,
+  onClick,
+}: {
+  status: AgentStatus | null;
+  left: number; // the check's seconds left, while it runs
+  onClick: () => void;
+}) {
   const ready = status?.available === true;
   const mode = status?.mode ? `${MODE_NAMES[status.mode]} · ` : "";
   const label =
     status === null
-      ? "Checking…"
+      ? `Checking… ${left} s`
       : ready
         ? `${mode}${status.model ?? "Ready"}`
         : "Unavailable";

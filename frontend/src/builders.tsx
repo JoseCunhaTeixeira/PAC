@@ -33,7 +33,7 @@ export function buildMutingParams(m: { method: string; tmin: number | null; tmax
 
 
 // The windows' settings sent: a shot distance left empty left out, so that sigpipe's own default
-// applies (none; 0 and 1,000 m in an older sigpipe, which refuses null).
+// applies (none; 0 and 1000 m in an older sigpipe, which refuses null).
 export function buildMaswParams(m: { length: number; step: number; distance_min: number | null; distance_max: number | null; }) {
   const near = bound(m.distance_min);
   const far = bound(m.distance_max);

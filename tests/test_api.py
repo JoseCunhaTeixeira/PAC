@@ -232,7 +232,7 @@ def test_the_inversion_form_starts_from_sigpipes_defaults() -> None:
     defaults = client.get("/inversion/defaults").json()
 
     parameters = defaults["parameters"]
-    # sigpipe's, but the half-space up to 2,000 m/s, as PACo's priors start it.
+    # sigpipe's, but the half-space up to 2000 m/s, as PACo's priors start it.
     half_space = VsLayer(vs_max=2_000.0)
     # The data choosing the layers; the table's layers ready for the fixed layering.
     assert InversionParameters.model_validate(parameters) == InversionParameters(

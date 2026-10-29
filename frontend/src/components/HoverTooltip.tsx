@@ -8,7 +8,7 @@ export function HoverTooltip({ x, y, tip }: { x: number; y: number; tip: Tip }) 
   );
 }
 
-// A field's bound on a line of its own ("≥ 0 s", "< 1,000 Hz"): the whole line in yellow, without
+// A field's bound on a line of its own ("≥ 0 s", "< 1000 Hz"): the whole line in yellow, without
 // a bullet.
 const BOUND = /^[<>≤≥] /;
 // A bound within a sentence ("when > 1 mode", "≥ 6 dB", "≤ 20 %"), its unit with it: in yellow too.

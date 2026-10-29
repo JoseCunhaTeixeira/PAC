@@ -133,6 +133,11 @@ class SessionInfo(BaseModel):
     tokens: Tokens | None = None
 
 
+# How long the check of a model server waits, in seconds, as the popup's connection test
+# (TEST_S): half for the connection, half for the answer. The chat page counts it down.
+CHECK_S = 60.0
+
+
 class AgentStatus(BaseModel):
     available: bool
     reason: str | None = None  # what is missing, and how to fix it
@@ -176,13 +181,15 @@ def _checked(mode: Mode, settings: AgentSettings) -> AgentStatus:
     if settings.llm_provider in LOCAL and settings.llm_base_url:
         url = settings.llm_base_url.rstrip("/")
         try:
-            response = httpx.get(
+            # Any answer will do: a company's gateway may serve no /models, or guard it
+            # otherwise, and still serve the chat, as the popup's connection test found; and it
+            # may take seconds to answer.
+            httpx.get(
                 f"{url}/models",
                 headers={"Authorization": f"Bearer {settings.llm_api_key.get_secret_value()}"},
-                timeout=3.0,
+                timeout=CHECK_S / 2,
             )
-            response.raise_for_status()
-        except httpx.HTTPError as error:
+        except httpx.TransportError as error:
             return found.model_copy(
                 update={
                     "reason": f"The model server at {url} does not answer "

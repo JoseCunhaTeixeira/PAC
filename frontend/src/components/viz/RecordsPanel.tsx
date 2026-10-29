@@ -166,7 +166,7 @@ export function Gather({ profile, file }: { profile: string; file: string }) {
     if (!raw.shown || !acquisition.data) return null;
     const index = acquisition.data.files.indexOf(traced);
     const source = acquisition.data.kind === "active" ? acquisition.data.source_positions[index]?.[0] ?? null : null;
-    // At most about 1,200 samples a trace: the plot shows no more.
+    // At most about 1200 samples a trace: the plot shows no more.
     const stride = Math.max(1, Math.ceil(raw.shown.n_samples / 1200));
     return {
       positions: acquisition.data.receiver_positions.map((position) => position[0]),

@@ -54,7 +54,7 @@ FORMER_UNBOUNDED_M = 1_000.0
 
 def shot_distances(masw: Mapping[str, Any]) -> tuple[float, float | None]:
     """The distances from a window's middle its shots lie within: the nearest (0 for none), the
-    farthest (None for none, as an older run's 1,000 m)."""
+    farthest (None for none, as an older run's 1000 m)."""
     near, far = masw.get("distance_min"), masw.get("distance_max")
     farthest = None if far is None or float(far) >= FORMER_UNBOUNDED_M else float(far)
     return (0.0 if near is None else float(near)), farthest
