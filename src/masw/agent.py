@@ -28,7 +28,6 @@ import anyio
 import anyio.from_thread
 import anyio.lowlevel
 import anyio.to_thread
-import httpx
 from pydantic import BaseModel, ValidationError
 
 from masw import assistant
@@ -179,22 +178,16 @@ def _checked(mode: Mode, settings: AgentSettings) -> AgentStatus:
         if (short := short_context(settings.context())) is not None:
             return found.model_copy(update={"reason": short})
     if settings.llm_provider in LOCAL and settings.llm_base_url:
-        url = settings.llm_base_url.rstrip("/")
-        try:
-            # Any answer will do: a company's gateway may serve no /models, or guard it
-            # otherwise, and still serve the chat, as the popup's connection test found; and it
-            # may take seconds to answer.
-            httpx.get(
-                f"{url}/models",
-                headers={"Authorization": f"Bearer {settings.llm_api_key.get_secret_value()}"},
-                timeout=CHECK_S / 2,
-            )
-        except httpx.TransportError as error:
+        from paco.llm.chat import unanswered
+
+        # Reached as the popup's connection test reaches it (a company's gateway: its
+        # certificates, which may take seconds to answer, and answer anything).
+        if (error := unanswered(settings.llm_base_url, settings.llm_api_key, CHECK_S)) is not None:
+            url = settings.llm_base_url.rstrip("/")
             return found.model_copy(
                 update={
-                    "reason": f"The model server at {url} does not answer "
-                    f"({type(error).__name__}). Start it, or choose another model in the "
-                    "agent's settings."
+                    "reason": f"The model server at {url} does not answer ({error}). Start it, "
+                    "or choose another model in the agent's settings."
                 }
             )
     return found.model_copy(update={"available": True})

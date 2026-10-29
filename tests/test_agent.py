@@ -143,11 +143,11 @@ def test_a_model_server_that_does_not_answer_is_named(monkeypatch: pytest.Monkey
 
 
 def test_a_gateway_serving_no_model_list_answers(monkeypatch: pytest.MonkeyPatch) -> None:
-    # A company's gateway may serve the chat and no /models (404), or guard it (401): it
-    # answers, all the status asks.
+    # A company's gateway may serve the chat and refuse /models (400, 401, 404): it answers, all
+    # the status asks.
     class NoList(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:
-            self.send_response(404)
+            self.send_response(400)
             self.end_headers()
 
     server = http.server.HTTPServer(("127.0.0.1", 0), NoList)
