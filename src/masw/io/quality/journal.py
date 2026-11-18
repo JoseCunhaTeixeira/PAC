@@ -132,7 +132,7 @@ def study_of(profile_folder: Path, run_id: str) -> Path | None:
 def journal_of(study: Path) -> tuple[JournalEntry, ...]:
     """The study's journal, in order; a line unread left out."""
     try:
-        lines = (study / JOURNAL_FILE).read_text().splitlines()
+        lines = (study / JOURNAL_FILE).read_text(encoding="utf-8").splitlines()
     except OSError:
         return ()
     entries: list[JournalEntry] = []
@@ -147,10 +147,10 @@ def journal_of(study: Path) -> tuple[JournalEntry, ...]:
 def search_of(study: Path) -> SearchDone | None:
     """The study's search, when it ran; None when its files cannot be read."""
     try:
-        made: Any = json.loads((study / SEARCH_FILE).read_text())
+        made: Any = json.loads((study / SEARCH_FILE).read_text(encoding="utf-8"))
         at = datetime.fromisoformat(made["made_at"])
         knockout: Any = (
-            json.loads((study / KNOCKOUT_FILE).read_text())
+            json.loads((study / KNOCKOUT_FILE).read_text(encoding="utf-8"))
             if (study / KNOCKOUT_FILE).exists()
             else {}
         )
@@ -201,7 +201,7 @@ def _varied(changes: list[dict[str, Any]]) -> frozenset[str]:
 def survey_of(study: Path) -> SurveyDone | None:
     """The study's survey, when it ran and its file read."""
     try:
-        return SurveyDone.model_validate_json((study / SURVEY_FILE).read_text())
+        return SurveyDone.model_validate_json((study / SURVEY_FILE).read_text(encoding="utf-8"))
     except OSError, ValueError:
         return None
 
@@ -210,7 +210,7 @@ def experiment_of(study: Path, name: str) -> ExperimentDone | None:
     """Experiment `name` of the study (E<n>), when its file is read."""
     try:
         return ExperimentDone.model_validate_json(
-            (study / EXPERIMENTS / f"{name}.json").read_text()
+            (study / EXPERIMENTS / f"{name}.json").read_text(encoding="utf-8")
         )
     except OSError, ValueError:
         return None
@@ -220,7 +220,7 @@ def _judged(study: Path, since: datetime) -> list[dict[str, Any]]:
     """The sheets the eye judged since `since`, the search's making (a search made again is
     judged afresh)."""
     path = study / JUDGED_FILE
-    lines = path.read_text().splitlines() if path.exists() else []
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
     sheets = [cast(dict[str, Any], json.loads(line)) for line in lines if line.strip()]
     return [sheet for sheet in sheets if datetime.fromisoformat(sheet["at"]) >= since]
 
@@ -228,7 +228,7 @@ def _judged(study: Path, since: datetime) -> list[dict[str, Any]]:
 def _runs(path: Path) -> set[str]:
     """The runs a study's line was, now and at each commit."""
     try:
-        line: Any = json.loads(path.read_text())
+        line: Any = json.loads(path.read_text(encoding="utf-8"))
     except OSError, ValueError:
         return set()
     if not isinstance(line, dict):

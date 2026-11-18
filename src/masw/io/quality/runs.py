@@ -1194,7 +1194,7 @@ def _requests(run_folder: Path) -> list[tuple[str, Step]]:
     if not path.exists():
         return []
     turns: dict[tuple[str, object], tuple[str, Step]] = {}
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         try:
             call = cast(dict[str, Any], json.loads(line))
             ended = datetime.fromisoformat(str(call["at"]))

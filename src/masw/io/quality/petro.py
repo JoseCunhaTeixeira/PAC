@@ -280,7 +280,9 @@ def model_of(run_folder: Path, log: QCLog | None) -> str | None:
         None,
     )
     path = run_folder / PAC_PETRO_CONFIG
-    pac: object = json.loads(path.read_text()).get("model_name") if path.exists() else None
+    pac: object = (
+        json.loads(path.read_text(encoding="utf-8")).get("model_name") if path.exists() else None
+    )
     if isinstance(pac, str) and (
         attempt is None or datetime.fromtimestamp(path.stat().st_mtime, UTC) > attempt.started_at
     ):
@@ -304,7 +306,7 @@ def _measures(window: Path) -> PetroMeasures | None:
         model_file.exists() and path.stat().st_mtime < model_file.stat().st_mtime
     ):
         return None
-    return PetroMeasures.model_validate_json(path.read_text())
+    return PetroMeasures.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 def _unmeasured(window: Path) -> str:

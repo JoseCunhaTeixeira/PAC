@@ -74,7 +74,7 @@ def kept() -> dict[str, str]:
     if not SETTINGS_FILE.is_file():
         return {}
     found: dict[str, str] = {}
-    for line in SETTINGS_FILE.read_text().splitlines():
+    for line in SETTINGS_FILE.read_text(encoding="utf-8").splitlines():
         name, sep, value = line.partition("=")
         if sep and name.strip() in (*NAMES.values(), KEY):
             found[name.strip()] = value.strip()
@@ -112,7 +112,7 @@ def dotenv(names: Collection[str]) -> dict[str, str]:
     if not path.is_file():
         return {}
     found: dict[str, str] = {}
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         name, sep, value = line.strip().removeprefix("export ").partition("=")
         if sep and name.strip() in names:
             found[name.strip()] = value.strip().strip("'\"")
@@ -148,7 +148,7 @@ def save(given: AssistantSettingsIn) -> AssistantSettings:
     with LOCK:
         # Created readable by its owner alone before the key is written in it.
         descriptor = os.open(written, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(descriptor, "w") as file:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
             file.write("".join(f"{name}={value}\n" for name, value in values.items()))
         written.chmod(0o600)
         written.replace(SETTINGS_FILE)

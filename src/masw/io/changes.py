@@ -115,5 +115,5 @@ def soils_result(window: Path) -> dict[str, Any]:
     path = window / PETRO_MEASURES
     if not path.exists():
         return {}
-    measures = PetroMeasures.model_validate_json(path.read_text())
+    measures = PetroMeasures.model_validate_json(path.read_text(encoding="utf-8"))
     return {"soils": list(measures.soils), "water_table_m": round(measures.water_table_m, 2)}

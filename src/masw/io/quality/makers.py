@@ -34,7 +34,9 @@ def inversion_by_agent(log: QCLog | None, unit: str, run_folder: Path) -> bool:
     done = next((one for one in reversed(attempts) if one.status == "succeeded"), None)
     saved = run_folder / unit / PARAMETERS_FILE
     if saved.exists():
-        given = cast(dict[str, Any], json.loads(saved.read_text()).get("parameters") or {})
+        given = cast(
+            dict[str, Any], json.loads(saved.read_text(encoding="utf-8")).get("parameters") or {}
+        )
         # The agent's parameters as its log holds them, against the window's.
         if done is None or any(given.get(key) != value for key, value in done.parameters.items()):
             return False

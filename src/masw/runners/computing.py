@@ -92,5 +92,5 @@ def window_error(run_folder: Path, outcome: WindowOutcome) -> WindowError:
         xmid=outcome.xmid,
         error_type=error_type,
         message=message,
-        traceback=log.read_text() if log.exists() else "",
+        traceback=log.read_text(encoding="utf-8") if log.exists() else "",
     )

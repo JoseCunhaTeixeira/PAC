@@ -291,7 +291,7 @@ def _nearest(window: Path) -> float | None:
     manifest = read_manifest(window.parent)
     if not path.exists() or (manifest is not None and manifest.profile.kind == "passive"):
         return None
-    return nearest_offset(MASWWindow.model_validate_json(path.read_text()))
+    return nearest_offset(MASWWindow.model_validate_json(path.read_text(encoding="utf-8")))
 
 
 def _image_metrics(
@@ -594,7 +594,7 @@ def _records_settings(
         return ()
     names = [
         one.name
-        for one in MASWWindow.model_validate_json(path.read_text()).selected_files
+        for one in MASWWindow.model_validate_json(path.read_text(encoding="utf-8")).selected_files
         if one.name not in manifest.exclusions.records
     ]
     return records_in_common(manifest, log, names)
@@ -653,7 +653,7 @@ def records_band(
     path = window / "window.json"
     if manifest is None or not path.exists():
         return None
-    selected = MASWWindow.model_validate_json(path.read_text()).selected_files
+    selected = MASWWindow.model_validate_json(path.read_text(encoding="utf-8")).selected_files
     folders = {record.name: record.folder for record in manifest.records}
     bands = [
         band
@@ -767,7 +767,9 @@ def measure_windows(run_folder: Path) -> None:
             metrics=tuple(Metric(**one.model_dump()) for one in report.measures),
             band_hz=None if band is None else (round(band[0], 2), round(band[1], 2)),
         )
-        (path.parent / MEASURES_FILE).write_text(measures.model_dump_json(indent=2))
+        (path.parent / MEASURES_FILE).write_text(
+            measures.model_dump_json(indent=2), encoding="utf-8"
+        )
 
 
 def _correlations_before_muting(
@@ -778,7 +780,7 @@ def _correlations_before_muting(
     preset = manifest.preset
     if str(preset.mode) != "passive-active":
         return None
-    window = MASWWindow.model_validate_json((folder / "window.json").read_text())
+    window = MASWWindow.model_validate_json((folder / "window.json").read_text(encoding="utf-8"))
     streams: dict[str, Stream] = {}
     for path in window.selected_files:
         found = record(path.name)

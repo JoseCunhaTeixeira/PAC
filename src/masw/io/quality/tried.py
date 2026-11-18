@@ -433,7 +433,11 @@ def _shown(value: object) -> str:
 
 def length_choice(run_folder: Path) -> LengthChoice | None:
     path = run_folder / COHERENCE_FILE
-    return LengthChoice.model_validate_json(path.read_text()) if path.exists() else None
+    return (
+        LengthChoice.model_validate_json(path.read_text(encoding="utf-8"))
+        if path.exists()
+        else None
+    )
 
 
 class _MuteFile(BaseModel):
@@ -466,7 +470,7 @@ def mutes_tried(run_folder: Path) -> tuple[MuteTried, ...]:
     path = run_folder / MUTE_FILE
     if not path.exists():
         return ()
-    found = _MuteFile.model_validate_json(path.read_text())
+    found = _MuteFile.model_validate_json(path.read_text(encoding="utf-8"))
     return tuple(
         one.model_copy(update={"kept": one.candidate == found.chosen}) for one in found.trials
     )
@@ -478,7 +482,9 @@ def mute_trigger(run_folder: Path) -> str | None:
     path = run_folder / MUTE_FILE
     if not path.exists():
         return None
-    said = trigger_delay(_MuteFile.model_validate_json(path.read_text()).trigger or {})
+    said = trigger_delay(
+        _MuteFile.model_validate_json(path.read_text(encoding="utf-8")).trigger or {}
+    )
     return said[0] if said else None
 
 
@@ -487,7 +493,7 @@ def segments_tried(run_folder: Path) -> tuple[SegmentsTried, ...]:
     path = run_folder / SEGMENTS_FILE
     if not path.exists():
         return ()
-    found = _SegmentsFile.model_validate_json(path.read_text())
+    found = _SegmentsFile.model_validate_json(path.read_text(encoding="utf-8"))
     own, chosen = found.baseline, found.chosen
     tried = ([own] if own is not None else []) + [one for one in found.candidates if one != own]
     return tuple(
@@ -501,7 +507,11 @@ def segments_tried(run_folder: Path) -> tuple[SegmentsTried, ...]:
 def segment_windows(run_folder: Path) -> int:
     """How many sample windows a passive run's segments trial tried each option on."""
     path = run_folder / SEGMENTS_FILE
-    return len(_SegmentsFile.model_validate_json(path.read_text()).windows) if path.exists() else 0
+    return (
+        len(_SegmentsFile.model_validate_json(path.read_text(encoding="utf-8")).windows)
+        if path.exists()
+        else 0
+    )
 
 
 def line_tried(run_folder: Path) -> tuple[LineTried, ...]:
@@ -509,7 +519,7 @@ def line_tried(run_folder: Path) -> tuple[LineTried, ...]:
     path = run_folder / LINE_LOOP_FILE
     if not path.exists():
         return ()
-    trials = _LineLoopFile.model_validate_json(path.read_text()).trials
+    trials = _LineLoopFile.model_validate_json(path.read_text(encoding="utf-8")).trials
     return tuple(
         one if one.change else one.model_copy(update={"change": _change_of(one.note)})
         for one in trials

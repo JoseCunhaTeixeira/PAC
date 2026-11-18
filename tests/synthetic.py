@@ -51,12 +51,12 @@ def write_profiles(root: Path) -> None:
     shots.mkdir()
     for name, x in SOURCES.items():
         _write(shots / name, _shot(x, rng))
-    (shots / "receiver_positions.yaml").write_text(yaml.safe_dump(receivers))
+    (shots / "receiver_positions.yaml").write_text(yaml.safe_dump(receivers), encoding="utf-8")
     (shots / "source_positions.yaml").write_text(
-        yaml.safe_dump({name: {"x": x, "z": 0.0} for name, x in SOURCES.items()})
+        yaml.safe_dump({name: {"x": x, "z": 0.0} for name, x in SOURCES.items()}), encoding="utf-8"
     )
 
     noise = root / "noise"
     noise.mkdir()
     _write(noise / "1.mseed", rng.standard_normal((N_RECEIVERS, int(4 * SAMPLING))))
-    (noise / "receiver_positions.yaml").write_text(yaml.safe_dump(receivers))
+    (noise / "receiver_positions.yaml").write_text(yaml.safe_dump(receivers), encoding="utf-8")

@@ -99,7 +99,9 @@ def measure_position(
         max_uncertainty=thresholds.useful_uncertainty,
         output_folder=output_folder,
     )
-    ((output_folder or window) / MEASURES_FILE).write_text(measures.model_dump_json(indent=2))
+    ((output_folder or window) / MEASURES_FILE).write_text(
+        measures.model_dump_json(indent=2), encoding="utf-8"
+    )
 
 
 def save_velocity_section_plot(folder: str, model: ModelName = DEFAULT_MODEL) -> Path:

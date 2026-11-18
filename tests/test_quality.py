@@ -258,14 +258,14 @@ def test_a_window_says_why_it_leaves_shots_out(run: str) -> None:
     folder = f"{run}-reach"
     target = OUTPUT_DIR / folder
     shutil.copytree(OUTPUT_DIR / run, target)
-    manifest = json.loads((target / "run.json").read_text())
+    manifest = json.loads((target / "run.json").read_text(encoding="utf-8"))
     manifest["preset"]["masw"]["distance_max"] = 10.0
     manifest["exclusions"] = {"records": ["1.mseed"], "traces": {}}
-    (target / "run.json").write_text(json.dumps(manifest))
-    window = json.loads((target / "xmid_2.50" / "window.json").read_text())
+    (target / "run.json").write_text(json.dumps(manifest), encoding="utf-8")
+    window = json.loads((target / "xmid_2.50" / "window.json").read_text(encoding="utf-8"))
     for key in ("selected_files", "acquisitions"):
         window[key] = []
-    (target / "xmid_2.50" / "window.json").write_text(json.dumps(window))
+    (target / "xmid_2.50" / "window.json").write_text(json.dumps(window), encoding="utf-8")
 
     sources = client.get(f"/quality/sources/{folder}/2.5").json()
 
@@ -415,7 +415,7 @@ def test_pac_measures_a_record_as_the_assistants_g1_does(run: str) -> None:
     # value, each saying what it covers, within the line's reach as G1's (line_reach); G1
     # alone judges.
     folder = OUTPUT_DIR / run / "records" / "1"
-    saved = json.loads((folder / "SignalMeasures_0000.json").read_text())["metrics"]
+    saved = json.loads((folder / "SignalMeasures_0000.json").read_text(encoding="utf-8"))["metrics"]
     streams = [
         load_stream([path])[0]
         for path in sorted((OUTPUT_DIR / run).glob("records/*/Stream_0000.hdf5"))
@@ -424,7 +424,9 @@ def test_pac_measures_a_record_as_the_assistants_g1_does(run: str) -> None:
     reach = line_reach(
         ((one, 0.0) for one in streams), SignalLimits(), max(positions) - min(positions)
     )
-    dispersion = json.loads((OUTPUT_DIR / run / "run.json").read_text())["preset"]["dispersion"]
+    dispersion = json.loads((OUTPUT_DIR / run / "run.json").read_text(encoding="utf-8"))["preset"][
+        "dispersion"
+    ]
     g1 = judge_signal(
         "1.mseed",
         load_stream([folder / "Stream_0000.hdf5"])[0],
@@ -547,7 +549,7 @@ def test_a_pac_run_shows_its_images_and_picks(run: str) -> None:
 def test_a_pac_inversion_saves_its_measures_as_the_assistant_does(run: str) -> None:
     # The job saved them where the assistant saves its own; Visualization only reads them.
     path = OUTPUT_DIR / run / "xmid_2.50" / "SeismicInversion_Measures_0000.json"
-    measures = InversionMeasures.model_validate_json(path.read_text())
+    measures = InversionMeasures.model_validate_json(path.read_text(encoding="utf-8"))
     assert measures.samples_per_chain > 0 and measures.useful_reference == USEFUL_REFERENCE
     saved = path.stat().st_mtime_ns
 
@@ -571,7 +573,7 @@ def test_a_pac_inversion_saves_its_measures_as_the_assistant_does(run: str) -> N
 def test_an_inversion_newer_than_its_measures_shows_none_of_them(run: str) -> None:
     window = OUTPUT_DIR / run / "xmid_5.50"
     path = window / "SeismicInversion_Measures_0000.json"
-    saved = path.read_text()
+    saved = path.read_text(encoding="utf-8")
     samples = window / "SeismicInversion_Samples_0000.npz"
     older = samples.stat().st_mtime_ns - 10**9
     os.utime(path, ns=(older, older))
@@ -587,20 +589,25 @@ def test_an_inversion_newer_than_its_measures_shows_none_of_them(run: str) -> No
     assert card["inverted"] is False and _texts(card) == [
         "Inverted before its measures were saved with it: invert it again to see them."
     ]
-    assert path.read_text() == saved and path.stat().st_mtime_ns == older  # never measured here
-    path.write_text(saved)
+    assert (
+        path.read_text(encoding="utf-8") == saved and path.stat().st_mtime_ns == older
+    )  # never measured here
+    path.write_text(saved, encoding="utf-8")
 
 
 def test_what_an_older_inversion_lacks_is_neither_shown_nor_made(run: str) -> None:
     window = OUTPUT_DIR / run / "xmid_5.50"
     path = window / "SeismicInversion_Measures_0000.json"
-    saved, band = path.read_text(), (window / VS_SPREAD_FILE).read_text()
+    saved, band = (
+        path.read_text(encoding="utf-8"),
+        (window / VS_SPREAD_FILE).read_text(encoding="utf-8"),
+    )
     # As an older inversion saved its measures: the depth read against a prior, neither the
     # interfaces nor the band of the models' Vs.
     older = json.dumps(
         json.loads(saved) | {"useful_reference": "curve", "useful_depth_m": 0.123, "interfaces": []}
     )
-    path.write_text(older)
+    path.write_text(older, encoding="utf-8")
     (window / VS_SPREAD_FILE).unlink()
 
     card = client.get(f"/quality/inversion/card/{run}/5.5").json()
@@ -613,9 +620,9 @@ def test_what_an_older_inversion_lacks_is_neither_shown_nor_made(run: str) -> No
     assert not any(text.startswith("The data inform") for text in _texts(card))
     column = next(one for one in section["windows"] if one["x"] == 5.5)
     assert column["informed"] is None
-    assert not (window / VS_SPREAD_FILE).exists() and path.read_text() == older
-    path.write_text(saved)
-    (window / VS_SPREAD_FILE).write_text(band)
+    assert not (window / VS_SPREAD_FILE).exists() and path.read_text(encoding="utf-8") == older
+    path.write_text(saved, encoding="utf-8")
+    (window / VS_SPREAD_FILE).write_text(band, encoding="utf-8")
 
 
 def test_the_figures_a_run_saved_are_listed_and_served_as_they_are(run: str) -> None:
@@ -642,7 +649,7 @@ def test_the_figures_a_run_saved_are_listed_and_served_as_they_are(run: str) -> 
 
 
 def test_a_windows_and_a_records_figures_are_listed_and_served(run: str) -> None:
-    manifest = json.loads((OUTPUT_DIR / run / "run.json").read_text())
+    manifest = json.loads((OUTPUT_DIR / run / "run.json").read_text(encoding="utf-8"))
     record = manifest["records"][0]["name"]
 
     # A record's preprocessed traces and its spectrum; a window's processing figures, not its
@@ -663,7 +670,7 @@ def test_a_windows_and_a_records_figures_are_listed_and_served(run: str) -> None
 
 
 def test_every_card_says_what_was_done_and_why(run: str) -> None:
-    manifest = json.loads((OUTPUT_DIR / run / "run.json").read_text())
+    manifest = json.loads((OUTPUT_DIR / run / "run.json").read_text(encoding="utf-8"))
     record = manifest["records"][0]["name"]
 
     cards = {
@@ -1051,10 +1058,10 @@ def judged(run: str) -> str:
     g8 = _result("G8", "xmid_2.50", "pass", [_metric("water_table_jump", 0.5, 1.0, "max")], [])
     # The window inverted as the log says: its parameters saved as the workflow's last.
     saved_path = target / "xmid_2.50" / "SeismicInversion_Parameters_0000.json"
-    saved = json.loads(saved_path.read_text())
+    saved = json.loads(saved_path.read_text(encoding="utf-8"))
     first = saved["parameters"]
     longer = {**first, "n_iterations": 2000, "n_burnin_iterations": 200}
-    saved_path.write_text(json.dumps({**saved, "parameters": longer}))
+    saved_path.write_text(json.dumps({**saved, "parameters": longer}), encoding="utf-8")
     lines = [
         _attempt("1.mseed", "preprocessing", 1, "initial", {}, at=now),
         _attempt("1.mseed", "preprocessing", 1, "initial", {"G1": g1_retry}, at=now),
@@ -1104,8 +1111,12 @@ def judged(run: str) -> str:
         ),
     ]
     # The last line cut short, as PACo may be writing it.
-    (target / "qc_log.jsonl").write_text("\n".join(lines) + '\n{"unit": "xmid_5.50", "sta')
-    (target / "qc_config.json").write_text(json.dumps({"model": {"max_rhat": 1.2, "min_ess": 300}}))
+    (target / "qc_log.jsonl").write_text(
+        "\n".join(lines) + '\n{"unit": "xmid_5.50", "sta', encoding="utf-8"
+    )
+    (target / "qc_config.json").write_text(
+        json.dumps({"model": {"max_rhat": 1.2, "min_ess": 300}}), encoding="utf-8"
+    )
     trial = {
         "length": 6,
         "metres": 5.0,
@@ -1118,7 +1129,7 @@ def judged(run: str) -> str:
         "compared": False,
     }
     choice = {"length": 6, "trials": [trial], "notes": [], "receivers": 12, "spacing_m": 1.0}
-    (target / "coherence.json").write_text(json.dumps({**choice, "longest": 6}))
+    (target / "coherence.json").write_text(json.dumps({**choice, "longest": 6}), encoding="utf-8")
     return folder
 
 
@@ -1166,7 +1177,7 @@ def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
             },
         ],
     }
-    (target / "mute.json").write_text(json.dumps(mutes))
+    (target / "mute.json").write_text(json.dumps(mutes), encoding="utf-8")
     tried = {
         "stage": "preprocessing",
         "overrides": {"muting": standard},
@@ -1186,7 +1197,7 @@ def test_an_assistant_run_card_lists_what_its_line_tried(judged: str) -> None:
         "note": "Tried for the line, not kept: trigger t0 0.003 s, asked by 90 windows "
         "(G1:shifted_trigger): 2 of 2 trial windows passing G3 against 2, under 2 more.",
     }
-    (target / "line_loop.json").write_text(json.dumps({"trials": [tried, older]}))
+    (target / "line_loop.json").write_text(json.dumps({"trials": [tried, older]}), encoding="utf-8")
     try:
         card = client.get(f"/quality/run/{judged}").json()
     finally:
@@ -1340,7 +1351,7 @@ def test_a_line_loop_that_kept_no_change_says_so(tmp_path: Path) -> None:
         "after": 9,
         "kept": False,
     }
-    (tmp_path / "line_loop.json").write_text(json.dumps({"trials": [tried]}))
+    (tmp_path / "line_loop.json").write_text(json.dumps({"trials": [tried]}), encoding="utf-8")
 
     (step,) = _line_tries(tmp_path, 1.5)
     assert step.lines == ("1 change tried", "None kept")
@@ -1447,7 +1458,7 @@ def test_a_window_the_agent_picked_again_says_each_pick(judged: str) -> None:
         {"threshold": 0.35, "wavelength_step": 0.6},
         at=later,
     )
-    with (OUTPUT_DIR / folder / "qc_log.jsonl").open("a") as log:
+    with (OUTPUT_DIR / folder / "qc_log.jsonl").open("a", encoding="utf-8") as log:
         log.write(f"{json.dumps(reset)}\n{again}\n")
 
     card = client.get(f"/quality/dispersion/card/{folder}/2.5").json()
@@ -1484,7 +1495,7 @@ def test_a_pick_changed_by_hand_leaves_the_assistants_curve_checks_behind(
     shutil.copytree(OUTPUT_DIR / judged, OUTPUT_DIR / folder)
     later = datetime.now(UTC).replace(year=datetime.now(UTC).year + 1)
     edits = OUTPUT_DIR / folder / "xmid_2.50" / "picks_edited.json"
-    edits.write_text(json.dumps({"edited_at": later.isoformat()}))
+    edits.write_text(json.dumps({"edited_at": later.isoformat()}), encoding="utf-8")
 
     card = client.get(f"/quality/dispersion/card/{folder}/2.5").json()
 
@@ -1544,7 +1555,11 @@ def test_a_mode_picked_in_pac_keeps_the_assistants_history_of_the_window(judged:
     assert m1 == ("M1 picked", "you", "box", [])
     assert m0 == ("M0 picked", "you", "auto", [])
     assert measured[1:3] == ("checks", "measured")
-    picking = [line for line in log.read_text().splitlines() if '"stage": "picking"' in line]
+    picking = [
+        line
+        for line in log.read_text(encoding="utf-8").splitlines()
+        if '"stage": "picking"' in line
+    ]
     assert any('"unit": "xmid_2.50"' in line for line in picking)
 
 
@@ -1691,7 +1706,7 @@ def test_a_change_in_pac_replaces_what_was_done_before_and_keeps_it(run: str) ->
     folder = f"{run}-changed"
     shutil.copytree(OUTPUT_DIR / run, OUTPUT_DIR / folder)
     window = OUTPUT_DIR / folder / "xmid_2.50"
-    before = (window / "DispersionCurves_0000.csv").read_text()
+    before = (window / "DispersionCurves_0000.csv").read_text(encoding="utf-8")
 
     picked = client.post(f"/dispersion_images/{folder}/2.5/pick/auto")
     assert picked.status_code == 200
@@ -1710,10 +1725,12 @@ def test_a_change_in_pac_replaces_what_was_done_before_and_keeps_it(run: str) ->
     # Nothing lost: the curves it replaced, kept where its record says.
     (change,) = [
         json.loads(line)
-        for line in (window / "history.jsonl").read_text().splitlines()
+        for line in (window / "history.jsonl").read_text(encoding="utf-8").splitlines()
         if json.loads(line)["how"] == "auto"
     ]
-    assert (window / change["aside"] / "DispersionCurves_0000.csv").read_text() == before
+    assert (window / change["aside"] / "DispersionCurves_0000.csv").read_text(
+        encoding="utf-8"
+    ) == before
     assert change["later"] == ["inversion", "petro_inversion"]
 
 
@@ -1788,7 +1805,7 @@ def test_a_receiver_the_line_left_out_is_the_windows_and_near_shots_the_near_fie
         "receiver, half the longest wavelength its trial curves reached (6 m), where it has a "
         "farther one."
     )
-    lines = (target / "qc_log.jsonl").read_text().splitlines()[:-1]
+    lines = (target / "qc_log.jsonl").read_text(encoding="utf-8").splitlines()[:-1]
     lines += [
         _attempt("line", "preprocessing", 1, "initial", {"G1": line}, at=now),
         _attempt(
@@ -1802,18 +1819,18 @@ def test_a_receiver_the_line_left_out_is_the_windows_and_near_shots_the_near_fie
             at=now,
         ),
     ]
-    (target / "qc_log.jsonl").write_text("\n".join(lines) + "\n")
-    manifest = json.loads((target / "run.json").read_text())
+    (target / "qc_log.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    manifest = json.loads((target / "run.json").read_text(encoding="utf-8"))
     manifest["exclusions"] = {"records": [], "traces": {"1.mseed": [3], "2.mseed": [3]}}
-    (target / "run.json").write_text(json.dumps(manifest))
+    (target / "run.json").write_text(json.dumps(manifest), encoding="utf-8")
     # Window 2.5 (0 to 5 m): the shot at -2 m, 2 m from its first receiver, in its near field;
     # the one at 13 m, 8 m from its last, stacked without the receiver the line left out.
-    window = json.loads((target / "xmid_2.50" / "window.json").read_text())
+    window = json.loads((target / "xmid_2.50" / "window.json").read_text(encoding="utf-8"))
     keep = [i for i, path in enumerate(window["selected_files"]) if path.endswith("2.mseed")]
     window["selected_files"] = [window["selected_files"][i] for i in keep]
     window["acquisitions"] = [window["acquisitions"][i] for i in keep]
     window["record_receivers"] = [[0, 1, 2, 4, 5]] * len(keep)
-    (target / "xmid_2.50" / "window.json").write_text(json.dumps(window))
+    (target / "xmid_2.50" / "window.json").write_text(json.dumps(window), encoding="utf-8")
 
     sources = client.get(f"/quality/sources/{folder}/2.5").json()
 
@@ -2116,7 +2133,7 @@ def test_a_records_muting_the_mute_trial_chose_comes_from_the_data(run: str) -> 
 
 def _lines(path: Path, records: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(json.dumps(one) + "\n" for one in records))
+    path.write_text("".join(json.dumps(one) + "\n" for one in records), encoding="utf-8")
 
 
 def _study(profile: Path, run_id: str) -> Path:
@@ -2126,7 +2143,9 @@ def _study(profile: Path, run_id: str) -> Path:
     study = profile / "studies" / "20261021-145900-0000"
     study.mkdir(parents=True)
     commit = {"number": 1, "run_id": run_id}
-    (study / "line.json").write_text(json.dumps({"run_id": run_id, "commits": [commit]}))
+    (study / "line.json").write_text(
+        json.dumps({"run_id": run_id, "commits": [commit]}), encoding="utf-8"
+    )
     variants: list[dict[str, Any]] = [
         {"label": "current", "changes": {}, "passing": 5, "windows": 12, "depth_m": 12.0},
         {
@@ -2196,9 +2215,9 @@ def _study(profile: Path, run_id: str) -> Path:
     axes = {"masw length": ["6", "8"], "masw distance_max": ["0.5", "1"]}
     search = {"made_at": "2026-10-21T15:00:00+00:00", "rows": rows, "dropped": 1, "axes": axes}
     (study / "searches").mkdir()
-    (study / "searches" / "S1.json").write_text(json.dumps(search))
+    (study / "searches" / "S1.json").write_text(json.dumps(search), encoding="utf-8")
     knockout = {"round": 2, "sheets": [], "finalists": ["g1", "g2"], "experiment": "E1"}
-    (study / "searches" / "S1_knockout.json").write_text(json.dumps(knockout))
+    (study / "searches" / "S1_knockout.json").write_text(json.dumps(knockout), encoding="utf-8")
     _lines(
         study / "searches" / "S1_judged.jsonl",
         [
@@ -2229,9 +2248,9 @@ def test_a_search_shows_its_finalists_the_one_it_chose_first(tmp_path: Path) -> 
         "axes": {"length": ["7", "9", "11", "13"]},
         "places": [10.0 * n for n in range(1, 13)],
     }
-    (study / "searches" / "S1.json").write_text(json.dumps(search))
+    (study / "searches" / "S1.json").write_text(json.dumps(search), encoding="utf-8")
     knockout = {"round": 3, "sheets": [], "finalists": ["g2", "g3", "g4"], "best": "g3"}
-    (study / "searches" / "S1_knockout.json").write_text(json.dumps(knockout))
+    (study / "searches" / "S1_knockout.json").write_text(json.dumps(knockout), encoding="utf-8")
     (study / "searches" / "S1_images" / "g3.npz").write_bytes(b"")
     commit = JournalEntry(
         id="L1",
@@ -2269,7 +2288,9 @@ def test_a_search_shows_its_finalists_the_one_it_chose_first(tmp_path: Path) -> 
 def test_a_study_is_read_for_the_runs_its_line_was(tmp_path: Path) -> None:
     profile = tmp_path / "shots"
     study = _study(profile, "20261021-151000-abcd")
-    (study / "journal.jsonl").write_text((study / "journal.jsonl").read_text() + "not json\n")
+    (study / "journal.jsonl").write_text(
+        (study / "journal.jsonl").read_text(encoding="utf-8") + "not json\n", encoding="utf-8"
+    )
 
     # A run of its line: the study, its journal (a line unread left out) and its search, the
     # sheets judged since it was made alone.
@@ -2296,11 +2317,13 @@ def test_an_autonomous_run_card_says_what_the_agent_chose_tried_and_did(judged: 
         "masw length: the most windows passing in E1 (L1, E1)",
         f"dispersion fmax: {USER_REASON} (L1)",
     )
-    lines = (target / "qc_log.jsonl").read_text().splitlines()[:-1]  # its last line cut short
+    lines = (
+        (target / "qc_log.jsonl").read_text(encoding="utf-8").splitlines()[:-1]
+    )  # its last line cut short
     committed = {"masw": {"length": 6}, "dispersion": {"fmax": 60}}
     now = datetime.now(UTC).isoformat()
     lines.append(_attempt("line", "phase_shift", 1, "initial", {}, committed, notes, at=now))
-    (target / "qc_log.jsonl").write_text("\n".join(lines) + "\n")
+    (target / "qc_log.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
     try:
         card = client.get(f"/quality/run/{folder}").json()
         dispersion = client.get(f"/quality/dispersion/card/{folder}/2.5").json()

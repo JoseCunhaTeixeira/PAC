@@ -53,6 +53,10 @@ where = ["src"]
 [tool.pyright]
 pythonVersion = "3.14"
 typeCheckingMode = "strict"
+# The project's environment, as uv makes it: found by its folder, without running its interpreter
+# (which pyright cannot do on some Windows machines).
+venvPath = "."
+venv = ".venv"
 
 include = ["src"]
 

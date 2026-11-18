@@ -67,7 +67,7 @@ def _windows(study: Path, trial: str) -> tuple[float, ...]:
     """The windows the study's experiments tried `trial` on; none when none did."""
     for path in sorted((study / EXPERIMENTS).glob("E*.json")):
         try:
-            found = ExperimentDone.model_validate_json(path.read_text())
+            found = ExperimentDone.model_validate_json(path.read_text(encoding="utf-8"))
         except ValueError:
             continue
         for one in found.tried:

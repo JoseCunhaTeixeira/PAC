@@ -9,6 +9,6 @@ APP = Path(__file__).parents[1] / "frontend" / "src" / "App.tsx"
 
 
 def test_every_page_the_assistant_names_is_in_pacs_menu() -> None:
-    labels = set(re.findall(r'\blabel: "([^"]+)"', APP.read_text()))
+    labels = set(re.findall(r'\blabel: "([^"]+)"', APP.read_text(encoding="utf-8")))
 
     assert set(prompts.PAC_PAGES) <= labels, set(prompts.PAC_PAGES) - labels

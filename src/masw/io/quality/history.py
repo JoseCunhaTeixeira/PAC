@@ -547,7 +547,7 @@ def _study_picks(run_folder: Path) -> list[Mapping[str, Any]]:
     if path is None or not path.exists():
         return []
     found: list[Mapping[str, Any]] = []
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         try:
             one = json.loads(line)
         except json.JSONDecodeError:
@@ -675,7 +675,7 @@ def _marked_picks(window: Path) -> list[_Run]:
     made: list[_Run] = []
     path = window / EDITS_FILE
     if path.exists():
-        data = cast(dict[str, Any], json.loads(path.read_text()))
+        data = cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
         modes, edited = data.get("modes"), data.get("edited_at")
         times = (
             cast(dict[str, str], modes)
@@ -687,7 +687,7 @@ def _marked_picks(window: Path) -> list[_Run]:
             made.append(_Run(key, "you", _parsed(when), 10**9, way="hand"))
     path = window / AUTO_FILE
     if path.exists():
-        when = _parsed(json.loads(path.read_text()).get("picked_at"))
+        when = _parsed(json.loads(path.read_text(encoding="utf-8")).get("picked_at"))
         made.append(_Run("picking:M0", "you", when, 10**9, way="auto"))
     return made
 

@@ -139,7 +139,9 @@ def measure_records(run_folder: Path) -> None:
             image_band=image_band(manifest.preset),
         )
         measures = SignalMeasures(metrics=metrics, band_hz=band)
-        (path.parent / MEASURES_FILE).write_text(measures.model_dump_json(indent=2))
+        (path.parent / MEASURES_FILE).write_text(
+            measures.model_dump_json(indent=2), encoding="utf-8"
+        )
         try:
             save_record_spectra(stream, path.parent, band)
         except Exception:  # a figure must not lose the measures
@@ -577,7 +579,7 @@ def saved_measures(path: Path) -> tuple[tuple[Metric, ...], tuple[float, float] 
     saved = path.parent / MEASURES_FILE
     if not path.exists() or not saved.exists() or saved.stat().st_mtime < path.stat().st_mtime:
         return (), None
-    measures = SignalMeasures.model_validate_json(saved.read_text())
+    measures = SignalMeasures.model_validate_json(saved.read_text(encoding="utf-8"))
     return measures.metrics, measures.band_hz
 
 

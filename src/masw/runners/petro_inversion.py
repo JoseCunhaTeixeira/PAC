@@ -52,7 +52,9 @@ def _run_petro_inversion(
 
     out_dir = output_folder(config.folder)
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "petro_inversion_config.json").write_text(config.model_dump_json(indent=2))
+    (out_dir / "petro_inversion_config.json").write_text(
+        config.model_dump_json(indent=2), encoding="utf-8"
+    )
 
     xmids = {xmid_folder(config.folder, xmid).name: xmid for xmid in config.positions}
     errors: dict[str, WindowError] = {}
@@ -109,7 +111,7 @@ def _measure(window: Path, model_name: str) -> None:
     except ValueError:
         logger.warning("The soil column of %s was not measured", window.name, exc_info=True)
         return
-    (window / MEASURES_FILE).write_text(measures.model_dump_json(indent=2))
+    (window / MEASURES_FILE).write_text(measures.model_dump_json(indent=2), encoding="utf-8")
 
 
 def _write_outcome(
@@ -130,4 +132,6 @@ def _write_outcome(
         }
         for outcome in sorted(outcomes, key=lambda one: xmids[one.unit])
     ]
-    (out_dir / "petro_inversion_outcome.json").write_text(json.dumps(results, indent=2))
+    (out_dir / "petro_inversion_outcome.json").write_text(
+        json.dumps(results, indent=2), encoding="utf-8"
+    )

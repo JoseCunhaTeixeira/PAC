@@ -282,7 +282,7 @@ def _runs(run_folder: Path) -> tuple[list[Attempt], list[Attempt | Reset]]:
     in the order logged."""
     runs: dict[tuple[str, str, int, datetime], Attempt] = {}
     order: list[tuple[str, str, int, datetime] | Reset] = []
-    for line in (run_folder / LOG_FILE).read_text().splitlines():
+    for line in (run_folder / LOG_FILE).read_text(encoding="utf-8").splitlines():
         try:
             entry = json.loads(line)
         except json.JSONDecodeError:
@@ -344,7 +344,7 @@ def config_section(run_folder: Path, name: str) -> dict[str, Any]:
     path = run_folder / CONFIG_FILE
     if not path.exists():
         return {}
-    config: object = json.loads(path.read_text())
+    config: object = json.loads(path.read_text(encoding="utf-8"))
     section = cast(dict[str, object], config).get(name) if isinstance(config, dict) else None
     return cast(dict[str, Any], section) if isinstance(section, dict) else {}
 

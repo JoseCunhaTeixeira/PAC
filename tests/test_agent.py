@@ -239,7 +239,7 @@ def test_pac_starting_removes_what_no_conversation_goes_on_with() -> None:
     study = profile / "studies" / "20261021-150000-abcd"
     (study / TRIALS / "t1").mkdir(parents=True)
     (study / TRIALS / "t1" / "window.npz").write_bytes(b"x" * 100)
-    (study / "journal.jsonl").write_text("{}\n")
+    (study / "journal.jsonl").write_text("{}\n", encoding="utf-8")
     cached = OUTPUT_DIR / ".cache" / "ef" / "ef56"
     cached.mkdir(parents=True, exist_ok=True)
     (cached / "image.h5").write_bytes(b"x" * 100)
@@ -445,7 +445,7 @@ def test_the_conversations_are_listed_the_latest_first() -> None:
 def test_an_answer_says_the_runs_it_worked_on_and_what_it_did() -> None:
     run = OUTPUT_DIR / "shots" / "20260930-120000-abcd"
     run.mkdir(parents=True, exist_ok=True)
-    (run / "run.json").write_text("{}")
+    (run / "run.json").write_text("{}", encoding="utf-8")
     calls = [
         ("inspect", '{"what": "runs"}', "Run 20260930-120000-abcd: shots"),
         ("run_processing", '{"profile": "shots"}', '{"run_id": "20260930-120000-abcd"}'),
@@ -497,7 +497,7 @@ def test_an_answer_that_asks_to_choose_is_said_to_the_menu() -> None:
 def test_the_autonomous_answer_says_the_runs_it_worked_on() -> None:
     run = OUTPUT_DIR / "shots" / "20261018-120000-abcd"
     run.mkdir(parents=True, exist_ok=True)
-    (run / "run.json").write_text("{}")
+    (run / "run.json").write_text("{}", encoding="utf-8")
     calls = [
         ("survey", "{}", "active line, 25 shots"),
         ("commit", "{}", "L1 made run 20261018-120000-abcd. 7 windows picked."),
@@ -609,7 +609,7 @@ def test_the_settings_are_saved_applied_and_the_key_never_shown(
     assert "vision" not in body
     # Kept for the next start, readable by its owner alone; in force now.
     assert fresh_settings.stat().st_mode & 0o777 == 0o600
-    assert "PACO_LLM_API_KEY=sk-ant-secret" in fresh_settings.read_text()
+    assert "PACO_LLM_API_KEY=sk-ant-secret" in fresh_settings.read_text(encoding="utf-8")
     import os
 
     assert (os.environ["PACO_AGENT_MODE"], os.environ["PACO_LLM_PROVIDER"]) == (
@@ -761,7 +761,9 @@ def test_the_popups_settings_win_over_a_dotenv(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # PAC run from a folder whose .env sets a small model's context.
-    (tmp_path / ".env").write_text("PACO_LLM_MODEL=Qwen/Qwen3-14B-FP8\nPACO_LLM_CONTEXT=16384\n")
+    (tmp_path / ".env").write_text(
+        "PACO_LLM_MODEL=Qwen/Qwen3-14B-FP8\nPACO_LLM_CONTEXT=16384\n", encoding="utf-8"
+    )
     monkeypatch.chdir(tmp_path)
     from paco.agent.settings import AgentSettings
 
@@ -801,6 +803,6 @@ def test_the_workers_set_in_dotenv_are_kept(
     assert os.environ["PACO_WORKERS"] == str(max(1, (os.cpu_count() or 2) // 2))
     # Set in .env: left to PACo, which reads it there.
     monkeypatch.delenv("PACO_WORKERS")
-    (tmp_path / ".env").write_text("PACO_WORKERS=3\n")
+    (tmp_path / ".env").write_text("PACO_WORKERS=3\n", encoding="utf-8")
     agent._use_pacs_folders()  # pyright: ignore[reportPrivateUsage]
     assert "PACO_WORKERS" not in os.environ

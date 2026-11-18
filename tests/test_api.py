@@ -306,8 +306,10 @@ def test_a_window_done_again_by_hand_keeps_nothing_older(run: str) -> None:
     window = run_folder / "xmid_2.50"
     archive = window / "attempts" / "1_inversion"
     archive.mkdir(parents=True)
-    (archive / "SeismicInversion_Samples_0000.npz").write_text("its first models")
-    (window / "SeismicInversion_Model_0000_old.csv").write_text("an older run's model")
+    (archive / "SeismicInversion_Samples_0000.npz").write_text("its first models", encoding="utf-8")
+    (window / "SeismicInversion_Model_0000_old.csv").write_text(
+        "an older run's model", encoding="utf-8"
+    )
     line = {"parameters": {}, "started_at": "2026-09-26T18:40:12Z", "status": "succeeded"}
     lines = [
         {"unit": "xmid_2.50", "stage": "inversion", "attempt": 1, "triggered_by": "initial"},
@@ -315,7 +317,7 @@ def test_a_window_done_again_by_hand_keeps_nothing_older(run: str) -> None:
         {"unit": "xmid_5.50", "stage": "inversion", "attempt": 1, "triggered_by": "initial"},
     ]
     log = run_folder / "qc_log.jsonl"
-    log.write_text("".join(json.dumps(line | one) + "\n" for one in lines))
+    log.write_text("".join(json.dumps(line | one) + "\n" for one in lines), encoding="utf-8")
     config = {
         "folder": run,
         "positions": [2.5],
@@ -339,7 +341,7 @@ def test_a_window_done_again_by_hand_keeps_nothing_older(run: str) -> None:
     ]
     assert (aside / "SeismicInversion_Model_0000_old.csv").exists()
     assert (aside / "attempts" / "1_inversion" / "SeismicInversion_Samples_0000.npz").exists()
-    assert len(log.read_text().splitlines()) == len(lines) + 1
+    assert len(log.read_text(encoding="utf-8").splitlines()) == len(lines) + 1
     card = client.get(f"/quality/inversion/card/{run}/2.5").json()
     assert any(one["text"] == "Inverted by the user." for one in card["sentences"])
     # What was done: the user's inversion now, measured against the agent's limits as no check
@@ -431,7 +433,7 @@ def test_a_stopped_run_keeps_the_windows_that_finished() -> None:
     assert asked["state"] == "stopped" or asked["stopping"]
     assert job["state"] == "stopped" and not job["stopping"]
     folder = output_folder(job["run"])
-    manifest = json.loads((folder / "run.json").read_text())
+    manifest = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     kept = {window["folder"] for window in manifest["windows"]}
     assert manifest["stopped"] and 1 <= len(kept) < job["total"]
     assert {path.name for path in folder.glob("xmid_*")} == kept
@@ -462,7 +464,7 @@ def test_a_stopped_inversion_leaves_its_windows_as_they_were(run: str) -> None:
     assert client.post(f"/dispersion_images/{run}/8.5/pick/box", json=box).status_code == 200
     window = output_folder(run) / "xmid_8.50"
     before = window / "SeismicInversion_Log_0000.log"
-    before.write_text("an earlier inversion\n")
+    before.write_text("an earlier inversion\n", encoding="utf-8")
     files = sorted(path.name for path in window.iterdir())
     config = {
         "folder": run,
@@ -488,6 +490,8 @@ def test_a_stopped_inversion_leaves_its_windows_as_they_were(run: str) -> None:
 
     assert job["state"] == "stopped" and job["elapsed"] < 60
     assert sorted(path.name for path in window.iterdir()) == files  # no staging, nothing new
-    assert before.read_text() == "an earlier inversion\n"
-    outcome = json.loads((output_folder(run) / "seismic_inversion_outcome.json").read_text())
+    assert before.read_text(encoding="utf-8") == "an earlier inversion\n"
+    outcome = json.loads(
+        (output_folder(run) / "seismic_inversion_outcome.json").read_text(encoding="utf-8")
+    )
     assert outcome == []

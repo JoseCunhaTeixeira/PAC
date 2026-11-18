@@ -86,7 +86,9 @@ def _run_inversion(
 
     out_dir = output_folder(config.folder)
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "seismic_inversion_config.json").write_text(config.model_dump_json(indent=2))
+    (out_dir / "seismic_inversion_config.json").write_text(
+        config.model_dump_json(indent=2), encoding="utf-8"
+    )
 
     errors: list[WindowError] = []
     results: list[dict[str, object]] = []
@@ -189,4 +191,6 @@ def _run_inversion(
 def _write_outcome(out_dir: Path, results: list[dict[str, object]]) -> None:
     """The positions that finished, by xmid, with their status and duration."""
     results.sort(key=lambda r: cast(float, r["xmid"]))
-    (out_dir / "seismic_inversion_outcome.json").write_text(json.dumps(results, indent=2))
+    (out_dir / "seismic_inversion_outcome.json").write_text(
+        json.dumps(results, indent=2), encoding="utf-8"
+    )

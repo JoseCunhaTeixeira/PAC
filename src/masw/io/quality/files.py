@@ -30,7 +30,7 @@ def pac_inverted(config: Path, unit: str) -> bool:
     window `unit`."""
     if not config.exists():
         return False
-    positions = json.loads(config.read_text()).get("positions") or ()
+    positions = json.loads(config.read_text(encoding="utf-8")).get("positions") or ()
     return any(abs(float(one) - xmid_of(unit)) < 1e-6 for one in positions)
 
 
@@ -45,7 +45,9 @@ def folder_path(folder: str) -> Path:
 def read_manifest(folder: Path) -> RunManifest | None:
     """The run's manifest; None for a folder of the older layout, which has none."""
     path = folder / MANIFEST_FILE
-    return RunManifest.model_validate_json(path.read_text()) if path.exists() else None
+    return (
+        RunManifest.model_validate_json(path.read_text(encoding="utf-8")) if path.exists() else None
+    )
 
 
 # The farthest distance older runs recorded for none (an older sigpipe's stand-in).
@@ -96,7 +98,9 @@ def read_window(window: Path) -> MASWWindow | None:
     """The records window folder `window` stacks, as the run built it; None without its
     window.json."""
     path = window / WINDOW_FILE
-    return MASWWindow.model_validate_json(path.read_text()) if path.exists() else None
+    return (
+        MASWWindow.model_validate_json(path.read_text(encoding="utf-8")) if path.exists() else None
+    )
 
 
 @dataclass(frozen=True)
@@ -140,7 +144,7 @@ def _line(run_folder: str, stamp: int, manifest_json: str) -> Line:
 
 
 def _receivers(path: Path) -> tuple[float, ...]:
-    raw: object = yaml.safe_load(path.read_text()) if path.exists() else None
+    raw: object = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else None
     if not isinstance(raw, list):
         return ()
     found: list[float] = []
@@ -152,7 +156,7 @@ def _receivers(path: Path) -> tuple[float, ...]:
 
 
 def _sources(path: Path) -> dict[str, float]:
-    raw: object = yaml.safe_load(path.read_text()) if path.exists() else None
+    raw: object = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else None
     if not isinstance(raw, dict):
         return {}
     found: dict[str, float] = {}
