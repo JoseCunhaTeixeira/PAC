@@ -17,7 +17,6 @@ dependencies = [
     "sigpipe[silex,santiludo] @ git+https://github.com/JoseCunhaTeixeira/sigpipe",
     # Named here only to take its CPU build (tool.uv.sources): sigpipe's Silex model runs on it.
     "torch",
-    "disba>=0.7.0",
     # The assistant: PACo, PAC's agent (its workflow or autonomous mode), run in PAC's process.
     # Its model is the user's, set in the assistant's settings: a provider's API, or their server.
     "PACo @ git+https://github.com/JoseCunhaTeixeira/PACo",

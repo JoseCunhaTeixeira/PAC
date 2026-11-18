@@ -50,8 +50,7 @@ const INVERT: Way[] = [
 
 const TOOLS = [
   { name: "PACo", role: "The AI agent and its quality checks", href: "https://github.com/JoseCunhaTeixeira/PACo" },
-  { name: "sigpipe", role: "Processing, dispersion, inversion, Silex", href: "https://github.com/JoseCunhaTeixeira/sigpipe" },
-  { name: "Disba", role: "Forward modelling", href: "https://github.com/keurfonluu/disba" },
+  { name: "sigpipe", role: "Processing, dispersion, forward modelling, inversion, Silex", href: "https://github.com/JoseCunhaTeixeira/sigpipe" },
 ];
 
 function Ways({ title, ways }: { title: string; ways: Way[] }) {

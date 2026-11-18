@@ -11,7 +11,7 @@ PAC runs entirely **on your own computer**. You start it once, then use it throu
 - **Hybrid processing:** supports both passive and active MASW methods without needing source position information. Uses the package [sigpipe](https://github.com/JoseCunhaTeixeira/sigpipe), a signal processing Python pipeline.
 - **Signal processing tools:** uses an automatic source detection algorithm combined with seismic interferometry.
 - **Automated dispersion analysis:** extracts and visualizes dispersion images and curves.
-- **Seismic inversion:** turns dispersion curves into shear-wave velocity profiles by Bayesian inversion (sigpipe). The number of layers is chosen by the data, or set by you; each model's dispersion curve is computed with [Disba](https://github.com/keurfonluu/disba).
+- **Seismic inversion:** turns dispersion curves into shear-wave velocity profiles by Bayesian inversion (sigpipe). The number of layers is chosen by the data, or set by you; each model's dispersion curve is computed by sigpipe's compiled core (surf96, in Rust).
 - **Petrophysical inversion:** computes soil profiles from dispersion data using the AI inversion model from [silex](https://github.com/JoseCunhaTeixeira/silex).
 - **User-friendly interface:** streamlined workflow with visualization capabilities.
 - **Agent:** PACo, an AI agent that processes profiles for you when you ask it in plain words, checking the quality of every step. It uses the language model you choose: a provider's API (Claude, OpenAI, Gemini, Mistral) or your own server. See [The agent](#the-agent).
