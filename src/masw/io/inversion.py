@@ -14,8 +14,7 @@ from masw.io.folders import get_xmid_folders
 from masw.io.paths import output_folder
 from masw.io.quality.inversion import thresholds_of
 from sigpipe.base.dispersion_curve import Mode
-from sigpipe.base.inversion import InversionResult
-from sigpipe.masw.inversion import InversionParameters, invert_window
+from sigpipe.masw.inversion import InversionParameters, WindowSampling, window_sampling
 from sigpipe.masw.inversion.measuring import MEASURES_FILE, measure_inversion
 from sigpipe.masw.inversion.section import (
     DEFAULT_MODEL,
@@ -41,25 +40,14 @@ def _units(folder: str) -> list[str]:
     return [xmid_folder(folder, xmid).name for xmid in get_xmid_folders(folder)]
 
 
-def invert_position(
-    folder: str,
-    xmid: float,
-    labels: Sequence[str],
-    parameters: InversionParameters,
-    output_folder: Path | None = None,
-    chain_jobs: int = 1,
-) -> InversionResult:
-    """Invert the window's curves of `labels`, its chains in `chain_jobs` processes, and write
-    PAC's files beside them, or in `output_folder` (a staging folder: see
-    sigpipe.masw.runs.stopping)."""
+def sample_position(
+    folder: str, xmid: float, labels: Sequence[str], parameters: InversionParameters
+) -> WindowSampling:
+    """The inversion of the window's curves of `labels` before its chains run (sigpipe's
+    window_sampling): the job runs them on its workers, then sigpipe's finish_window writes
+    PAC's files of their outputs."""
     modes = {Mode.from_label(label) for label in labels}
-    return invert_window(
-        xmid_folder(folder, xmid),
-        parameters,
-        modes,
-        chain_jobs=chain_jobs,
-        output_folder=output_folder,
-    )
+    return window_sampling(xmid_folder(folder, xmid), parameters, modes)
 
 
 def list_inversion_status(folder: str) -> list[tuple[float, bool]]:

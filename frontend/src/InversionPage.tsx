@@ -330,10 +330,14 @@ export default function InversionPage() {
     );
   });
   const selectedXmids = eligible.filter((xmid) => selectedPositions[xmid]);
+  // Every window's chains share the workers, each on whichever is free (the layers given run a
+  // window's chains together, as one): no more workers than chains to run.
+  const chainsEach = layering === "free" ? nChains : 1;
   const maxWorkers =
-    selectedXmids.length > 0 ? Math.min(nCpus, selectedXmids.length) : nCpus;
-  // Fewer positions than workers: as many workers, for good (more positions later do not raise
-  // them).
+    selectedXmids.length > 0 && chainsEach > 0
+      ? Math.min(nCpus, selectedXmids.length * chainsEach)
+      : nCpus;
+  // Fewer chains than workers: as many workers, for good (more chains later do not raise them).
   if (nWorkers > maxWorkers) setNWorkers(maxWorkers);
   const cells: RailCell[] = xmids.map((xmid) => {
     const picks = positionPicks.find((one) => one.xmid === xmid);
@@ -683,7 +687,7 @@ export default function InversionPage() {
                   workers={nWorkers}
                   setWorkers={setNWorkers}
                   maxWorkers={maxWorkers}
-                  tip="Windows inverted in parallel"
+                  tip="Chains run in parallel, across the windows"
                 />
               </>
             }

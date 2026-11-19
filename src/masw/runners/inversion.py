@@ -1,6 +1,8 @@
-"""Seismic inversions of a run's positions, as PAC's inversion job does them: each position in a
-worker process, into a staging folder whose files replace the window's only once it succeeded,
-then the line's section and comparison figures. Stoppable: see sigpipe.masw.runs.stopping."""
+"""Seismic inversions of a run's positions, as PAC's inversion job does them: every position's
+chains share the job's workers, each on whichever is free, the costliest first (sigpipe's
+Scheduler); once a position's chains are in, its files and measures are made in a worker too,
+into a staging folder whose files replace the window's only once it succeeded; then the line's
+section and comparison figures. Stoppable: see sigpipe.masw.runs.stopping."""
 
 import json
 import logging
@@ -8,8 +10,9 @@ import threading
 import time
 import traceback
 from collections.abc import Callable, Sequence
-from concurrent.futures import Future, ProcessPoolExecutor
+from concurrent.futures import Future
 from dataclasses import asdict
+from functools import partial
 from pathlib import Path
 from typing import cast
 
@@ -21,9 +24,11 @@ from masw.io.paths import output_folder
 from masw.logging_config import setup_logging
 from masw.models.inversion import InversionRunConfig
 from masw.runners.computing import WindowError
-from sigpipe.masw.inversion import InversionParameters
+from sigpipe.algorithms.inversion.rayleigh.seismic.mcmc import Ran
+from sigpipe.masw.inversion import InversionParameters, WindowSampling, finish_window
 from sigpipe.masw.runs.history import STAGE_FILES
-from sigpipe.masw.runs.stopping import Stopped, commit, finished, staging, undo
+from sigpipe.masw.runs.scheduling import Scheduler, Split
+from sigpipe.masw.runs.stopping import Stopped, commit, staging, undo
 from sigpipe.workers import one_thread_each
 
 logger = logging.getLogger(__name__)
@@ -31,31 +36,33 @@ logger = logging.getLogger(__name__)
 ProgressCallback = Callable[[int, int, "WindowError | None"], None]
 
 
-def _invert_position_timed(
+def _timed(part: Callable[[], Ran]) -> tuple[Ran, float]:
+    """Runs in a worker: a part of a window's inversion (one of its chains, or the layers
+    given's chains together), and the time it took."""
+    start = time.perf_counter()
+    ran = part()
+    return ran, time.perf_counter() - start
+
+
+def _finish_position(
+    window: WindowSampling,
     folder: str,
     xmid: float,
-    labels: Sequence[str],
     parameters: InversionParameters,
     output: Path,
-    chain_jobs: int,
+    ran: Sequence[tuple[Ran, float]],
 ) -> float:
-    """Runs in a worker: the window's inversion, then its measures (how deep its data inform
-    it among them), saved with it: Visualization only reads them."""
+    """Runs in a worker: the window's inversion made of its chains' outputs, then its measures
+    (how deep its data inform it among them), saved with it: Visualization only reads them. The
+    time the window took in the workers, its chains' and this."""
     start = time.perf_counter()
-    io.invert_position(folder, xmid, labels, parameters, output, chain_jobs)
+    finish_window(window, [chain for chain, _ in ran], output)
     try:
         io.measure_position(folder, xmid, parameters, output)
     except StopIteration, OSError, ValueError:
         # Its model stands, shown without its measures (no fundamental mode picked, say).
         logger.warning("The inversion of xmid=%.2f was not measured", xmid, exc_info=True)
-    return time.perf_counter() - start
-
-
-def chain_jobs(workers: int, windows: int, chains: int) -> int:
-    """The processes each window's chains run in: the workers the windows running at once leave
-    idle, shared between them, never more than its chains (PACo's rule,
-    paco.qc.inverting.chain_jobs). The workers asked are all the cores a job takes."""
-    return max(1, min(chains, workers // max(1, windows)))
+    return sum(seconds for _, seconds in ran) + time.perf_counter() - start
 
 
 def run_inversion(
@@ -93,53 +100,60 @@ def _run_inversion(
     errors: list[WindowError] = []
     results: list[dict[str, object]] = []
     completed = 0
-    windows = max(1, min(config.n_workers, total))
-    jobs = chain_jobs(config.n_workers, windows, config.parameters.n_chains)
     if on_progress is not None:
         on_progress(completed, total, None)
 
-    one_thread_each()
-    with ProcessPoolExecutor(
-        max_workers=windows,
-        initializer=setup_logging,
-    ) as executor:
-        futures: dict[Future[float], float] = {}
-        for xmid in config.positions:
-            output = staging(xmid_folder(config.folder, xmid))
-            future = executor.submit(
-                _invert_position_timed,
-                config.folder,
-                xmid,
-                config.labels,
-                config.parameters,
-                output,
-                jobs,
-            )
-            futures[future] = xmid
+    # Each position's curves read and its parameters checked here, before any worker starts: a
+    # position refused fails alone, the others run.
+    windows: dict[float, WindowSampling] = {}
+    for xmid in config.positions:
         try:
-            for future in finished(executor, futures, stop):
+            windows[xmid] = io.sample_position(
+                config.folder, xmid, config.labels, config.parameters
+            )
+        except Exception as exc:
+            pos_err = _failed(config.folder, xmid, exc)
+            errors.append(pos_err)
+            results.append(
+                {"xmid": xmid, "status": "failed", "duration_s": None, **asdict(pos_err)}
+            )
+            completed += 1
+            if on_progress is not None:
+                on_progress(completed, total, pos_err)
+
+    parts = sum(len(window.sampling.parts) for window in windows.values())
+    one_thread_each()
+    with Scheduler(
+        max(1, min(config.n_workers, parts)),
+        initializer=setup_logging,
+    ) as scheduler:
+        futures: dict[Future[float], float] = {}
+        for xmid, window in windows.items():
+            output = staging(xmid_folder(config.folder, xmid))
+            split = Split(
+                parts=[partial(_timed, part) for part in window.sampling.parts],
+                finish=partial(
+                    _finish_position, window, config.folder, xmid, config.parameters, output
+                ),
+                cost=window.sampling.cost,
+            )
+            futures[scheduler.submit(split)] = xmid
+        try:
+            for future in scheduler.finished(futures, stop):
                 xmid = futures.pop(future)
                 pos_err = None
                 try:
                     duration_s = future.result()
                     # Its new results replace all its old ones, set aside, and its earlier
                     # attempts' (the assistant's) are forgotten; the change in its history.
-                    window = xmid_folder(config.folder, xmid)
-                    aside = commit(window, replacing=STAGE_FILES["inversion"], aside="inversion")
-                    redone(window, "inversion", aside)
-                    record_inversion(window, config.labels, config.parameters, aside)
+                    folder = xmid_folder(config.folder, xmid)
+                    aside = commit(folder, replacing=STAGE_FILES["inversion"], aside="inversion")
+                    redone(folder, "inversion", aside)
+                    record_inversion(folder, config.labels, config.parameters, aside)
                     logger.info("Finished xmid=%.2f", xmid)
                     results.append({"xmid": xmid, "status": "success", "duration_s": duration_s})
                 except Exception as exc:
-                    # The window keeps the files it had: a failed inversion's are not kept.
-                    undo(xmid_folder(config.folder, xmid), created=False)
-                    logger.exception("Inversion failed for xmid=%.2f", xmid)
-                    pos_err = WindowError(
-                        xmid=xmid,
-                        error_type=type(exc).__name__,
-                        message=str(exc),
-                        traceback=traceback.format_exc(),
-                    )
+                    pos_err = _failed(config.folder, xmid, exc)
                     errors.append(pos_err)
                     results.append(
                         {"xmid": xmid, "status": "failed", "duration_s": None, **asdict(pos_err)}
@@ -188,8 +202,22 @@ def _run_inversion(
     return errors
 
 
+def _failed(folder: str, xmid: float, exc: Exception) -> WindowError:
+    """A position whose inversion failed, said so: the window keeps the files it had (a failed
+    inversion's are not kept)."""
+    undo(xmid_folder(folder, xmid), created=False)
+    logger.error("Inversion failed for xmid=%.2f", xmid, exc_info=exc)
+    return WindowError(
+        xmid=xmid,
+        error_type=type(exc).__name__,
+        message=str(exc),
+        traceback="".join(traceback.format_exception(exc)),
+    )
+
+
 def _write_outcome(out_dir: Path, results: list[dict[str, object]]) -> None:
-    """The positions that finished, by xmid, with their status and duration."""
+    """The positions that finished, by xmid, with their status and duration: the time each one's
+    chains, files and measures took in the workers."""
     results.sort(key=lambda r: cast(float, r["xmid"]))
     (out_dir / "seismic_inversion_outcome.json").write_text(
         json.dumps(results, indent=2), encoding="utf-8"

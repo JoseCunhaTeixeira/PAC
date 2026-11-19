@@ -299,6 +299,38 @@ def test_an_inversion_gives_a_section(run: str) -> None:
     assert len(comparison["observed_by_wavelength_grid"][0]) == len(lambdas)
 
 
+def test_a_position_without_the_curves_asked_fails_alone(run: str) -> None:
+    # A copy of the run, not to change the others' windows: 2.5 and 5.5 picked (above), 8.5 not.
+    folder = f"{run}-chains"
+    shutil.copytree(output_folder(run), output_folder(folder))
+    config = {
+        "folder": folder,
+        "positions": [2.5, 5.5, 8.5],
+        "labels": ["M0"],
+        "parameters": {"n_iterations": 1_000, "n_burnin_iterations": 100, "n_chains": 3},
+        "n_workers": 4,
+    }
+
+    job = _wait(client.post("/inversion/run", json=config).json())
+
+    # 8.5 refused before any worker started; the six chains of the two others on four workers.
+    assert (job["state"], job["completed"], job["total"]) == ("succeeded", 3, 3)
+    (error,) = job["errors"]
+    assert error["xmid"] == 8.5 and "No M0 curve in xmid_8.50" in error["message"]
+    status = client.get(f"/inversion/status/{folder}").json()
+    assert [one["has_result"] for one in status] == [True, True, False]
+    outcome = json.loads(
+        (output_folder(folder) / "seismic_inversion_outcome.json").read_text(encoding="utf-8")
+    )
+    assert [(one["xmid"], one["status"]) for one in outcome] == [
+        (2.5, "success"),
+        (5.5, "success"),
+        (8.5, "failed"),
+    ]
+    assert all(one["duration_s"] > 0 for one in outcome[:2])
+    assert not list(output_folder(folder).rglob(".partial"))
+
+
 def test_a_window_done_again_by_hand_keeps_nothing_older(run: str) -> None:
     # After the inversion above: 2.5 and 5.5 inverted with M0. 2.5 as the assistant leaves a
     # window it retried: an attempt archived, its lines in the QC log, a file of its own.
