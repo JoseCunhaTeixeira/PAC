@@ -1,10 +1,11 @@
 """The assistant's settings, as its settings popup sets them: the mode the chat runs (autonomous or
 workflow), the model (on a provider's API: its name and the key; or on a server speaking
 OpenAI's chat API, the user's or any other: its address, its name, its key, its context), and
-whether figures may reach it. Kept in PAC's data folder (data/settings/assistant.env, readable by
-its owner alone: it holds the API key) and applied over the environment's (compose's .env), where
-PACo reads them as PACO_*. Pydantic and sigpipe's text reading only: PACo may be missing."""
+whether figures may reach it. Kept in PAC's data folder (data/settings/assistant.env, its owner's
+alone on every system: it holds the API key) and applied over the environment's (compose's .env),
+where PACo reads them as PACO_*. Pydantic and sigpipe's text reading only: PACo may be missing."""
 
+import logging
 import os
 import threading
 from collections.abc import Collection
@@ -14,7 +15,10 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from masw.io.paths import PROJECT_ROOT
+from masw.io.private import is_private, make_private, write_private
 from sigpipe.text import read_hand_written
+
+logger = logging.getLogger(__name__)
 
 SETTINGS_FILE = (
     Path(os.environ.get("PAC_SETTINGS_DIR", PROJECT_ROOT / "data/settings")) / "assistant.env"
@@ -71,9 +75,16 @@ def load() -> None:
 
 
 def kept() -> dict[str, str]:
-    """The settings the popup saved, by PACo's names; none before the first save."""
+    """The settings the popup saved, by PACo's names; none before the first save. A file others
+    may read (copied in, or kept by a PAC that left that to its folder) is made its owner's alone
+    first."""
     if not SETTINGS_FILE.is_file():
         return {}
+    try:
+        if not is_private(SETTINGS_FILE):
+            make_private(SETTINGS_FILE)
+    except OSError as error:
+        logger.warning("%s could not be made its owner's alone: %s", SETTINGS_FILE, error)
     found: dict[str, str] = {}
     for line in SETTINGS_FILE.read_text(encoding="utf-8").splitlines():
         name, sep, value = line.partition("=")
@@ -141,17 +152,12 @@ def values_of(given: AssistantSettingsIn) -> dict[str, str]:
 
 
 def save(given: AssistantSettingsIn) -> AssistantSettings:
-    """`given` kept, in a file readable by its owner alone, and applied. The file is written whole
+    """`given` kept, in a file its owner alone may read or write (masw.io.private: private from
+    its creation, before the key is written in it), and applied. The file is written whole
     beside, then put in place: never read half-written."""
     values = values_of(given)
     SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    written = SETTINGS_FILE.with_name(f".{SETTINGS_FILE.name}.new")
     with LOCK:
-        # Created readable by its owner alone before the key is written in it.
-        descriptor = os.open(written, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
-            file.write("".join(f"{name}={value}\n" for name, value in values.items()))
-        written.chmod(0o600)
-        written.replace(SETTINGS_FILE)
+        write_private(SETTINGS_FILE, "".join(f"{name}={value}\n" for name, value in values.items()))
         load()
         return current()

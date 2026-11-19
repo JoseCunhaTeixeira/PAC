@@ -24,6 +24,7 @@ from paco.agent.loop import from_data
 from masw import agent
 from masw.api.main import app
 from masw.io.paths import OUTPUT_DIR
+from masw.io.private import is_private
 
 client = TestClient(app)
 # The scope of a request to process: that stage asked, nothing named.
@@ -609,10 +610,8 @@ def test_the_settings_are_saved_applied_and_the_key_never_shown(
     )
     assert "sk-ant-secret" not in saved.text
     assert "vision" not in body
-    # Kept for the next start, readable by its owner alone; in force now. A file's mode is
-    # POSIX's: on Windows, the folder's access rights decide who reads it.
-    if os.name == "posix":
-        assert fresh_settings.stat().st_mode & 0o777 == 0o600
+    # Kept for the next start, its owner's alone on every system (masw.io.private); in force now.
+    assert is_private(fresh_settings)
     assert "PACO_LLM_API_KEY=sk-ant-secret" in fresh_settings.read_text(encoding="utf-8")
     assert (os.environ["PACO_AGENT_MODE"], os.environ["PACO_LLM_PROVIDER"]) == (
         "autonomous",
@@ -628,6 +627,19 @@ def test_the_settings_are_saved_applied_and_the_key_never_shown(
         "PACO_LLM_API_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
+
+
+def test_settings_others_may_read_are_made_their_owners_alone(fresh_settings: Path) -> None:
+    from masw import assistant
+
+    # As a copy keeps them, or a file left to its folder's rights.
+    fresh_settings.parent.mkdir(parents=True, exist_ok=True)
+    fresh_settings.write_text("PACO_LLM_MODEL=claude-opus-5-5\n", encoding="utf-8")
+    fresh_settings.chmod(0o644)
+    assert not is_private(fresh_settings)
+
+    assert assistant.kept() == {"PACO_LLM_MODEL": "claude-opus-5-5"}
+    assert is_private(fresh_settings)
 
 
 def test_settings_paco_refuses_are_not_saved(fresh_settings: Path) -> None:
