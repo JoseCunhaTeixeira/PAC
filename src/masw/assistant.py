@@ -3,7 +3,7 @@ workflow), the model (on a provider's API: its name and the key; or on a server 
 OpenAI's chat API, the user's or any other: its address, its name, its key, its context), and
 whether figures may reach it. Kept in PAC's data folder (data/settings/assistant.env, readable by
 its owner alone: it holds the API key) and applied over the environment's (compose's .env), where
-PACo reads them as PACO_*. Pydantic only: PACo may be missing."""
+PACo reads them as PACO_*. Pydantic and sigpipe's text reading only: PACo may be missing."""
 
 import os
 import threading
@@ -14,6 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from masw.io.paths import PROJECT_ROOT
+from sigpipe.text import read_hand_written
 
 SETTINGS_FILE = (
     Path(os.environ.get("PAC_SETTINGS_DIR", PROJECT_ROOT / "data/settings")) / "assistant.env"
@@ -112,7 +113,7 @@ def dotenv(names: Collection[str]) -> dict[str, str]:
     if not path.is_file():
         return {}
     found: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in read_hand_written(path).splitlines():
         name, sep, value = line.strip().removeprefix("export ").partition("=")
         if sep and name.strip() in names:
             found[name.strip()] = value.strip().strip("'\"")

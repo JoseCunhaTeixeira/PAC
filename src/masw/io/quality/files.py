@@ -20,6 +20,7 @@ from sigpipe.masw.pipelines.common import PREPROCESSED
 from sigpipe.masw.profiles.loading import RECEIVER_POSITIONS_FILE, SOURCE_POSITIONS_FILE
 from sigpipe.masw.runs import RunManifest, xmid_of
 from sigpipe.masw.windows import MASWWindow
+from sigpipe.text import read_hand_written
 
 MANIFEST_FILE = "run.json"
 WINDOW_FILE = "window.json"
@@ -144,7 +145,7 @@ def _line(run_folder: str, stamp: int, manifest_json: str) -> Line:
 
 
 def _receivers(path: Path) -> tuple[float, ...]:
-    raw: object = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else None
+    raw: object = yaml.safe_load(read_hand_written(path)) if path.exists() else None
     if not isinstance(raw, list):
         return ()
     found: list[float] = []
@@ -156,7 +157,7 @@ def _receivers(path: Path) -> tuple[float, ...]:
 
 
 def _sources(path: Path) -> dict[str, float]:
-    raw: object = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else None
+    raw: object = yaml.safe_load(read_hand_written(path)) if path.exists() else None
     if not isinstance(raw, dict):
         return {}
     found: dict[str, float] = {}
