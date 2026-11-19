@@ -3,6 +3,7 @@ process, on PAC's own folders, and the page reads the conversation as events."""
 
 import http.server
 import json
+import os
 import shutil
 import threading
 import time
@@ -98,8 +99,9 @@ class ScriptedModel(FillsForms):
 
 
 def _events(session: str, after: int = 0) -> dict[str, Any]:
-    # A minute at most: processing runs its trials (the window lengths, the mutes) first.
-    for _ in range(600):
+    # Five minutes at most: processing runs its trials (the window lengths, the mutes) first,
+    # each in new worker processes, which Windows takes seconds to start.
+    for _ in range(3000):
         body = client.get(f"/agent/sessions/{session}/events", params={"after": after}).json()
         if not body["busy"]:
             return body
@@ -607,11 +609,11 @@ def test_the_settings_are_saved_applied_and_the_key_never_shown(
     )
     assert "sk-ant-secret" not in saved.text
     assert "vision" not in body
-    # Kept for the next start, readable by its owner alone; in force now.
-    assert fresh_settings.stat().st_mode & 0o777 == 0o600
+    # Kept for the next start, readable by its owner alone; in force now. A file's mode is
+    # POSIX's: on Windows, the folder's access rights decide who reads it.
+    if os.name == "posix":
+        assert fresh_settings.stat().st_mode & 0o777 == 0o600
     assert "PACO_LLM_API_KEY=sk-ant-secret" in fresh_settings.read_text(encoding="utf-8")
-    import os
-
     assert (os.environ["PACO_AGENT_MODE"], os.environ["PACO_LLM_PROVIDER"]) == (
         "autonomous",
         "anthropic",
@@ -794,8 +796,6 @@ def test_the_popups_settings_win_over_a_dotenv(
 def test_the_workers_set_in_dotenv_are_kept(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import os
-
     monkeypatch.delenv("PACO_WORKERS", raising=False)
     monkeypatch.chdir(tmp_path)
     # No .env: half the machine's cores.
