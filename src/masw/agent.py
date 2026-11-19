@@ -5,9 +5,10 @@ small model step by step, or autonomous, the model choosing its own settings and
 a frontier model with vision and a long context. The same model either way, a provider's API or
 the user's server (PACO_LLM_*: PACo's paco.llm).
 
-Without a model, or with a model server that does not answer, `status` says what is missing and
-the rest of PAC is unaffected. With masw.assistant, the only module of PAC that knows PACo, which
-it imports once a conversation starts."""
+Without a model, with a model server that does not answer, or with a key or a model the
+provider's API refuses, `status` says what is wrong and the rest of PAC is unaffected. With
+masw.assistant, the only module of PAC that knows PACo, which it imports once a conversation
+starts."""
 
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ import anyio
 import anyio.from_thread
 import anyio.lowlevel
 import anyio.to_thread
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, SecretStr, ValidationError
 
 from masw import assistant
 from masw.assistant import Mode, dotenv
@@ -38,6 +39,7 @@ if TYPE_CHECKING:
     from mcp.server import MCPServer
     from paco.agent import Agent, AgentSettings, ChatModel
     from paco.autonomous.host.loop import Host
+    from paco.llm.settings import Provider
     from paco.stopping import Signal
 
 logger = logging.getLogger(__name__)
@@ -132,9 +134,27 @@ class SessionInfo(BaseModel):
     tokens: Tokens | None = None
 
 
-# How long the check of a model server waits, in seconds, as the popup's connection test
-# (TEST_S): half for the connection, half for the answer. The chat page counts it down.
+# How long the check of the model's API waits (a server's, or a provider's), in seconds, as the
+# popup's connection test (TEST_S): half for the connection, half for the answer. The chat page
+# counts it down.
 CHECK_S = 60.0
+# The providers' own APIs, as the chat page names them.
+APIS = {
+    "anthropic": "Anthropic's API",
+    "openai": "OpenAI's API",
+    "gemini": "Google's Gemini API",
+    "mistral": "Mistral's API",
+}
+# What a provider's API refuses, by the status it answers a question about the model with: the
+# key; the model, unknown to it; the request as made, as Gemini's refuses a key. Any other status
+# is an answer: a key barred from the models' list alone (403, as OpenAI's restricted keys may
+# be), a limit reached, the API overloaded, which the chat says if they last.
+REFUSALS = {
+    401: "{api} refused the API key ({error}). Set a valid one in the agent's settings.",
+    404: "{api} does not know the model {model} ({error}). Choose another in the agent's settings.",
+    400: "{api} refused the model's settings ({error}). Check the key and the model's name in the "
+    "agent's settings.",
+}
 
 
 class AgentStatus(BaseModel):
@@ -155,8 +175,10 @@ class SessionBusy(RuntimeError):
 
 
 def status() -> AgentStatus:
-    """Whether the chat can run: its model set, a model server of the user's answering, and the
-    long context the autonomous mode needs."""
+    """Whether the chat can run: its model set, the long context the autonomous mode needs, and
+    the model's API taking it: a model server of the user's answering, a provider's taking the
+    key and knowing the model. Asked each time the chat page opens: a key revoked since it was
+    saved is found there, before any message."""
     try:
         _, mode, settings = snapshot()
     except AgentUnavailable as error:
@@ -166,9 +188,9 @@ def status() -> AgentStatus:
 
 def _checked(mode: Mode, settings: AgentSettings) -> AgentStatus:
     """Whether a conversation can run in `mode` with the model `settings` name: the long context
-    the autonomous mode needs, a model server of the user's answering."""
-    from paco.llm.settings import LOCAL
-
+    the autonomous mode needs; a model server of the user's answering, as an address the settings
+    give a provider's API (a proxy in front of it); a provider's own API taking the key and
+    knowing the model."""
     found = AgentStatus(
         available=False, model=settings.llm_model, mode=mode, provider=settings.llm_provider
     )
@@ -177,7 +199,7 @@ def _checked(mode: Mode, settings: AgentSettings) -> AgentStatus:
 
         if (short := short_context(settings.context())) is not None:
             return found.model_copy(update={"reason": short})
-    if settings.llm_provider in LOCAL and settings.llm_base_url:
+    if settings.llm_base_url:
         from paco.llm.chat import unanswered
 
         # Reached as the popup's connection test reaches it (a company's gateway: its
@@ -190,7 +212,45 @@ def _checked(mode: Mode, settings: AgentSettings) -> AgentStatus:
                     "or choose another model in the agent's settings."
                 }
             )
+    elif (
+        said := refused(settings.llm_provider, settings.llm_model, settings.llm_api_key, CHECK_S)
+    ) is not None:
+        return found.model_copy(update={"reason": said})
     return found.model_copy(update={"available": True})
+
+
+def refused(provider: Provider, model: str, api_key: SecretStr, wait_s: float) -> str | None:
+    """Why `provider`'s own API refuses `model` with `api_key` (REFUSALS), or does not answer;
+    None when it takes them. Asked of its models API, which costs no token, as the chat's client
+    reaches it, within about `wait_s` seconds, half for the connection, half for the answer."""
+    import anthropic
+    import openai
+    from paco.llm.chat import ADDRESSES
+
+    api = APIS.get(provider, provider)
+    key = api_key.get_secret_value()
+    try:
+        if provider == "anthropic":
+            with anthropic.Anthropic(api_key=key, timeout=wait_s / 2, max_retries=0) as claude:
+                claude.models.retrieve(model)
+        else:
+            with openai.OpenAI(
+                api_key=key, base_url=ADDRESSES.get(provider), timeout=wait_s / 2, max_retries=0
+            ) as other:
+                other.models.retrieve(model)
+    except (anthropic.APIStatusError, openai.APIStatusError) as error:
+        said = REFUSALS.get(error.status_code)
+        if said is None:
+            return None
+        return said.format(api=api, model=model, error=f"{type(error).__name__}: {error}")
+    except (anthropic.APIConnectionError, openai.APIConnectionError) as error:
+        cause = error.__cause__ or error
+        reason = f"{type(cause).__name__}: {cause}" if str(cause) else type(cause).__name__
+        return (
+            f"{api} does not answer ({reason}). Check this machine's connection, or choose "
+            "another model in the agent's settings."
+        )
+    return None
 
 
 # How many times the settings PACo runs with changed since PAC started, counted while

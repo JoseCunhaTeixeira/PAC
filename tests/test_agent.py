@@ -1,12 +1,14 @@
 """The chat page's backend with a scripted model standing in for Qwen: PACo's tools run in this
 process, on PAC's own folders, and the page reads the conversation as events."""
 
+import contextlib
 import http.server
 import json
 import os
 import shutil
 import threading
 import time
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +22,8 @@ from openai.types.chat import (
 from paco.agent import Filled, Reply, ToolCall
 from paco.agent.answer import SCHEMA as ANSWER_SCHEMA
 from paco.agent.loop import from_data
+from paco.llm.settings import Provider
+from pydantic import SecretStr
 
 from masw import agent
 from masw.api.main import app
@@ -164,6 +168,115 @@ def test_a_gateway_serving_no_model_list_answers(monkeypatch: pytest.MonkeyPatch
         server.server_close()
 
     assert found["available"], found
+
+
+@contextlib.contextmanager
+def provider_api(status: int, body: object) -> Generator[tuple[str, list[str]]]:
+    """A provider's API standing in for the real one: its address, and the paths asked of it,
+    each answered with `status` and `body`."""
+    asked: list[str] = []
+
+    class Answers(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            asked.append(self.path)
+            sent = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(sent)))
+            self.end_headers()
+            self.wfile.write(sent)
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Answers)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", asked
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _reached_at(provider: Provider, address: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`provider`'s own API at `address`, for its client and the check alike: Anthropic's where
+    ANTHROPIC_BASE_URL says, the others' at PACo's addresses (paco.llm.chat)."""
+    from paco.llm import chat
+
+    if provider == "anthropic":
+        monkeypatch.setenv("ANTHROPIC_BASE_URL", address)
+    else:
+        monkeypatch.setitem(chat.ADDRESSES, provider, address)
+
+
+def test_a_key_the_provider_no_longer_takes_is_said_before_any_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A key saved, then revoked at the provider: PAC starts with it set.
+    monkeypatch.delenv("PACO_AGENT_MODE", raising=False)
+    monkeypatch.delenv("PACO_LLM_BASE_URL", raising=False)
+    monkeypatch.setenv("PACO_LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("PACO_LLM_MODEL", "claude-sonnet-5-5")
+    monkeypatch.setenv("PACO_LLM_API_KEY", "sk-ant-revoked")
+    invalid = {"type": "error", "error": {"type": "authentication_error", "message": "invalid"}}
+    with provider_api(401, invalid) as (address, asked):
+        _reached_at("anthropic", address, monkeypatch)
+        found = client.get("/agent/status").json()
+        refused = client.post("/agent/sessions")
+
+    assert (found["available"], found["model"]) == (False, "claude-sonnet-5-5")
+    assert found["reason"].startswith("Anthropic's API refused the API key (AuthenticationError")
+    # Asked of the models API alone, which costs no token; no conversation starts.
+    assert asked == ["/v1/models/claude-sonnet-5-5"] * 2
+    assert (refused.status_code, refused.json()["detail"]) == (503, found["reason"])
+
+
+@pytest.mark.parametrize(
+    ("provider", "status", "said"),
+    [
+        ("openai", 401, "OpenAI's API refused the API key (AuthenticationError"),
+        ("mistral", 401, "Mistral's API refused the API key (AuthenticationError"),
+        # Gemini's refuses a key it does not take as a request refused as made.
+        ("gemini", 400, "Google's Gemini API refused the model's settings (BadRequestError"),
+        ("anthropic", 404, "Anthropic's API does not know the model the-model (NotFoundError"),
+    ],
+)
+def test_what_the_provider_refuses_is_said(
+    provider: Provider, status: int, said: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with provider_api(status, {"error": {"message": "refused"}}) as (address, asked):
+        _reached_at(provider, address, monkeypatch)
+        reason = agent.refused(provider, "the-model", SecretStr("a-key"), 5.0)
+
+    assert reason is not None and reason.startswith(said), reason
+    assert len(asked) == 1 and asked[0].endswith("/models/the-model")
+
+
+@pytest.mark.parametrize(
+    ("provider", "status"),
+    [
+        # A key barred from the models' list alone, as OpenAI's restricted keys may be: the chat
+        # may take it.
+        ("openai", 403),
+        # A limit reached, the API overloaded: the chat says it if they last.
+        ("anthropic", 429),
+        ("anthropic", 529),
+        ("anthropic", 200),
+    ],
+)
+def test_a_provider_answering_otherwise_takes_the_settings(
+    provider: Provider, status: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    model = {"type": "model", "id": "the-model", "display_name": "The model"}
+    with provider_api(status, model if status == 200 else {"error": {}}) as (address, _):
+        _reached_at(provider, address, monkeypatch)
+
+        assert agent.refused(provider, "the-model", SecretStr("a-key"), 5.0) is None
+
+
+def test_a_provider_out_of_reach_is_said(monkeypatch: pytest.MonkeyPatch) -> None:
+    _reached_at("mistral", "http://127.0.0.1:9/v1", monkeypatch)  # nothing listens there
+
+    reason = agent.refused("mistral", "mistral-large-latest", SecretStr("a-key"), 5.0)
+
+    assert reason is not None and reason.startswith("Mistral's API does not answer (")
 
 
 def test_a_conversation_runs_pacos_tools_on_pacs_folders() -> None:
@@ -547,10 +660,14 @@ def test_the_autonomous_mode_refuses_a_model_that_takes_no_images(
     async def blind(_: object) -> str:
         return "claude-opus-5-5 takes no images: the autonomous mode judges every image by eye."
 
+    def taken(*_: object) -> None:
+        """The key and the model taken, without asking Anthropic's API."""
+
     monkeypatch.setenv("PACO_AGENT_MODE", "autonomous")
     monkeypatch.setenv("PACO_LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("PACO_LLM_MODEL", "claude-opus-5-5")
     monkeypatch.setenv("PACO_LLM_API_KEY", "sk-ant-test")
+    monkeypatch.setattr(agent, "refused", taken)
     monkeypatch.setattr(chat, "blind", blind)
 
     session = agent.sessions.create().id
