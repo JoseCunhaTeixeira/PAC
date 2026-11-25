@@ -150,7 +150,9 @@ def test_the_picks_replace_their_modes_curve(run: str) -> None:
         len(client.post(f"/dispersion_images/{run}/2.5/pick/lasso", json=lasso).json()["curves"])
         == 1
     )
-    box["label"], box["vmin"], box["vmax"] = "M1", 300, 800
+    # The shots hold one wave: M1 picked on its ridge too, from 30 Hz (a box on its flank alone,
+    # where the image has no peak, picks nothing).
+    box["label"], box["fmin"] = "M1", 30
     both = client.post(f"/dispersion_images/{run}/2.5/pick/box", json=box).json()
     assert [one["label"] for one in both["curves"]] == ["M0", "M1"]
 
@@ -201,9 +203,9 @@ def test_a_windows_m0_is_picked_automatically(run: str) -> None:
     # by hand.
     folder = f"{run}-auto"
     shutil.copytree(output_folder(run), output_folder(folder))
-    box = {"fmin": 10, "fmax": 60, "vmin": 300, "vmax": 800, "label": "M1"}
+    box = {"fmin": 30, "fmax": 60, "vmin": 100, "vmax": 400, "label": "M1"}
     client.post(f"/dispersion_images/{folder}/5.5/pick/box", json=box)
-    box |= {"vmin": 100, "vmax": 400, "label": "M0"}
+    box |= {"fmin": 10, "label": "M0"}
     hand = client.post(f"/dispersion_images/{folder}/5.5/pick/box", json=box).json()
 
     auto = client.post(f"/dispersion_images/{folder}/5.5/pick/auto").json()
@@ -385,12 +387,12 @@ def test_a_window_done_again_by_hand_keeps_nothing_older(run: str) -> None:
     assert section.exists()
 
     # Another mode picked, then deleted: the inversion, of M0, kept.
-    box = {"fmin": 10, "fmax": 60, "vmin": 300, "vmax": 800, "label": "M1"}
+    box = {"fmin": 30, "fmax": 60, "vmin": 100, "vmax": 400, "label": "M1"}
     assert client.post(f"/dispersion_images/{run}/2.5/pick/box", json=box).status_code == 200
     assert client.delete(f"/dispersion_images/{run}/2.5/pick/M1").status_code == 200
     assert (window / "SeismicInversion_Samples_0000.npz").exists()
     # M0 picked again: the inversion made of the old curve erased, the line's section with it.
-    box.update({"vmin": 100, "vmax": 400, "label": "M0"})
+    box.update({"fmin": 10, "label": "M0"})
     assert client.post(f"/dispersion_images/{run}/2.5/pick/box", json=box).status_code == 200
     assert not any(window.glob("SeismicInversion_*")) and not section.exists()
     assert (window / "DispersionCurves_0000.csv").exists()

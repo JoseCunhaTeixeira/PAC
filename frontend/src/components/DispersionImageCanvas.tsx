@@ -138,14 +138,21 @@ export function DispersionImageCanvas({
 
     const heatmap = heatmapRef.current;
     if (heatmap && heatmap.width > 0 && heatmap.height > 0) {
-      // Only the heatmap's cells on show, scaled to the plot: its columns
-      // run from fMin to fMax, its rows from vMax (top) down to vMin.
+      // Only the heatmap's cells on show, scaled to the plot, each cell centred on its sample:
+      // its columns' edges half a step either side of the frequencies, from fMin - df/2 to
+      // fMax + df/2, its rows' from vMax + dv/2 (top) down to vMin - dv/2. Edges on the first
+      // and last samples would draw the image up to half a cell off its picks: on a steep
+      // branch, a ridge seemingly beside its curve.
       const nf = heatmap.width, nv = heatmap.height;
-      const [c0, c1] = visibleCells(nf, fMin, fMax, f0, f1);
-      const [r0, r1] = visibleCells(nv, vMax, vMin, v0, v1);
+      const halfF = nf > 1 ? (fMax - fMin) / (nf - 1) / 2 : 0.5;
+      const halfV = nv > 1 ? (vMax - vMin) / (nv - 1) / 2 : 0.5;
+      const fLo = fMin - halfF, fHi = fMax + halfF;
+      const vLo = vMin - halfV, vHi = vMax + halfV;
+      const [c0, c1] = visibleCells(nf, fLo, fHi, f0, f1);
+      const [r0, r1] = visibleCells(nv, vHi, vLo, v0, v1);
       if (c1 > c0 && r1 > r0) {
-        const fEdge = (c: number) => fMin + (c / nf) * (fMax - fMin);
-        const vEdge = (r: number) => vMax - (r / nv) * (vMax - vMin);
+        const fEdge = (c: number) => fLo + (c / nf) * (fHi - fLo);
+        const vEdge = (r: number) => vHi - (r / nv) * (vHi - vLo);
         const x0 = xOf(fEdge(c0)), x1 = xOf(fEdge(c1));
         const y0 = yOf(vEdge(r0)), y1 = yOf(vEdge(r1));
         ctx.drawImage(heatmap, c0, r0, c1 - c0, r1 - r0, x0, y0, x1 - x0, y1 - y0);

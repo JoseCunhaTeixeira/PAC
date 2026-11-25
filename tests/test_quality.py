@@ -1527,7 +1527,8 @@ def test_a_mode_picked_in_pac_keeps_the_assistants_history_of_the_window(judged:
     folder = f"{judged}-m1"
     shutil.copytree(OUTPUT_DIR / judged, OUTPUT_DIR / folder)
     log = OUTPUT_DIR / folder / "qc_log.jsonl"
-    box = {"fmin": 10, "fmax": 60, "vmin": 300, "vmax": 800, "label": "M1"}
+    # The shots hold one wave: M1 on its ridge too, from 30 Hz.
+    box = {"fmin": 30, "fmax": 60, "vmin": 100, "vmax": 400, "label": "M1"}
 
     client.post(f"/dispersion_images/{folder}/2.5/pick/box", json=box)
 
