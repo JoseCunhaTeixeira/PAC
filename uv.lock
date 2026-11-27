@@ -2002,7 +2002,7 @@ wheels = [
 [[package]]
 name = "sigpipe"
 version = "1.0.0"
-source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#acc22ce6b508683712820edadd0ccb977c675180" }
+source = { git = "https://github.com/JoseCunhaTeixeira/sigpipe#71ca2e6840f7d83c94f88be0023b9447c8ddccfe" }
 dependencies = [
     { name = "h5py" },
     { name = "matplotlib" },
